@@ -1,0 +1,64 @@
+"""
+Runtime-editable instance configuration.
+These are settings that can be changed by admins at runtime.
+"""
+type InstanceConfig {
+  "Instance name, displayed in page titles. Defaults to 'Chatto'."
+  instanceName: String! @goField(forceResolver: true)
+
+  "Welcome message to display on the login screen (Markdown). Null if not configured."
+  welcomeMessage: String @goField(forceResolver: true)
+
+  "Message of the Day, displayed in the header bar. Null if not configured."
+  motd: String @goField(forceResolver: true)
+
+  "OpenGraph title for link previews. Falls back to instance name if not set."
+  ogTitle: String @goField(forceResolver: true)
+
+  "OpenGraph description for link previews. Falls back to default if not set."
+  ogDescription: String @goField(forceResolver: true)
+
+  "OpenGraph image URL for link previews and the login page. Null if not set. Pass width and height to get a resized version."
+  ogImageUrl(width: Int, height: Int): String @goField(forceResolver: true)
+}
+
+"""
+Information about this Chatto instance.
+These fields don't require authentication and are available on the login page.
+"""
+type Instance {
+  "The application version."
+  version: String!
+
+  "List of enabled SSO provider names (e.g., 'google', 'github')."
+  enabledAuthProviders: [String!]!
+
+  "Runtime-editable configuration settings."
+  config: InstanceConfig! @goField(forceResolver: true)
+
+  "True if the instance needs initial setup (no admin exists yet)."
+  needsSetup: Boolean! @goField(forceResolver: true)
+
+  "True if Web Push notifications are enabled on this instance."
+  pushNotificationsEnabled: Boolean! @goField(forceResolver: true)
+
+  "VAPID public key for Web Push subscriptions. Null if push is disabled."
+  vapidPublicKey: String @goField(forceResolver: true)
+
+  "LiveKit WebSocket URL for voice calls. Null if voice calls are disabled."
+  livekitUrl: String @goField(forceResolver: true)
+
+  "True if direct (email/password) registration is enabled on this instance."
+  directRegistrationEnabled: Boolean! @goField(forceResolver: true)
+
+  "Maximum upload size for regular attachments (images, files) in bytes."
+  maxUploadSize: Int! @goField(forceResolver: true)
+
+  "Maximum upload size for video attachments in bytes. Same as maxUploadSize when video processing is disabled."
+  maxVideoUploadSize: Int! @goField(forceResolver: true)
+}
+
+extend type Query {
+  "Get information about this Chatto instance. No authentication required."
+  instance: Instance! @goField(forceResolver: true)
+}

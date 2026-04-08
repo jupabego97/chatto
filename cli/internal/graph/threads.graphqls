@@ -1,0 +1,48 @@
+"""
+A thread that the current user is following.
+Contains metadata for display in the My Threads list.
+"""
+type FollowedThread {
+  "The ID of the space containing the thread."
+  spaceId: ID!
+
+  "The ID of the room containing the thread."
+  roomId: ID!
+
+  "The room containing the thread."
+  room: Room! @goField(forceResolver: true)
+
+  "The event ID of the thread's root message."
+  threadRootEventId: ID!
+
+  "The root message of the thread (for preview text)."
+  rootMessage: SpaceEvent @goField(forceResolver: true)
+
+  "Number of replies in this thread."
+  replyCount: Int!
+
+  "Timestamp of the most recent reply (null if no replies)."
+  lastReplyAt: Time
+
+  "Users who have participated in this thread."
+  threadParticipants(first: Int = 5): [User!]! @goField(forceResolver: true)
+
+  "Whether this thread has unread replies since the user last opened it."
+  hasUnread: Boolean!
+}
+
+extend type Query {
+  """
+  List threads the current user is following in a specific space.
+  Returns threads sorted by last activity (newest first).
+  Requires space membership.
+  """
+  myFollowedThreads(spaceId: ID!): [FollowedThread!]!
+
+  """
+  Check if the current user has any unread followed threads in a space.
+  Lightweight query for sidebar unread indicators.
+  Requires space membership.
+  """
+  hasUnreadFollowedThreads(spaceId: ID!): Boolean!
+}

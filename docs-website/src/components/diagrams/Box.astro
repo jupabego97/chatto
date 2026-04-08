@@ -1,0 +1,22 @@
+---
+interface Props {
+  type: 'browser' | 'caddy' | 'chatto' | 'nats' | 'nats-leader' | 'livekit';
+  x: number;
+  y: number;
+  w?: number;
+  h?: number;
+  label: string;
+  sublabel?: string;
+  port?: string;
+}
+
+const { type, x, y, w = 140, h = 55, label, sublabel, port } = Astro.props;
+const cx = x + w / 2;
+const labelY = sublabel ? y + h / 2 - 4 : y + h / 2 + 4;
+const sublabelY = labelY + 16;
+---
+
+{port && <text class="port" x={cx} y={y - 8} text-anchor="middle">{port}</text>}
+<rect class:list={['box', `box-${type}`]} x={x} y={y} width={w} height={h} />
+<text class="label" x={cx} y={labelY} text-anchor="middle">{label}</text>
+{sublabel && <text class="sublabel" x={cx} y={sublabelY} text-anchor="middle">{sublabel}</text>}

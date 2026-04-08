@@ -1,0 +1,2 @@
+brew "mailpit"
+brew "livekit"

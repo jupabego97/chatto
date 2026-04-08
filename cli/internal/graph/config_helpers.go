@@ -1,0 +1,67 @@
+package graph
+
+import (
+	"hmans.de/chatto/internal/core"
+	"hmans.de/chatto/internal/graph/model"
+	configv1 "hmans.de/chatto/internal/pb/chatto/config/v1"
+)
+
+// instanceConfigToModel converts a protobuf InstanceConfig to the GraphQL model.
+func instanceConfigToModel(cfg *configv1.InstanceConfig, isConfigured bool) *model.AdminInstanceConfig {
+	// Default blocked usernames for unconfigured instances
+	defaultBlocked := core.DefaultBlockedUsernames
+
+	if cfg == nil {
+		return &model.AdminInstanceConfig{
+			IsConfigured:     false,
+			InstanceName:     "Chatto", // Default
+			BlockedUsernames: &defaultBlocked,
+		}
+	}
+
+	instanceName := cfg.InstanceName
+	if instanceName == "" {
+		instanceName = "Chatto" // Default
+	}
+
+	var welcomeMessage *string
+	if cfg.WelcomeMessage != "" {
+		welcomeMessage = &cfg.WelcomeMessage
+	}
+
+	var motd *string
+	if cfg.Motd != "" {
+		motd = &cfg.Motd
+	}
+
+	// For blocked usernames: return the configured value (even if empty, meaning admin cleared it)
+	// But if not configured at all, return the defaults
+	var blockedUsernames *string
+	if isConfigured {
+		// Return what's in config (even if empty string)
+		blockedUsernames = &cfg.BlockedUsernames
+	} else {
+		// Not configured - return defaults
+		blockedUsernames = &defaultBlocked
+	}
+
+	var ogTitle *string
+	if cfg.OgTitle != "" {
+		ogTitle = &cfg.OgTitle
+	}
+
+	var ogDescription *string
+	if cfg.OgDescription != "" {
+		ogDescription = &cfg.OgDescription
+	}
+
+	return &model.AdminInstanceConfig{
+		IsConfigured:     isConfigured,
+		WelcomeMessage:   welcomeMessage,
+		InstanceName:     instanceName,
+		Motd:             motd,
+		BlockedUsernames: blockedUsernames,
+		OgTitle:          ogTitle,
+		OgDescription:    ogDescription,
+	}
+}

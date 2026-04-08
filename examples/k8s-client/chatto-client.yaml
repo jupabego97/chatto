@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: chatto-client
+  namespace: chatto-client
+spec:
+  selector:
+    app: chatto-client
+  ports:
+    - port: 80
+      targetPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chatto-client
+  namespace: chatto-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chatto-client
+  template:
+    metadata:
+      labels:
+        app: chatto-client
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      containers:
+        - name: chatto-client
+          image: ghcr.io/hmans/chatto-client:latest
+          ports:
+            - containerPort: 80
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "5"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1

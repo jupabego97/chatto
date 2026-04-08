@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package chatto.config.v1;
+
+option go_package = "hmans.de/chatto/internal/pb/chatto/config/v1;configv1";
+
+// InstanceConfig stores runtime-editable instance settings.
+// Stored in INSTANCE_CONFIG KV bucket with key "config.instance".
+message InstanceConfig {
+  // Welcome message shown on the login page (markdown supported).
+  string welcome_message = 1;
+
+  // Instance name, displayed in page titles.
+  string instance_name = 2;
+
+  // Message of the Day, displayed in the header bar.
+  string motd = 3;
+
+  // Blocked usernames (newline-separated). Users cannot register with these names.
+  // Checked case-insensitively during registration.
+  string blocked_usernames = 4;
+
+  // Custom OpenGraph title for link previews. Falls back to instance_name if empty.
+  string og_title = 5;
+
+  // Custom OpenGraph description for link previews. Falls back to default if empty.
+  string og_description = 6;
+}

@@ -1,0 +1,137 @@
+package core
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/nats-io/nats.go/jetstream"
+	"google.golang.org/protobuf/proto"
+
+	"hmans.de/chatto/internal/core/subjects"
+	corev1 "hmans.de/chatto/internal/pb/chatto/core/v1"
+)
+
+// ============================================================================
+// User Settings Operations
+// ============================================================================
+
+// userPreferencesKey returns the KV key for a user's instance-level preferences.
+func userPreferencesKey(userID string) string {
+	return fmt.Sprintf("user_preferences.%s", userID)
+}
+
+// UserSettingsInput represents a partial update to user settings.
+// Pointer fields: nil = don't change, non-nil = set to this value.
+type UserSettingsInput struct {
+	// Timezone is an IANA timezone name. nil = no change, pointer to "" = clear override.
+	Timezone *string
+	// TimeFormat preference. nil = no change.
+	TimeFormat *corev1.TimeFormat
+}
+
+// GetUserSettings retrieves a user's settings from the INSTANCE KV bucket.
+// Returns nil, nil if no settings have been saved yet (the user hasn't configured any).
+// Authorization: Caller must verify access (self-only in GraphQL layer).
+func (c *ChattoCore) GetUserSettings(ctx context.Context, userID string) (*corev1.InstanceUserPreferences, error) {
+	entry, err := c.storage.instanceKV.Get(ctx, userPreferencesKey(userID))
+	if err != nil {
+		if errors.Is(err, jetstream.ErrKeyNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get user settings: %w", err)
+	}
+
+	settings := &corev1.InstanceUserPreferences{}
+	if err := proto.Unmarshal(entry.Value(), settings); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal user settings: %w", err)
+	}
+
+	return settings, nil
+}
+
+// UpdateUserSettings merges the provided fields into the user's existing settings.
+// Nil fields in the input are ignored (not cleared).
+// To clear the timezone override, pass a pointer to an empty string.
+// Authorization: Caller must verify access (self-only in GraphQL layer).
+func (c *ChattoCore) UpdateUserSettings(ctx context.Context, userID string, input UserSettingsInput) (*corev1.InstanceUserPreferences, error) {
+	// Get current settings (or start fresh if none exist)
+	settings, err := c.GetUserSettings(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if settings == nil {
+		settings = &corev1.InstanceUserPreferences{}
+	}
+
+	// Apply non-nil fields
+	if input.Timezone != nil {
+		tz := *input.Timezone
+		if tz != "" {
+			// Validate IANA timezone name
+			if _, err := time.LoadLocation(tz); err != nil {
+				return nil, fmt.Errorf("invalid timezone %q: %w", tz, err)
+			}
+			settings.Timezone = &tz
+		} else {
+			// Clear the timezone override
+			settings.Timezone = nil
+		}
+	}
+
+	if input.TimeFormat != nil {
+		settings.TimeFormat = *input.TimeFormat
+	}
+
+	// Persist
+	data, err := proto.Marshal(settings)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal user settings: %w", err)
+	}
+
+	if _, err := c.storage.instanceKV.Put(ctx, userPreferencesKey(userID), data); err != nil {
+		return nil, fmt.Errorf("failed to store user settings: %w", err)
+	}
+
+	c.logger.Info("Updated user settings", "user_id", userID)
+
+	// Publish live event for multi-tab/multi-device sync
+	c.publishInstanceUserPreferencesUpdatedEvent(ctx, userID, settings)
+
+	return settings, nil
+}
+
+// publishInstanceUserPreferencesUpdatedEvent publishes a live event when preferences change.
+// User-scoped: only delivered to the user who changed their preferences.
+func (c *ChattoCore) publishInstanceUserPreferencesUpdatedEvent(ctx context.Context, userID string, settings *corev1.InstanceUserPreferences) {
+	tz := ""
+	if settings.Timezone != nil {
+		tz = *settings.Timezone
+	}
+
+	event := newInstanceEvent(userID, &corev1.InstanceEvent{
+		Event: &corev1.InstanceEvent_InstanceUserPreferencesUpdated{
+			InstanceUserPreferencesUpdated: &corev1.InstanceUserPreferencesUpdatedEvent{
+				Timezone:   tz,
+				TimeFormat: settings.TimeFormat,
+			},
+		},
+	})
+
+	subject := subjects.LiveInstanceUserEvent(userID, "settings_updated")
+	if err := c.publishInstanceEvent(ctx, subject, event); err != nil {
+		c.logger.Warn("failed to publish user settings updated event", "error", err, "user_id", userID)
+	}
+}
+
+// deleteUserSettings removes a user's settings. Called during account deletion.
+func (c *ChattoCore) deleteUserSettings(ctx context.Context, userID string) error {
+	if err := c.storage.instanceKV.Delete(ctx, userPreferencesKey(userID)); err != nil {
+		if errors.Is(err, jetstream.ErrKeyNotFound) {
+			return nil // No settings to delete
+		}
+		return fmt.Errorf("failed to delete user settings: %w", err)
+	}
+	return nil
+}

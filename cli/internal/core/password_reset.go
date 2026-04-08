@@ -1,0 +1,162 @@
+package core
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/nats-io/nats.go/jetstream"
+)
+
+// ============================================================================
+// Password Reset Constants and Errors
+// ============================================================================
+
+const (
+	// PasswordResetTokenTTL is the duration a password reset token is valid.
+	PasswordResetTokenTTL = 1 * time.Hour
+)
+
+var (
+	// ErrPasswordResetTokenNotFound is returned when the reset token doesn't exist.
+	ErrPasswordResetTokenNotFound = errors.New("password reset token not found")
+
+	// ErrPasswordResetTokenExpired is returned when the reset token has expired.
+	ErrPasswordResetTokenExpired = errors.New("password reset token has expired")
+)
+
+// ============================================================================
+// Password Reset Types
+// ============================================================================
+
+// PasswordResetToken represents a token used to reset a user's password.
+type PasswordResetToken struct {
+	UserID    string    `json:"user_id"`
+	Email     string    `json:"email"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// ============================================================================
+// KV Key Functions
+// ============================================================================
+
+// passwordResetTokenKey returns the KV key for a password reset token.
+// Format: password_reset.{token}
+func passwordResetTokenKey(token string) string {
+	return fmt.Sprintf("password_reset.%s", token)
+}
+
+// ============================================================================
+// Password Reset Token Operations
+// ============================================================================
+
+// CreatePasswordResetToken creates a new password reset token for a verified email.
+// If the email is not found or not verified, returns ("", nil) to prevent email enumeration.
+// Only verified emails can trigger password reset.
+func (c *ChattoCore) CreatePasswordResetToken(ctx context.Context, email string) (string, error) {
+	// Normalize email
+	normalizedEmail := strings.ToLower(strings.TrimSpace(email))
+	if normalizedEmail == "" {
+		return "", fmt.Errorf("email is required")
+	}
+
+	// Look up user by verified email
+	user, err := c.GetUserByVerifiedEmail(ctx, normalizedEmail)
+	if err != nil {
+		// User not found or email not verified - return empty string, no error
+		// This prevents email enumeration attacks
+		return "", nil
+	}
+
+	// Generate token
+	token := NewPasswordResetToken()
+
+	tokenData := PasswordResetToken{
+		UserID:    user.Id,
+		Email:     normalizedEmail,
+		CreatedAt: time.Now(),
+	}
+
+	data, err := json.Marshal(tokenData)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal token: %w", err)
+	}
+
+	_, err = c.storage.instanceKV.Put(ctx, passwordResetTokenKey(token), data)
+	if err != nil {
+		return "", fmt.Errorf("failed to store password reset token: %w", err)
+	}
+
+	return token, nil
+}
+
+// getPasswordResetToken retrieves and validates a password reset token.
+// Returns the token data including userID and email.
+func (c *ChattoCore) getPasswordResetToken(ctx context.Context, token string) (*PasswordResetToken, error) {
+	entry, err := c.storage.instanceKV.Get(ctx, passwordResetTokenKey(token))
+	if err != nil {
+		if errors.Is(err, jetstream.ErrKeyNotFound) {
+			return nil, ErrPasswordResetTokenNotFound
+		}
+		return nil, fmt.Errorf("failed to get password reset token: %w", err)
+	}
+
+	var tokenData PasswordResetToken
+	if err := json.Unmarshal(entry.Value(), &tokenData); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal token: %w", err)
+	}
+
+	// Check if token has expired
+	if time.Since(tokenData.CreatedAt) > PasswordResetTokenTTL {
+		// Clean up expired token
+		c.storage.instanceKV.Delete(ctx, passwordResetTokenKey(token))
+		return nil, ErrPasswordResetTokenExpired
+	}
+
+	return &tokenData, nil
+}
+
+// deletePasswordResetToken removes a password reset token.
+func (c *ChattoCore) deletePasswordResetToken(ctx context.Context, token string) error {
+	err := c.storage.instanceKV.Delete(ctx, passwordResetTokenKey(token))
+	if err != nil && !errors.Is(err, jetstream.ErrKeyNotFound) {
+		return fmt.Errorf("failed to delete password reset token: %w", err)
+	}
+	return nil
+}
+
+// ValidatePasswordResetToken validates a token and returns the associated userID.
+// This is useful for checking if a token is valid before showing the reset form.
+func (c *ChattoCore) ValidatePasswordResetToken(ctx context.Context, token string) (string, error) {
+	tokenData, err := c.getPasswordResetToken(ctx, token)
+	if err != nil {
+		return "", err
+	}
+	return tokenData.UserID, nil
+}
+
+// ResetPassword validates the token, updates the user's password, and deletes the token.
+// The newPasswordHash should already be bcrypt-hashed by the caller.
+// This is atomic: the token is deleted regardless of password update outcome.
+func (c *ChattoCore) ResetPassword(ctx context.Context, token string, newPasswordHash string) error {
+	// Validate token first
+	tokenData, err := c.getPasswordResetToken(ctx, token)
+	if err != nil {
+		return err
+	}
+
+	// Delete token immediately to prevent reuse (even if password update fails)
+	defer c.deletePasswordResetToken(ctx, token)
+
+	// Update the password
+	passwordKey := fmt.Sprintf("auth.%s.password", tokenData.UserID)
+	_, err = c.storage.instanceKV.Put(ctx, passwordKey, []byte(newPasswordHash))
+	if err != nil {
+		return fmt.Errorf("failed to update password: %w", err)
+	}
+
+	return nil
+}

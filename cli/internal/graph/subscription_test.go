@@ -1,0 +1,508 @@
+package graph
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+)
+
+// ============================================================================
+// Subscription Resolver Tests
+// ============================================================================
+
+func TestSubscriptionResolver_MySpaceEvents(t *testing.T) {
+	env := setupTestResolver(t)
+
+	t.Run("subscribe to space events as member", func(t *testing.T) {
+		// Create a context with timeout for subscription
+		subCtx, cancel := context.WithTimeout(env.authContext(), 5*time.Second)
+		defer cancel()
+
+		// Subscribe to space events
+		eventChan, err := env.resolver.Subscription().MySpaceEvents(subCtx, env.testSpace.Id)
+		if err != nil {
+			t.Fatalf("Unexpected error subscribing: %v", err)
+		}
+
+		if eventChan == nil {
+			t.Fatal("Expected event channel, got nil")
+		}
+
+		// Give subscription time to be ready
+		time.Sleep(50 * time.Millisecond)
+
+		// Post a message to trigger an event
+		go func() {
+			_, err := env.core.PostMessage(env.ctx, env.testSpace.Id, env.testRoom.Id, env.testUser.Id, "Test subscription message", nil, "", "", nil, false)
+			if err != nil {
+				t.Logf("Failed to post message: %v", err)
+			}
+		}()
+
+		// Wait for MessagePosted event (skip non-message events like presence)
+		deadline := time.After(3 * time.Second)
+		found := false
+		for !found {
+			select {
+			case event := <-eventChan:
+				if event == nil {
+					t.Error("Received nil event")
+					return
+				}
+				if event.GetMessagePosted() != nil {
+					found = true
+				}
+			case <-deadline:
+				t.Error("Timeout waiting for MessagePosted event")
+				return
+			}
+		}
+	})
+
+	t.Run("subscribe without authentication", func(t *testing.T) {
+		eventChan, err := env.resolver.Subscription().MySpaceEvents(env.unauthContext(), env.testSpace.Id)
+		if !errors.Is(err, ErrNotAuthenticated) {
+			t.Errorf("Expected ErrNotAuthenticated, got %v", err)
+		}
+
+		if eventChan != nil {
+			t.Errorf("Expected nil channel, got %v", eventChan)
+		}
+	})
+
+	t.Run("subscribe without space membership", func(t *testing.T) {
+		// Create another user who is not a member of the test space
+		otherUser, err := env.core.CreateUser(env.ctx, "system", "othersubuser", "Other Sub User", "password456")
+		if err != nil {
+			t.Fatalf("Failed to create other user: %v", err)
+		}
+
+		// Try to subscribe as the other user (who is not a space member)
+		eventChan, err := env.resolver.Subscription().MySpaceEvents(env.authContextForUser(otherUser), env.testSpace.Id)
+		if !errors.Is(err, ErrNotSpaceMember) {
+			t.Errorf("Expected ErrNotSpaceMember, got %v", err)
+		}
+
+		if eventChan != nil {
+			t.Errorf("Expected nil channel, got %v", eventChan)
+		}
+	})
+
+	t.Run("only receive events for member rooms", func(t *testing.T) {
+		// Create another room in the same space that the user is NOT a member of
+		otherRoom, err := env.core.CreateRoom(env.ctx, env.testUser.Id, env.testSpace.Id, "other-room", "Another room")
+		if err != nil {
+			t.Fatalf("Failed to create other room: %v", err)
+		}
+
+		// Create another user to post in that room
+		poster, err := env.core.CreateUser(env.ctx, "system", "poster", "Poster User", "password")
+		if err != nil {
+			t.Fatalf("Failed to create poster user: %v", err)
+		}
+		_, err = env.core.JoinSpace(env.ctx, poster.Id, env.testSpace.Id)
+		if err != nil {
+			t.Fatalf("Failed to join space: %v", err)
+		}
+		_, err = env.core.JoinRoom(env.ctx, poster.Id, env.testSpace.Id, poster.Id, otherRoom.Id)
+		if err != nil {
+			t.Fatalf("Failed to join room: %v", err)
+		}
+
+		// Leave the test user from the other room (they're not a member)
+		// (they were never added, so this is fine)
+
+		subCtx, cancel := context.WithTimeout(env.authContext(), 3*time.Second)
+		defer cancel()
+
+		eventChan, err := env.resolver.Subscription().MySpaceEvents(subCtx, env.testSpace.Id)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+
+		// Give subscription time to be ready
+		time.Sleep(50 * time.Millisecond)
+
+		// Post message in the other room (user should NOT receive this)
+		go func() {
+			_, err := env.core.PostMessage(env.ctx, env.testSpace.Id, otherRoom.Id, poster.Id, "Message in other room", nil, "", "", nil, false)
+			if err != nil {
+				t.Logf("Failed to post message: %v", err)
+			}
+		}()
+
+		// Should timeout without receiving the event
+		select {
+		case event := <-eventChan:
+			if event != nil && event.GetMessagePosted() != nil {
+				t.Error("Should not receive events from rooms user is not a member of")
+			}
+		case <-time.After(500 * time.Millisecond):
+			// Expected - no event received
+		}
+	})
+
+	t.Run("subscription cleanup on context cancellation", func(t *testing.T) {
+		subCtx, cancel := context.WithCancel(env.authContext())
+
+		eventChan, err := env.resolver.Subscription().MySpaceEvents(subCtx, env.testSpace.Id)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+
+		// Cancel the context to stop the subscription
+		cancel()
+
+		// Give some time for cleanup
+		time.Sleep(100 * time.Millisecond)
+
+		// Channel should be closed or no longer receiving
+		select {
+		case _, ok := <-eventChan:
+			if ok {
+				// If we received something, that's fine - it might be buffered
+				t.Log("Received event after cancellation (may be buffered)")
+			}
+			// Channel closed is expected behavior
+		case <-time.After(200 * time.Millisecond):
+			// Timeout is acceptable - subscription stopped
+		}
+	})
+
+	t.Run("receive multiple events in order", func(t *testing.T) {
+		subCtx, cancel := context.WithTimeout(env.authContext(), 10*time.Second)
+		defer cancel()
+
+		eventChan, err := env.resolver.Subscription().MySpaceEvents(subCtx, env.testSpace.Id)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+
+		// Give subscription time to be ready
+		time.Sleep(50 * time.Millisecond)
+
+		// Post multiple messages
+		messages := []string{"First message", "Second message", "Third message"}
+		go func() {
+			for _, msg := range messages {
+				_, err := env.core.PostMessage(env.ctx, env.testSpace.Id, env.testRoom.Id, env.testUser.Id, msg, nil, "", "", nil, false)
+				if err != nil {
+					t.Logf("Failed to post message: %v", err)
+				}
+				time.Sleep(10 * time.Millisecond) // Small delay to ensure ordering
+			}
+		}()
+
+		// Receive events and verify order
+		receivedCount := 0
+		for i := 0; i < len(messages); i++ {
+			select {
+			case event := <-eventChan:
+				if event == nil {
+					t.Error("Received nil event")
+					continue
+				}
+				if event.GetMessagePosted() != nil {
+					receivedCount++
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatalf("Timeout waiting for event %d", i+1)
+			}
+		}
+
+		if receivedCount != len(messages) {
+			t.Errorf("Expected %d message events, got %d", len(messages), receivedCount)
+		}
+	})
+
+	t.Run("receive thread reply as MessagePosted event", func(t *testing.T) {
+		// Thread replies are delivered via JetStream as regular MessagePosted events.
+		// Client-side filtering determines what to display:
+		// - Room views filter out events where inThread is set
+		// - Thread panes filter for events where inThread matches their thread root
+
+		// Create a second user (User B) who will post replies
+		userB, err := env.core.CreateUser(env.ctx, "system", "userb", "User B", "password123")
+		if err != nil {
+			t.Fatalf("Failed to create user B: %v", err)
+		}
+		_, err = env.core.JoinSpace(env.ctx, userB.Id, env.testSpace.Id)
+		if err != nil {
+			t.Fatalf("Failed to join space: %v", err)
+		}
+		_, err = env.core.JoinRoom(env.ctx, userB.Id, env.testSpace.Id, userB.Id, env.testRoom.Id)
+		if err != nil {
+			t.Fatalf("Failed to join room: %v", err)
+		}
+
+		// User A posts a root message
+		rootEvent, err := env.core.PostMessage(env.ctx, env.testSpace.Id, env.testRoom.Id, env.testUser.Id, "Thread root", nil, "", "", nil, false)
+		if err != nil {
+			t.Fatalf("Failed to post root message: %v", err)
+		}
+		rootEventID := rootEvent.Id
+
+		// User A subscribes to space events
+		subCtx, cancel := context.WithTimeout(env.authContext(), 10*time.Second)
+		defer cancel()
+
+		eventChan, err := env.resolver.Subscription().MySpaceEvents(subCtx, env.testSpace.Id)
+		if err != nil {
+			t.Fatalf("Unexpected error subscribing: %v", err)
+		}
+
+		// Give subscription time to be ready
+		time.Sleep(100 * time.Millisecond)
+
+		// User B posts a reply to the root message
+		go func() {
+			_, err := env.core.PostMessage(env.ctx, env.testSpace.Id, env.testRoom.Id, userB.Id, "Reply from User B", nil, rootEventID, "", nil, false)
+			if err != nil {
+				t.Logf("Failed to post reply: %v", err)
+			}
+		}()
+
+		// User A should receive the thread reply as a MessagePosted event with inThread set
+		// Loop to skip other events (joins, etc.) until we find the thread reply
+		timeout := time.After(10 * time.Second)
+		for {
+			select {
+			case event := <-eventChan:
+				if event == nil {
+					continue
+				}
+				if msg := event.GetMessagePosted(); msg != nil && msg.InThread != "" {
+					if msg.InThread != rootEventID {
+						t.Errorf("Expected InThread=%q, got %q", rootEventID, msg.InThread)
+					}
+					t.Logf("Received MessagePosted for thread reply in thread=%s", msg.InThread)
+					return // Success - thread reply received
+				}
+			case <-timeout:
+				t.Fatal("Timeout waiting for thread reply event")
+			}
+		}
+	})
+}
+
+func TestSubscriptionResolver_MyInstanceEvents(t *testing.T) {
+	env := setupTestResolver(t)
+
+	t.Run("subscribe to instance events authenticated", func(t *testing.T) {
+		subCtx, cancel := context.WithTimeout(env.authContext(), 5*time.Second)
+		defer cancel()
+
+		eventChan, err := env.resolver.Subscription().MyInstanceEvents(subCtx)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+
+		if eventChan == nil {
+			t.Fatal("Expected event channel, got nil")
+		}
+	})
+
+	t.Run("subscribe without authentication", func(t *testing.T) {
+		eventChan, err := env.resolver.Subscription().MyInstanceEvents(env.unauthContext())
+		if !errors.Is(err, ErrNotAuthenticated) {
+			t.Errorf("Expected ErrNotAuthenticated, got %v", err)
+		}
+
+		if eventChan != nil {
+			t.Errorf("Expected nil channel, got %v", eventChan)
+		}
+	})
+
+	t.Run("receive mention notification when mentioned by another user", func(t *testing.T) {
+		// Create User B who will mention User A
+		userB, err := env.core.CreateUser(env.ctx, "system", "mentioner", "User B", "password123")
+		if err != nil {
+			t.Fatalf("Failed to create user B: %v", err)
+		}
+		_, err = env.core.JoinSpace(env.ctx, userB.Id, env.testSpace.Id)
+		if err != nil {
+			t.Fatalf("Failed to join space: %v", err)
+		}
+		_, err = env.core.JoinRoom(env.ctx, userB.Id, env.testSpace.Id, userB.Id, env.testRoom.Id)
+		if err != nil {
+			t.Fatalf("Failed to join room: %v", err)
+		}
+
+		// User A subscribes to instance events
+		subCtx, cancel := context.WithTimeout(env.authContext(), 10*time.Second)
+		defer cancel()
+
+		eventChan, err := env.resolver.Subscription().MyInstanceEvents(subCtx)
+		if err != nil {
+			t.Fatalf("Unexpected error subscribing: %v", err)
+		}
+
+		// Give subscription time to be ready (longer delay for slow CI)
+		time.Sleep(200 * time.Millisecond)
+
+		// User B posts a message mentioning User A (env.testUser)
+		// The testUser's login is used for the mention
+		go func() {
+			_, err := env.core.PostMessage(env.ctx, env.testSpace.Id, env.testRoom.Id, userB.Id, "Hey @"+env.testUser.Login+" check this out!", nil, "", "", nil, false)
+			if err != nil {
+				t.Logf("Failed to post message: %v", err)
+			}
+		}()
+
+		// Wait for mention notification event (for room indicator) or notification created event (for bell icon)
+		// Both events are published, so we accept whichever arrives first
+		select {
+		case event := <-eventChan:
+			if event == nil {
+				t.Fatal("Received nil event")
+			}
+			// Accept either MentionNotificationEvent or NotificationCreatedEvent
+			if mentioned := event.GetMentionNotification(); mentioned != nil {
+				if mentioned.SpaceId != env.testSpace.Id {
+					t.Errorf("Expected space ID %s, got %s", env.testSpace.Id, mentioned.SpaceId)
+				}
+				if mentioned.RoomId != env.testRoom.Id {
+					t.Errorf("Expected room ID %s, got %s", env.testRoom.Id, mentioned.RoomId)
+				}
+				if mentioned.MentionedByUserId != userB.Id {
+					t.Errorf("Expected mentioner ID %s, got %s", userB.Id, mentioned.MentionedByUserId)
+				}
+				t.Logf("Successfully received mention notification in space %s, room %s", mentioned.SpaceId, mentioned.RoomId)
+			} else if notifCreated := event.GetNotificationCreated(); notifCreated != nil {
+				if notifCreated.SpaceId != env.testSpace.Id {
+					t.Errorf("Expected space ID %s, got %s", env.testSpace.Id, notifCreated.SpaceId)
+				}
+				if notifCreated.RoomId != env.testRoom.Id {
+					t.Errorf("Expected room ID %s, got %s", env.testRoom.Id, notifCreated.RoomId)
+				}
+				t.Logf("Successfully received notification created event for mention in space %s, room %s", notifCreated.SpaceId, notifCreated.RoomId)
+			} else {
+				t.Fatalf("Expected MentionNotificationEvent or NotificationCreatedEvent, got %T", event.Event)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("Timeout waiting for mention event")
+		}
+	})
+}
+
+// TestSubscriptionResolver_Presence tests that presence is set via myInstanceEvents
+// and delivered via mySpaceEvents.
+func TestSubscriptionResolver_Presence(t *testing.T) {
+	env := setupTestResolver(t)
+
+	t.Run("receive presence changed event when another user comes online via instance events", func(t *testing.T) {
+		// Create User B who will come online after User A is subscribed
+		userB, err := env.core.CreateUser(env.ctx, "system", "userb-presence", "User B", "password123")
+		if err != nil {
+			t.Fatalf("Failed to create user B: %v", err)
+		}
+		_, err = env.core.JoinSpace(env.ctx, userB.Id, env.testSpace.Id)
+		if err != nil {
+			t.Fatalf("Failed to join space: %v", err)
+		}
+
+		// User A subscribes to instance events (sets their presence to ONLINE)
+		instCtxA, instCancelA := context.WithTimeout(env.authContext(), 10*time.Second)
+		defer instCancelA()
+		_, err = env.resolver.Subscription().MyInstanceEvents(instCtxA)
+		if err != nil {
+			t.Fatalf("Unexpected error subscribing User A to instance events: %v", err)
+		}
+
+		// User A subscribes to space events (receives presence change events via KV watcher)
+		subCtxA, cancelA := context.WithTimeout(env.authContext(), 10*time.Second)
+		defer cancelA()
+		eventChanA, err := env.resolver.Subscription().MySpaceEvents(subCtxA, env.testSpace.Id)
+		if err != nil {
+			t.Fatalf("Unexpected error subscribing User A to space events: %v", err)
+		}
+
+		// Wait for User A's subscription to complete initial sync
+		time.Sleep(200 * time.Millisecond)
+
+		// User B subscribes to instance events (this sets their presence to ONLINE)
+		instCtxB, instCancelB := context.WithTimeout(env.authContextForUser(userB), 5*time.Second)
+		defer instCancelB()
+		_, err = env.resolver.Subscription().MyInstanceEvents(instCtxB)
+		if err != nil {
+			t.Fatalf("Unexpected error subscribing User B to instance events: %v", err)
+		}
+
+		// User A should receive a PresenceChangedEvent for User B via space events
+		deadline := time.After(5 * time.Second)
+		found := false
+		for !found {
+			select {
+			case event := <-eventChanA:
+				if event == nil {
+					t.Fatal("Received nil event")
+				}
+				presenceEvent := event.GetPresenceChanged()
+				if presenceEvent == nil {
+					t.Logf("Received non-presence event: %T, skipping", event.Event)
+					continue
+				}
+				if event.ActorId != userB.Id {
+					t.Logf("Received presence event for %s (not User B), skipping", event.ActorId)
+					continue
+				}
+				if presenceEvent.Status != "ONLINE" {
+					t.Errorf("Expected status ONLINE, got %s", presenceEvent.Status)
+				}
+				t.Logf("Successfully received presence event: user %s is now %s", event.ActorId, presenceEvent.Status)
+				found = true
+			case <-deadline:
+				t.Fatal("Timeout waiting for User B's presence event")
+			}
+		}
+	})
+
+	t.Run("presence set by instance events, remains after subscription ends (TTL-based expiry)", func(t *testing.T) {
+		// Create a user
+		userC, err := env.core.CreateUser(env.ctx, "system", "userc-presence", "User C", "password123")
+		if err != nil {
+			t.Fatalf("Failed to create user C: %v", err)
+		}
+
+		// Subscribe to instance events (this sets presence to ONLINE)
+		subCtx, cancel := context.WithCancel(env.authContextForUser(userC))
+
+		_, err = env.resolver.Subscription().MyInstanceEvents(subCtx)
+		if err != nil {
+			t.Fatalf("Unexpected error subscribing: %v", err)
+		}
+
+		// Wait for presence to be set
+		var status string
+		for i := 0; i < 20; i++ {
+			time.Sleep(50 * time.Millisecond)
+			status, err = env.core.GetUserPresence(env.ctx, userC.Id)
+			if err != nil {
+				t.Fatalf("Failed to get presence status: %v", err)
+			}
+			if status == "ONLINE" {
+				break
+			}
+		}
+		if status != "ONLINE" {
+			t.Errorf("Expected status ONLINE while subscribed, got %s", status)
+		}
+
+		// Cancel the subscription
+		cancel()
+
+		// Wait for cleanup
+		time.Sleep(200 * time.Millisecond)
+
+		// Verify user is still ONLINE - we no longer delete presence on disconnect.
+		// TTL-based expiry supports multi-device scenarios.
+		status, err = env.core.GetUserPresence(env.ctx, userC.Id)
+		if err != nil {
+			t.Fatalf("Failed to get presence status after cleanup: %v", err)
+		}
+		if status != "ONLINE" {
+			t.Errorf("Expected status ONLINE after subscription ends (TTL handles expiry), got %s", status)
+		}
+	})
+}

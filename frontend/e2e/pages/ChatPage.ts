@@ -1,0 +1,280 @@
+import { expect, type Locator, type Page } from '@playwright/test';
+import * as routes from '../routes';
+import { RoomPage } from './RoomPage';
+
+/**
+ * Page object for the main chat interface.
+ * Handles sidebar navigation, space creation, and room entry.
+ */
+export class ChatPage {
+  constructor(readonly page: Page) {}
+
+  /** The create space button in the sidebar */
+  get createSpaceButton(): Locator {
+    return this.page.locator('[title="Create Space"]');
+  }
+
+  /** The explore spaces link in the sidebar */
+  get exploreSpacesLink(): Locator {
+    return this.page.getByRole('link', { name: 'Explore Spaces' });
+  }
+
+  /** The room list container in the sidebar */
+  get roomList(): Locator {
+    return this.page.locator('.room-list');
+  }
+
+  /**
+   * Navigate to the chat page.
+   * Note: Users may be redirected based on their state:
+   * - New users (no spaces): redirected to /chat/spaces
+   * - Users with last space: redirected to /chat/-/[spaceId]/[roomId]
+   */
+  async goto(): Promise<void> {
+    await this.page.goto('/chat');
+    // Wait for any /chat path - redirects happen based on user state
+    await this.page.waitForURL((url) => url.pathname.startsWith('/chat'));
+
+  }
+
+  /**
+   * Extract space ID from current URL.
+   * Works with URLs like /chat/-/S1234abc or /chat/-/S1234abc/R5678xyz
+   */
+  getSpaceId(): string {
+    const url = this.page.url();
+    const match = url.match(/\/chat\/-\/([a-zA-Z0-9]+)/);
+    if (!match) throw new Error(`Could not extract space ID from URL: ${url}`);
+    return match[1];
+  }
+
+  /**
+   * Create a new space via the create space page.
+   * Returns the space name for reference.
+   */
+  async createSpace(name?: string, description?: string): Promise<string> {
+    const spaceName = name ?? `Test Space ${Date.now()}`;
+
+    await this.createSpaceButton.click();
+    await this.page.waitForURL(routes.newSpace);
+
+    await this.page.getByLabel('Name').fill(spaceName);
+
+    if (description) {
+      await this.page.getByLabel('Description').fill(description);
+    }
+
+    await this.page.locator('button[type="submit"]').click();
+    // After creating a space, user is redirected to the first room in the new space
+    // Wait for a URL that looks like a space page (not /spaces, /admin, /dm, etc.)
+    // Use negative lookahead to exclude known non-space paths
+    await this.page.waitForURL(routes.patterns.anySpace);
+
+    return spaceName;
+  }
+
+  /**
+   * Enter a room by clicking it in the sidebar.
+   * Returns a RoomPage for interacting with messages.
+   * If already in the room (e.g., after createSpace redirect), skips navigation
+   * to avoid disrupting WebSocket subscriptions.
+   * Always waits for room UI to be ready before returning.
+   */
+  async enterRoom(roomName: string): Promise<RoomPage> {
+    const link = this.roomList.getByRole('link', { name: `# ${roomName}` });
+    await expect(link).toBeVisible();
+
+    // Check if already in this room (aria-current="page" indicates active link)
+    const isActive = await link.getAttribute('aria-current');
+    if (isActive !== 'page') {
+      await link.click();
+      await this.page.waitForURL(routes.patterns.anyRoom);
+    }
+
+    // Wait for room UI to be fully loaded (header and message input)
+    await expect(this.getRoomHeader(roomName)).toBeVisible({ timeout: 5000 });
+    await expect(this.page.getByTestId('message-input')).toBeVisible({ timeout: 5000 });
+
+    return new RoomPage(this.page);
+  }
+
+  // --- Space Icon Indicators ---
+
+  /**
+   * Get the container div for a space icon by space name.
+   * Scopes to the specific space in the sidebar (the parent div wrapping the button and any dots).
+   */
+  getSpaceIconContainer(spaceName: string): Locator {
+    return this.page
+      .locator('.space-list')
+      .locator('div', { has: this.page.getByRole('link', { name: spaceName, exact: true }) });
+  }
+
+  /** Get the unread dot locator for a specific space */
+  getSpaceUnreadDot(spaceName: string): Locator {
+    return this.getSpaceIconContainer(spaceName).getByTestId('space-unread-dot');
+  }
+
+  /** Click the unread dot on a specific space icon */
+  async clickSpaceUnreadDot(spaceName: string): Promise<void> {
+    await this.getSpaceUnreadDot(spaceName).click();
+  }
+
+  /** Assert that a specific space icon shows an unread dot */
+  async expectSpaceHasUnread(spaceName: string, options?: { timeout?: number }): Promise<void> {
+    await expect(this.getSpaceUnreadDot(spaceName)).toBeVisible(options);
+  }
+
+  /** Assert that a specific space icon does NOT show an unread dot */
+  async expectSpaceHasNoUnread(spaceName: string, options?: { timeout?: number }): Promise<void> {
+    await expect(this.getSpaceUnreadDot(spaceName)).not.toBeVisible(options);
+  }
+
+  // --- Room Creation ---
+
+  /** The room name input field in the admin room creation modal */
+  get roomNameInput(): Locator {
+    return this.page.getByLabel('Room Name');
+  }
+
+  /** The room description input field in the admin room creation modal */
+  get roomDescriptionInput(): Locator {
+    return this.page.getByLabel('Description (optional)');
+  }
+
+  /** The submit button in the room creation form */
+  get roomFormSubmitButton(): Locator {
+    return this.page.locator('form').getByRole('button', { name: 'Create Room' });
+  }
+
+  /** The room header (visible after navigating to a room) */
+  getRoomHeader(roomName: string): Locator {
+    return this.page.getByRole('heading', { name: `# ${roomName}` });
+  }
+
+  /**
+   * Open the room creation modal on the admin rooms page.
+   * Navigates to the admin rooms page and clicks "New Room".
+   */
+  async openCreateRoomModal(): Promise<void> {
+    const spaceId = this.getSpaceId();
+    await this.page.goto(routes.spaceAdminRooms(spaceId));
+    await this.page.getByRole('button', { name: 'New Room' }).click();
+    await expect(this.roomNameInput).toBeVisible();
+  }
+
+  /**
+   * Create a new room via the GraphQL API, then navigate to it.
+   * Much faster than UI-based creation and used for test setup.
+   * Returns the room name for reference.
+   */
+  async createRoom(name?: string, description?: string): Promise<string> {
+    const roomName = name ?? `test-room-${Date.now()}`;
+    const spaceId = this.getSpaceId();
+
+    // Create and join room via API
+    const result = await this.page.evaluate(
+      async ({ spaceId, roomName, description }) => {
+        const createRes = await fetch('/api/graphql', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-REQUEST-TYPE': 'GraphQL' },
+          credentials: 'include',
+          body: JSON.stringify({
+            query: `mutation($input: CreateRoomInput!) { createRoom(input: $input) { id name } }`,
+            variables: { input: { spaceId, name: roomName, description: description || undefined } }
+          })
+        });
+        const createData = await createRes.json();
+        if (createData.errors) throw new Error(JSON.stringify(createData.errors));
+        const roomId = createData.data.createRoom.id;
+
+        // Join the room
+        const joinRes = await fetch('/api/graphql', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-REQUEST-TYPE': 'GraphQL' },
+          credentials: 'include',
+          body: JSON.stringify({
+            query: `mutation($input: JoinRoomInput!) { joinRoom(input: $input) }`,
+            variables: { input: { spaceId, roomId } }
+          })
+        });
+        const joinData = await joinRes.json();
+        if (joinData.errors) throw new Error(JSON.stringify(joinData.errors));
+
+        return { roomId };
+      },
+      { spaceId, roomName, description }
+    );
+
+    // Navigate to the new room
+    await this.page.goto(routes.room(spaceId, result.roomId));
+
+    // Wait for room UI to be fully loaded (header and message input)
+    await expect(this.getRoomHeader(roomName)).toBeVisible({ timeout: 5000 });
+    await expect(this.page.getByTestId('message-input')).toBeVisible({ timeout: 5000 });
+
+    return roomName;
+  }
+
+  // --- Room Creation Assertions ---
+
+  /**
+   * Assert that the room creation submit button is disabled.
+   */
+  async expectRoomSubmitDisabled(): Promise<void> {
+    await expect(this.roomFormSubmitButton).toBeDisabled();
+  }
+
+  /**
+   * Assert that a validation error message is visible.
+   */
+  async expectValidationError(errorText: string): Promise<void> {
+    await expect(this.page.getByText(errorText)).toBeVisible();
+  }
+
+  /**
+   * Assert that the room header is visible (verifies navigation to room).
+   */
+  async expectRoomHeaderVisible(roomName: string): Promise<void> {
+    await expect(this.getRoomHeader(roomName)).toBeVisible();
+  }
+
+  /**
+   * Navigate to the Explore Spaces page.
+   */
+  async goToExploreSpaces(): Promise<void> {
+    await this.exploreSpacesLink.click();
+    await this.page.waitForURL(routes.spaces);
+  }
+
+  /**
+   * Navigate to the DM list.
+   */
+  async goToDMs(): Promise<void> {
+    await this.page.goto(routes.dm);
+    await this.page.waitForURL(routes.dm);
+  }
+
+  // --- Assertions ---
+
+  /**
+   * Assert that the create space button is visible.
+   */
+  async expectCreateSpaceVisible(): Promise<void> {
+    await expect(this.createSpaceButton).toBeVisible();
+  }
+
+  /**
+   * Assert that the create space button is NOT visible (permission denied).
+   */
+  async expectCreateSpaceNotVisible(): Promise<void> {
+    await expect(this.createSpaceButton).not.toBeVisible();
+  }
+
+  /**
+   * Assert that the explore spaces button is visible.
+   */
+  async expectExploreSpacesVisible(): Promise<void> {
+    await expect(this.page.locator('[title="Explore Spaces"]')).toBeVisible();
+  }
+}

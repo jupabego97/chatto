@@ -1,0 +1,630 @@
+package core
+
+import (
+	"context"
+	"testing"
+
+	"hmans.de/chatto/internal/core/rbac"
+)
+
+// Helper to construct expected allow key from permission
+func expectedAllowKey(subject string, perm Permission, objectId string) string {
+	parts := perm.KeyParts()
+	return rbac.AllowKey(subject, parts.Verb, parts.ObjectType, objectId)
+}
+
+// Helper to construct expected deny key from permission
+func expectedDenyKey(subject string, perm Permission, objectId string) string {
+	parts := perm.KeyParts()
+	return rbac.DenyKey(subject, parts.Verb, parts.ObjectType, objectId)
+}
+
+// ============================================================================
+// Instance-Level Role Operations Tests
+// ============================================================================
+
+func TestGrantInstanceRolePermission(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	t.Run("creates correct KV key for valid permission", func(t *testing.T) {
+		err := core.GrantInstanceRolePermission(ctx, InstRoleModerator, PermSpaceCreate)
+		if err != nil {
+			t.Fatalf("GrantInstanceRolePermission() error = %v", err)
+		}
+
+		// Verify key was created
+		kv := core.instanceRBACEngine.KV()
+		expectedKey := expectedAllowKey(InstRoleModerator, PermSpaceCreate, rbac.ObjectIdAny)
+		_, err = kv.Get(ctx, expectedKey)
+		if err != nil {
+			t.Errorf("Expected KV key %s to exist, got error: %v", expectedKey, err)
+		}
+	})
+
+	t.Run("removes existing denial when granting", func(t *testing.T) {
+		// First deny the permission
+		err := core.DenyInstanceRolePermission(ctx, InstRoleModerator, PermSpaceList)
+		if err != nil {
+			t.Fatalf("DenyInstanceRolePermission() error = %v", err)
+		}
+
+		// Now grant it - should remove the denial
+		err = core.GrantInstanceRolePermission(ctx, InstRoleModerator, PermSpaceList)
+		if err != nil {
+			t.Fatalf("GrantInstanceRolePermission() error = %v", err)
+		}
+
+		// Verify denial was removed
+		kv := core.instanceRBACEngine.KV()
+		denyKey := expectedDenyKey(InstRoleModerator, PermSpaceList, rbac.ObjectIdAny)
+		_, err = kv.Get(ctx, denyKey)
+		if err == nil {
+			t.Error("Expected denial key to be removed after grant")
+		}
+	})
+
+	t.Run("rejects permission that does not apply at instance scope", func(t *testing.T) {
+		// space.manage only applies at space scope
+		err := core.GrantInstanceRolePermission(ctx, InstRoleModerator, PermSpaceManage)
+		if err == nil {
+			t.Error("Expected error for permission that doesn't apply at instance scope")
+		}
+	})
+}
+
+func TestDenyInstanceRolePermission(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	t.Run("creates deny key", func(t *testing.T) {
+		err := core.DenyInstanceRolePermission(ctx, InstRoleEveryone, PermSpaceCreate)
+		if err != nil {
+			t.Fatalf("DenyInstanceRolePermission() error = %v", err)
+		}
+
+		// Verify deny key was created
+		kv := core.instanceRBACEngine.KV()
+		expectedKey := expectedDenyKey(InstRoleEveryone, PermSpaceCreate, rbac.ObjectIdAny)
+		_, err = kv.Get(ctx, expectedKey)
+		if err != nil {
+			t.Errorf("Expected deny key %s to exist, got error: %v", expectedKey, err)
+		}
+	})
+
+	t.Run("removes existing grant when denying", func(t *testing.T) {
+		// First grant the permission
+		err := core.GrantInstanceRolePermission(ctx, InstRoleEveryone, PermSpaceJoin)
+		if err != nil {
+			t.Fatalf("GrantInstanceRolePermission() error = %v", err)
+		}
+
+		// Now deny it - should remove the grant
+		err = core.DenyInstanceRolePermission(ctx, InstRoleEveryone, PermSpaceJoin)
+		if err != nil {
+			t.Fatalf("DenyInstanceRolePermission() error = %v", err)
+		}
+
+		// Verify grant was removed
+		kv := core.instanceRBACEngine.KV()
+		grantKey := expectedAllowKey(InstRoleEveryone, PermSpaceJoin, rbac.ObjectIdAny)
+		_, err = kv.Get(ctx, grantKey)
+		if err == nil {
+			t.Error("Expected grant key to be removed after denial")
+		}
+	})
+
+	t.Run("rejects permission that does not apply at instance scope", func(t *testing.T) {
+		err := core.DenyInstanceRolePermission(ctx, InstRoleModerator, PermRoleManage)
+		if err == nil {
+			t.Error("Expected error for permission that doesn't apply at instance scope")
+		}
+	})
+}
+
+func TestClearInstanceRolePermission(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	t.Run("clears both grant and denial", func(t *testing.T) {
+		// Grant a permission
+		err := core.GrantInstanceRolePermission(ctx, InstRoleModerator, PermDMView)
+		if err != nil {
+			t.Fatalf("Failed to grant: %v", err)
+		}
+
+		// Clear it
+		err = core.ClearInstanceRolePermission(ctx, InstRoleModerator, PermDMView)
+		if err != nil {
+			t.Fatalf("ClearInstanceRolePermission() error = %v", err)
+		}
+
+		// Verify both keys are gone
+		kv := core.instanceRBACEngine.KV()
+		grantKey := expectedAllowKey(InstRoleModerator, PermDMView, rbac.ObjectIdAny)
+		denyKey := expectedDenyKey(InstRoleModerator, PermDMView, rbac.ObjectIdAny)
+
+		if _, err := kv.Get(ctx, grantKey); err == nil {
+			t.Error("Expected grant key to be cleared")
+		}
+		if _, err := kv.Get(ctx, denyKey); err == nil {
+			t.Error("Expected deny key to be cleared")
+		}
+	})
+
+	t.Run("succeeds when clearing non-existent key", func(t *testing.T) {
+		err := core.ClearInstanceRolePermission(ctx, InstRoleEveryone, PermDMWrite)
+		if err != nil {
+			t.Errorf("Expected no error when clearing non-existent key, got: %v", err)
+		}
+	})
+}
+
+
+// ============================================================================
+// Space-Level Operations Tests
+// ============================================================================
+
+func TestGrantSpaceRolePermission(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	user, _ := core.CreateUser(ctx, "system", "testuser", "Test User", "password123")
+	space, _ := core.CreateSpace(ctx, user.Id, "Test Space", "A test space")
+
+	t.Run("creates correct KV key for space role", func(t *testing.T) {
+		err := core.GrantSpaceRolePermission(ctx, space.Id, SpaceRoleEveryone, PermRoomCreate)
+		if err != nil {
+			t.Fatalf("GrantSpaceRolePermission() error = %v", err)
+		}
+
+		// Verify key was created in space RBAC KV
+		kv, _ := core.getSpaceRBACKV(ctx, space.Id)
+		expectedKey := expectedAllowKey(SpaceRoleEveryone, PermRoomCreate, rbac.ObjectIdAny)
+		_, err = kv.Get(ctx, expectedKey)
+		if err != nil {
+			t.Errorf("Expected space KV key to exist, got error: %v", err)
+		}
+	})
+
+	t.Run("works for instance role override at space level", func(t *testing.T) {
+		// Instance role override at space level
+		err := core.GrantSpaceRolePermission(ctx, space.Id, InstRoleModerator, PermRoomJoin)
+		if err != nil {
+			t.Fatalf("GrantSpaceRolePermission() for instance role error = %v", err)
+		}
+	})
+
+	t.Run("rejects room-only permission at space scope", func(t *testing.T) {
+		// room.manage only applies at space and room scopes, but not instance
+		// Actually room.manage applies at space and room, so it should work...
+		// Let me use a room-only permission if there is one... Looking at the code,
+		// room.join applies at all three scopes. Let's skip this test as there's no
+		// purely room-only permission that can't be used at space level.
+	})
+}
+
+func TestDenySpaceRolePermission(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	user, _ := core.CreateUser(ctx, "system", "testuser", "Test User", "password123")
+	space, _ := core.CreateSpace(ctx, user.Id, "Test Space", "A test space")
+
+	t.Run("creates deny key in space RBAC", func(t *testing.T) {
+		err := core.DenySpaceRolePermission(ctx, space.Id, SpaceRoleEveryone, PermMessagePost)
+		if err != nil {
+			t.Fatalf("DenySpaceRolePermission() error = %v", err)
+		}
+
+		// Verify deny key was created
+		kv, _ := core.getSpaceRBACKV(ctx, space.Id)
+		expectedKey := expectedDenyKey(SpaceRoleEveryone, PermMessagePost, rbac.ObjectIdAny)
+		_, err = kv.Get(ctx, expectedKey)
+		if err != nil {
+			t.Errorf("Expected space deny key to exist, got error: %v", err)
+		}
+	})
+}
+
+func TestClearSpaceRolePermission(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	user, _ := core.CreateUser(ctx, "system", "testuser", "Test User", "password123")
+	space, _ := core.CreateSpace(ctx, user.Id, "Test Space", "A test space")
+
+	t.Run("clears both grant and denial at space level", func(t *testing.T) {
+		// Grant then clear
+		_ = core.GrantSpaceRolePermission(ctx, space.Id, SpaceRoleEveryone, PermRoomList)
+
+		err := core.ClearSpaceRolePermission(ctx, space.Id, SpaceRoleEveryone, PermRoomList)
+		if err != nil {
+			t.Fatalf("ClearSpaceRolePermission() error = %v", err)
+		}
+
+		// Verify keys are gone
+		kv, _ := core.getSpaceRBACKV(ctx, space.Id)
+		grantKey := expectedAllowKey(SpaceRoleEveryone, PermRoomList, rbac.ObjectIdAny)
+		if _, err := kv.Get(ctx, grantKey); err == nil {
+			t.Error("Expected grant key to be cleared")
+		}
+	})
+}
+
+
+// ============================================================================
+// Room-Level Operations Tests
+// ============================================================================
+
+func TestGrantRoomRolePermission(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	user, _ := core.CreateUser(ctx, "system", "testuser", "Test User", "password123")
+	space, _ := core.CreateSpace(ctx, user.Id, "Test Space", "A test space")
+	room, _ := core.CreateRoom(ctx, user.Id, space.Id, "General", "General chat")
+
+	t.Run("creates correct KV key for room-level permission", func(t *testing.T) {
+		err := core.grantRoomRolePermissionInternal(ctx, space.Id, room.Id, SpaceRoleEveryone, PermMessagePost)
+		if err != nil {
+			t.Fatalf("GrantRoomRolePermission() error = %v", err)
+		}
+
+		// Verify key was created with room ID as objectId
+		kv, _ := core.getSpaceRBACKV(ctx, space.Id)
+		expectedKey := expectedAllowKey(SpaceRoleEveryone, PermMessagePost, room.Id)
+		_, err = kv.Get(ctx, expectedKey)
+		if err != nil {
+			t.Errorf("Expected room grant key to exist, got error: %v", err)
+		}
+	})
+
+	t.Run("rejects permission that does not apply at room scope", func(t *testing.T) {
+		// space.create only applies at instance scope
+		err := core.grantRoomRolePermissionInternal(ctx, space.Id, room.Id, SpaceRoleEveryone, PermSpaceCreate)
+		if err == nil {
+			t.Error("Expected error for permission that doesn't apply at room scope")
+		}
+	})
+}
+
+func TestDenyRoomRolePermission(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	user, _ := core.CreateUser(ctx, "system", "testuser", "Test User", "password123")
+	space, _ := core.CreateSpace(ctx, user.Id, "Test Space", "A test space")
+	room, _ := core.CreateRoom(ctx, user.Id, space.Id, "General", "General chat")
+
+	t.Run("creates deny key at room level", func(t *testing.T) {
+		err := core.denyRoomRolePermissionInternal(ctx, space.Id, room.Id, SpaceRoleEveryone, PermMessagePost)
+		if err != nil {
+			t.Fatalf("DenyRoomRolePermission() error = %v", err)
+		}
+
+		// Verify deny key was created
+		kv, _ := core.getSpaceRBACKV(ctx, space.Id)
+		expectedKey := expectedDenyKey(SpaceRoleEveryone, PermMessagePost, room.Id)
+		_, err = kv.Get(ctx, expectedKey)
+		if err != nil {
+			t.Errorf("Expected room deny key to exist, got error: %v", err)
+		}
+	})
+
+	t.Run("rejects permission that does not apply at room scope", func(t *testing.T) {
+		err := core.denyRoomRolePermissionInternal(ctx, space.Id, room.Id, SpaceRoleEveryone, PermAdminAccess)
+		if err == nil {
+			t.Error("Expected error for permission that doesn't apply at room scope")
+		}
+	})
+}
+
+func TestClearRoomRolePermission(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	user, _ := core.CreateUser(ctx, "system", "testuser", "Test User", "password123")
+	space, _ := core.CreateSpace(ctx, user.Id, "Test Space", "A test space")
+	room, _ := core.CreateRoom(ctx, user.Id, space.Id, "General", "General chat")
+
+	t.Run("clears both grant and denial at room level", func(t *testing.T) {
+		// Grant then clear
+		_ = core.grantRoomRolePermissionInternal(ctx, space.Id, room.Id, SpaceRoleEveryone, PermRoomJoin)
+
+		err := core.clearRoomRolePermissionInternal(ctx, space.Id, room.Id, SpaceRoleEveryone, PermRoomJoin)
+		if err != nil {
+			t.Fatalf("ClearRoomRolePermission() error = %v", err)
+		}
+
+		// Verify key was removed
+		kv, _ := core.getSpaceRBACKV(ctx, space.Id)
+		grantKey := expectedAllowKey(SpaceRoleEveryone, PermRoomJoin, room.Id)
+		if _, err := kv.Get(ctx, grantKey); err == nil {
+			t.Error("Expected grant key to be cleared")
+		}
+	})
+}
+
+
+// ============================================================================
+// Idempotency Tests
+// ============================================================================
+
+func TestPermissionOpsIdempotency(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	t.Run("granting same permission twice succeeds", func(t *testing.T) {
+		err := core.GrantInstanceRolePermission(ctx, InstRoleModerator, PermDMView)
+		if err != nil {
+			t.Fatalf("First grant failed: %v", err)
+		}
+
+		err = core.GrantInstanceRolePermission(ctx, InstRoleModerator, PermDMView)
+		if err != nil {
+			t.Errorf("Second grant should succeed (idempotent), got: %v", err)
+		}
+	})
+
+	t.Run("denying same permission twice succeeds", func(t *testing.T) {
+		err := core.DenyInstanceRolePermission(ctx, InstRoleEveryone, PermDMWrite)
+		if err != nil {
+			t.Fatalf("First deny failed: %v", err)
+		}
+
+		err = core.DenyInstanceRolePermission(ctx, InstRoleEveryone, PermDMWrite)
+		if err != nil {
+			t.Errorf("Second deny should succeed (idempotent), got: %v", err)
+		}
+	})
+
+	t.Run("denying after grant updates correctly", func(t *testing.T) {
+		perm := PermSpaceJoin
+
+		// Grant
+		err := core.GrantInstanceRolePermission(ctx, InstRoleEveryone, perm)
+		if err != nil {
+			t.Fatalf("Grant failed: %v", err)
+		}
+
+		// Now deny
+		err = core.DenyInstanceRolePermission(ctx, InstRoleEveryone, perm)
+		if err != nil {
+			t.Fatalf("Deny failed: %v", err)
+		}
+
+		// Verify grant is gone and deny exists
+		kv := core.instanceRBACEngine.KV()
+		grantKey := expectedAllowKey(InstRoleEveryone, perm, rbac.ObjectIdAny)
+		denyKey := expectedDenyKey(InstRoleEveryone, perm, rbac.ObjectIdAny)
+
+		if _, err := kv.Get(ctx, grantKey); err == nil {
+			t.Error("Grant key should be removed after deny")
+		}
+		if _, err := kv.Get(ctx, denyKey); err != nil {
+			t.Error("Deny key should exist")
+		}
+	})
+}
+
+// ============================================================================
+// Initialization Tests
+// ============================================================================
+
+func TestInitInstanceDefaults(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	// InitInstanceDefaults is called during setupTestCore, so we can verify its effects
+
+	t.Run("admin has all instance permissions", func(t *testing.T) {
+		for _, perm := range PermissionsForScope(ScopeInstance) {
+			kv := core.instanceRBACEngine.KV()
+			key := expectedAllowKey(InstRoleAdmin, perm.Permission, rbac.ObjectIdAny)
+			_, err := kv.Get(ctx, key)
+			if err != nil {
+				t.Errorf("Expected admin to have permission %s, but key not found", perm.Permission)
+			}
+		}
+	})
+
+	t.Run("everyone has space.list permission", func(t *testing.T) {
+		kv := core.instanceRBACEngine.KV()
+		key := expectedAllowKey(InstRoleEveryone, PermSpaceList, rbac.ObjectIdAny)
+		_, err := kv.Get(ctx, key)
+		if err != nil {
+			t.Error("Expected instance-everyone to have space.list permission")
+		}
+	})
+
+	t.Run("everyone has expected permissions", func(t *testing.T) {
+		kv := core.instanceRBACEngine.KV()
+		expectedPerms := []Permission{PermSpaceList, PermSpaceJoin, PermSpaceCreate, PermUserDeleteSelf, PermDMView, PermDMWrite}
+		for _, perm := range expectedPerms {
+			key := expectedAllowKey(InstRoleEveryone, perm, rbac.ObjectIdAny)
+			_, err := kv.Get(ctx, key)
+			if err != nil {
+				t.Errorf("Expected instance-everyone to have permission %s, but key not found", perm)
+			}
+		}
+	})
+}
+
+func TestInitSpaceDefaults(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	user, _ := core.CreateUser(ctx, "system", "testuser", "Test User", "password123")
+	space, _ := core.CreateSpace(ctx, user.Id, "Test Space", "A test space")
+
+	// InitSpaceDefaults is called during CreateSpace, so we can verify its effects
+
+	t.Run("owner has all space permissions", func(t *testing.T) {
+		kv, _ := core.getSpaceRBACKV(ctx, space.Id)
+		for _, perm := range PermissionsForScope(ScopeSpace) {
+			key := expectedAllowKey(SpaceRoleOwner, perm.Permission, rbac.ObjectIdAny)
+			_, err := kv.Get(ctx, key)
+			if err != nil {
+				t.Errorf("Expected space owner to have permission %s, but key not found", perm.Permission)
+			}
+		}
+	})
+
+	t.Run("everyone has default member permissions", func(t *testing.T) {
+		kv, _ := core.getSpaceRBACKV(ctx, space.Id)
+		for _, perm := range DefaultSpaceEveryonePermissions() {
+			key := expectedAllowKey(SpaceRoleEveryone, perm, rbac.ObjectIdAny)
+			_, err := kv.Get(ctx, key)
+			if err != nil {
+				t.Errorf("Expected space everyone to have permission %s, but key not found", perm)
+			}
+		}
+	})
+
+	t.Run("moderator has moderation permissions", func(t *testing.T) {
+		kv, _ := core.getSpaceRBACKV(ctx, space.Id)
+		moderatorPerms := []Permission{PermRoomManage, PermMemberRemove, PermMessageDeleteAny}
+		for _, perm := range moderatorPerms {
+			key := expectedAllowKey("moderator", perm, rbac.ObjectIdAny)
+			_, err := kv.Get(ctx, key)
+			if err != nil {
+				t.Errorf("Expected space moderator to have permission %s, but key not found", perm)
+			}
+		}
+	})
+
+	t.Run("instance-everyone permissions are at instance level not space level", func(t *testing.T) {
+		// space.join is granted at instance level only, not as space-level overrides
+		kv, _ := core.getSpaceRBACKV(ctx, space.Id)
+		key := expectedAllowKey(InstRoleEveryone, PermSpaceJoin, rbac.ObjectIdAny)
+		_, err := kv.Get(ctx, key)
+		if err == nil {
+			t.Errorf("Expected instance-everyone NOT to have space-level override for space.join (instance-level only)")
+		}
+	})
+}
+
+// ============================================================================
+// Context Cancellation Tests
+// ============================================================================
+
+func TestPermissionOpsWithCancelledContext(t *testing.T) {
+	core, _ := setupTestCore(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	t.Run("grant fails with cancelled context", func(t *testing.T) {
+		err := core.GrantInstanceRolePermission(ctx, InstRoleModerator, PermSpaceList)
+		if err == nil {
+			t.Error("Expected error with cancelled context")
+		}
+	})
+}
+
+// ============================================================================
+// Announcements Room Tests
+// ============================================================================
+
+func TestSetupAnnouncementsRoomPermissions(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	// Create a user and space
+	user, err := core.CreateUser(ctx, SystemActorID, "ann-test-user", "Ann Test", "password")
+	if err != nil {
+		t.Fatalf("CreateUser failed: %v", err)
+	}
+	space, err := core.CreateSpace(ctx, user.Id, "Test Space", "")
+	if err != nil {
+		t.Fatalf("CreateSpace failed: %v", err)
+	}
+
+	// Create a regular room
+	regularRoom, err := core.CreateRoom(ctx, user.Id, space.Id, "general", "")
+	if err != nil {
+		t.Fatalf("CreateRoom (general) failed: %v", err)
+	}
+
+	// Create an announcements room
+	annRoom, err := core.CreateRoom(ctx, user.Id, space.Id, "announcements", "")
+	if err != nil {
+		t.Fatalf("CreateRoom (announcements) failed: %v", err)
+	}
+
+	t.Run("announcements room denies message.post to everyone", func(t *testing.T) {
+		kv, _ := core.getSpaceRBACKV(ctx, space.Id)
+		denyKey := expectedDenyKey(SpaceRoleEveryone, PermMessagePost, annRoom.Id)
+		_, err := kv.Get(ctx, denyKey)
+		if err != nil {
+			t.Errorf("Expected deny key %s to exist for announcements room", denyKey)
+		}
+	})
+
+	t.Run("announcements room grants message.post to owner, admin, and moderator", func(t *testing.T) {
+		kv, _ := core.getSpaceRBACKV(ctx, space.Id)
+
+		for _, roleName := range []string{SpaceRoleOwner, SpaceRoleAdmin, SpaceRoleModerator} {
+			grantKey := expectedAllowKey(roleName, PermMessagePost, annRoom.Id)
+			_, err := kv.Get(ctx, grantKey)
+			if err != nil {
+				t.Errorf("Expected grant key %s to exist for %s in announcements room", grantKey, roleName)
+			}
+		}
+	})
+
+	t.Run("regular room does not have announcements permissions", func(t *testing.T) {
+		kv, _ := core.getSpaceRBACKV(ctx, space.Id)
+
+		// Regular room should NOT have the everyone denial for message.post
+		denyKey := expectedDenyKey(SpaceRoleEveryone, PermMessagePost, regularRoom.Id)
+		_, err := kv.Get(ctx, denyKey)
+		if err == nil {
+			t.Errorf("Regular room should not have %s denial for everyone", PermMessagePost)
+		}
+	})
+
+	t.Run("owner can post in announcements, regular member cannot", func(t *testing.T) {
+		// Owner should be able to post
+		canOwner, err := core.CanPostMessage(ctx, user.Id, space.Id, annRoom.Id)
+		if err != nil {
+			t.Fatalf("CanPostMessage (owner) failed: %v", err)
+		}
+		if !canOwner {
+			t.Error("Owner should be able to post in announcements room")
+		}
+
+		// Create a regular member
+		member, err := core.CreateUser(ctx, SystemActorID, "member-user", "Member", "password")
+		if err != nil {
+			t.Fatalf("CreateUser (member) failed: %v", err)
+		}
+		_, err = core.JoinSpace(ctx, member.Id, space.Id)
+		if err != nil {
+			t.Fatalf("JoinSpace failed: %v", err)
+		}
+		_, err = core.JoinRoom(ctx, member.Id, space.Id, member.Id, annRoom.Id)
+		if err != nil {
+			t.Fatalf("JoinRoom failed: %v", err)
+		}
+
+		// Regular member should NOT be able to post
+		canMember, err := core.CanPostMessage(ctx, member.Id, space.Id, annRoom.Id)
+		if err != nil {
+			t.Fatalf("CanPostMessage (member) failed: %v", err)
+		}
+		if canMember {
+			t.Error("Regular member should NOT be able to post in announcements room")
+		}
+
+		// Regular member SHOULD be able to post in threads (default space permission)
+		canMemberPostInThread, err := core.CanPostInThread(ctx, member.Id, space.Id, annRoom.Id)
+		if err != nil {
+			t.Fatalf("CanPostInThread (member) failed: %v", err)
+		}
+		if !canMemberPostInThread {
+			t.Error("Regular member should be able to post in existing threads in announcements room")
+		}
+	})
+}

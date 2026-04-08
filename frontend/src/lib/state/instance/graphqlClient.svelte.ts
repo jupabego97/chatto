@@ -1,0 +1,365 @@
+import { Client, fetchExchange, subscriptionExchange, mapExchange } from '@urql/svelte';
+import { createClient as createWSClient } from 'graphql-ws';
+import { instanceRegistry } from './registry.svelte';
+
+// Auth failure / session validation callbacks (origin instance only)
+let onAuthFailure: (() => void) | null = null;
+let onSessionValidationNeeded: (() => void) | null = null;
+let lastSessionValidation = 0;
+const SESSION_VALIDATION_COOLDOWN_MS = 5000;
+
+export function setAuthFailureHandler(handler: () => void) {
+	onAuthFailure = handler;
+}
+
+export function setSessionValidationHandler(handler: () => void) {
+	onSessionValidationNeeded = handler;
+}
+
+function triggerAuthFailure() {
+	if (onAuthFailure) {
+		onAuthFailure();
+	}
+}
+
+function triggerSessionValidation() {
+	if (!onSessionValidationNeeded) return;
+
+	// Skip if we've validated recently (within cooldown period)
+	const now = Date.now();
+	if (now - lastSessionValidation < SESSION_VALIDATION_COOLDOWN_MS) {
+		return;
+	}
+	lastSessionValidation = now;
+
+	onSessionValidationNeeded();
+}
+
+export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected';
+
+export interface GraphQLClientConfig {
+	/** GraphQL HTTP endpoint URL (relative for origin, absolute for remote) */
+	url: string;
+	/** WebSocket URL (relative for origin, absolute wss:// for remote) */
+	wsUrl: string;
+	/** Bearer token for cross-origin auth, or null to use cookies */
+	token: string | null;
+	/** Whether this is the origin instance (controls auth failure / session validation) */
+	isOrigin: boolean;
+}
+
+/** Construct a WebSocket URL from an HTTP URL (http→ws, https→wss). */
+export function httpToWsUrl(httpUrl: string): string {
+	return httpUrl.replace(/^http/, 'ws');
+}
+
+const HOME_URL = '/api/graphql';
+
+export class GraphQLClient {
+	status = $state<ConnectionStatus>('connecting');
+	reconnectCount = $state(0);
+	#failedAttempts = $state(0);
+	client: Client;
+	#wsClient: ReturnType<typeof createWSClient>;
+	#activeSocket: WebSocket | null = null;
+	#pongTimeoutId: ReturnType<typeof setTimeout> | null = null;
+	#immediateReconnect = false;
+	#lastVisibleAt = Date.now();
+	#visibilityHandler: (() => void) | null = null;
+	#onlineHandler: (() => void) | null = null;
+	#suspendDetectorInterval: ReturnType<typeof setInterval> | null = null;
+	#host: string;
+
+	get isConnected() {
+		return this.status === 'connected';
+	}
+
+	/** Show disconnection icon immediately when WebSocket is not connected */
+	get showConnectionLostIcon() {
+		return this.status === 'disconnected';
+	}
+
+	/** Show urgent (orange) disconnection indicator after 6 failed reconnection attempts (~30+ seconds) */
+	get showConnectionLostBanner() {
+		return this.#failedAttempts >= 6;
+	}
+
+	/** Force-terminate and immediately reconnect the WebSocket. */
+	forceReconnect(reason: string) {
+		console.log('[ws:%s] Force reconnect: %s (status: %s)', this.#host, reason, this.status);
+		this.#immediateReconnect = true;
+		this.#wsClient.terminate();
+	}
+
+	constructor(config: GraphQLClientConfig) {
+		const { url, wsUrl, token, isOrigin } = config;
+		this.#host = isOrigin
+			? (typeof window !== 'undefined' ? window.location.host : 'localhost')
+			: // eslint-disable-next-line svelte/prefer-svelte-reactivity -- extracting host string, URL not stored
+				new URL(url).host;
+
+		// Client pings the server every 15s. The `ping` handler starts a 5s
+		// pong timeout; if the server doesn't respond, we close the socket.
+		// Combined with the server's own 10s ping interval, this gives two
+		// independent liveness checks.
+		this.#wsClient = createWSClient({
+			url: wsUrl,
+			keepAlive: 15_000,
+			retryAttempts: Infinity,
+			shouldRetry: () => true,
+			...(token ? { connectionParams: () => ({ token }) } : {}),
+			retryWait: async (retries) => {
+				// Track failed attempts for UI display (banner shows after 6 failures)
+				this.#failedAttempts = retries;
+
+				// Skip delay if this is a manual reconnect (e.g., tab became visible)
+				if (this.#immediateReconnect) {
+					this.#immediateReconnect = false;
+					console.log('[ws:%s] Retry attempt %d (immediate)', this.#host, retries);
+					return;
+				}
+				// First attempt: immediate (catches quick server restarts)
+				if (retries === 0) {
+					console.log('[ws:%s] Retry attempt %d (immediate)', this.#host, retries);
+					return;
+				}
+				// All subsequent attempts: every 5s
+				console.log('[ws:%s] Retry attempt %d (waiting 5s)', this.#host, retries);
+				await new Promise((resolve) => setTimeout(resolve, 5000));
+			},
+			on: {
+				ping: (received) => {
+					if (received) {
+						// Server sent us a ping — all good
+						console.debug('[ws:%s] Server ping received', this.#host);
+						return;
+					}
+					// We sent a ping to the server — start a 5s timeout for the pong
+					console.debug('[ws:%s] Client ping sent, awaiting pong', this.#host);
+					this.#pongTimeoutId = setTimeout(() => {
+						if (this.#activeSocket?.readyState === WebSocket.OPEN) {
+							console.log(
+								'[ws:%s] Pong timeout (no response in 5s), closing socket',
+								this.#host
+							);
+							this.#activeSocket.close(4408, 'Pong Timeout');
+						}
+					}, 5_000);
+				},
+				pong: (received) => {
+					if (received && this.#pongTimeoutId !== null) {
+						// Server responded to our ping — clear the timeout
+						console.debug('[ws:%s] Pong received', this.#host);
+						clearTimeout(this.#pongTimeoutId);
+						this.#pongTimeoutId = null;
+					}
+				},
+				connected: (socket) => {
+					this.#activeSocket = socket as WebSocket;
+					console.log('[ws:%s] Connected', this.#host);
+
+					if (this.status === 'disconnected') {
+						this.reconnectCount++;
+						console.log(
+							'[ws:%s] Reconnected (count: %d)',
+							this.#host,
+							this.reconnectCount
+						);
+						// Re-validate session after reconnect (origin instance only)
+						if (isOrigin) triggerSessionValidation();
+					}
+					this.status = 'connected';
+					this.#failedAttempts = 0;
+				},
+				closed: (event) => {
+					this.#activeSocket = null;
+					if (this.#pongTimeoutId !== null) {
+						clearTimeout(this.#pongTimeoutId);
+						this.#pongTimeoutId = null;
+					}
+					const closeEvent = event as CloseEvent | undefined;
+					console.log(
+						'[ws:%s] Closed (code: %s, reason: %s)',
+						this.#host,
+						closeEvent?.code ?? 'unknown',
+						closeEvent?.reason || 'none'
+					);
+					this.status = 'disconnected';
+				},
+				error: (err) => console.error('[ws:%s] Error:', this.#host, err)
+			}
+		});
+
+		this.client = new Client({
+			url,
+			preferGetMethod: false,
+			...(token ? { fetchOptions: () => ({ headers: { Authorization: `Bearer ${token}` } }) } : {}),
+			exchanges: [
+				// Auth error detection and reconnect trigger
+				mapExchange({
+					onResult: (result) => {
+						// Check for GraphQL errors indicating auth failure (origin instance only)
+						if (
+							isOrigin &&
+							result.error?.graphQLErrors?.some((e) => e.message?.includes('not authenticated'))
+						) {
+							console.log('Auth failure detected in GraphQL error, triggering logout');
+							triggerAuthFailure();
+						}
+
+						// If an HTTP request succeeded but WebSocket is disconnected,
+						// the server is reachable — force reconnect the WebSocket
+						if (!result.error && this.status === 'disconnected') {
+							this.forceReconnect('HTTP request succeeded while WS disconnected');
+						}
+
+						return result;
+					}
+				}),
+				subscriptionExchange({
+					forwardSubscription: (request) => {
+						const input = { ...request, query: request.query || '' };
+						return {
+							subscribe: (sink) => {
+								const unsubscribe = this.#wsClient.subscribe(input, sink);
+								return { unsubscribe };
+							}
+						};
+					}
+				}),
+				fetchExchange
+			]
+		});
+
+		// Reconnect when tab becomes visible after being backgrounded.
+		// If the tab was hidden for >30s, force-terminate the WebSocket regardless of
+		// reported status. This catches silently-dead connections where the OS killed
+		// the socket during sleep but the client never received a close event.
+		if (typeof document !== 'undefined') {
+			this.#visibilityHandler = () => {
+				if (document.visibilityState === 'visible') {
+					const hiddenDuration = Date.now() - this.#lastVisibleAt;
+
+					// Re-validate session when tab becomes visible (origin instance only)
+					if (isOrigin) triggerSessionValidation();
+
+					if (this.status === 'disconnected' || hiddenDuration > 30_000) {
+						this.forceReconnect(
+							`tab visible after ${Math.round(hiddenDuration / 1000)}s hidden`
+						);
+					}
+
+					this.#lastVisibleAt = Date.now();
+				} else {
+					this.#lastVisibleAt = Date.now();
+				}
+			};
+			document.addEventListener('visibilitychange', this.#visibilityHandler);
+		}
+
+		// Detect wake from OS-level sleep/suspend via timer gap. When the JS
+		// event loop is frozen (lid close, phone lock), setInterval callbacks
+		// don't fire. On wake the first callback fires with a large actual gap.
+		if (typeof window !== 'undefined') {
+			let lastTick = Date.now();
+			this.#suspendDetectorInterval = setInterval(() => {
+				const now = Date.now();
+				if (now - lastTick > 30_000) {
+					this.forceReconnect(
+						`suspend detected (timer gap: ${Math.round((now - lastTick) / 1000)}s)`
+					);
+				}
+				lastTick = now;
+			}, 10_000);
+
+			// Reconnect when network comes back online (e.g., after airplane mode
+			// or Wi-Fi re-association following sleep).
+			this.#onlineHandler = () => {
+				this.forceReconnect('network came back online');
+			};
+			window.addEventListener('online', this.#onlineHandler);
+		}
+	}
+
+	/** Clean up WebSocket connection and event listeners. */
+	dispose() {
+		if (this.#visibilityHandler && typeof document !== 'undefined') {
+			document.removeEventListener('visibilitychange', this.#visibilityHandler);
+			this.#visibilityHandler = null;
+		}
+		if (this.#onlineHandler && typeof window !== 'undefined') {
+			window.removeEventListener('online', this.#onlineHandler);
+			this.#onlineHandler = null;
+		}
+		if (this.#suspendDetectorInterval !== null) {
+			clearInterval(this.#suspendDetectorInterval);
+			this.#suspendDetectorInterval = null;
+		}
+		this.#wsClient.dispose();
+	}
+}
+
+/**
+ * Manages GraphQL clients for multiple Chatto instances.
+ * The origin client is created eagerly; remote clients are created lazily on first access.
+ */
+class GraphQLClientManager {
+	#clients = new Map<string, GraphQLClient>();
+	#originClient: GraphQLClient;
+
+	constructor() {
+		this.#originClient = new GraphQLClient({
+			url: HOME_URL,
+			wsUrl: HOME_URL,
+			token: null,
+			isOrigin: true
+		});
+	}
+
+	/** The origin instance client (serves the SPA, uses cookies). */
+	get originClient(): GraphQLClient {
+		return this.#originClient;
+	}
+
+	/** Get or create a client for a registered instance. */
+	getClient(instanceId: string): GraphQLClient {
+		// Return origin client for the origin instance
+		if (instanceRegistry.isOriginInstance(instanceId)) {
+			return this.#originClient;
+		}
+
+		// Return cached client if available
+		const existing = this.#clients.get(instanceId);
+		if (existing) return existing;
+
+		// Create new client for remote instance
+		const instance = instanceRegistry.getInstance(instanceId);
+		if (!instance) {
+			throw new Error(`Instance "${instanceId}" not found in registry`);
+		}
+
+		const url = `${instance.url}/api/graphql`;
+		const client = new GraphQLClient({
+			url,
+			wsUrl: httpToWsUrl(url),
+			token: instance.token,
+			isOrigin: false
+		});
+
+		this.#clients.set(instanceId, client);
+		return client;
+	}
+
+	/** Destroy and remove a client. Cannot destroy the origin client. */
+	destroyClient(instanceId: string): boolean {
+		const client = this.#clients.get(instanceId);
+		if (!client) return false;
+
+		client.dispose();
+		this.#clients.delete(instanceId);
+		return true;
+	}
+}
+
+export const graphqlClientManager = new GraphQLClientManager();
+

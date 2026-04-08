@@ -1,0 +1,190 @@
+"Admin-only queries. Returns null if the user is not an instance admin."
+type AdminQueries {
+  "Get system information (NATS/JetStream)."
+  systemInfo: SystemInfo!
+
+  "Get subjects and message counts for a specific stream."
+  streamSubjects(name: String!): [StreamSubject!]!
+
+  "Get keys for a specific KV bucket."
+  kvKeys(name: String!): [String!]!
+
+}
+
+"A subject in a JetStream stream with its message count."
+type StreamSubject {
+  "The NATS subject pattern."
+  subject: String!
+  "Number of messages stored for this subject."
+  messages: Int64!
+}
+
+extend type Query {
+  "Admin-only queries. Returns null if user lacks admin permission."
+  admin: AdminQueries
+}
+
+"Information about the NATS connection."
+type ConnectionInfo {
+  "Whether the connection to NATS is currently active."
+  connected: Boolean!
+  "Unique identifier of the connected NATS server."
+  serverID: String!
+  "Human-readable name of the connected NATS server."
+  serverName: String!
+  "NATS server version string."
+  version: String!
+  "Maximum message payload size in bytes."
+  maxPayload: Int64!
+  "Round-trip time to the NATS server (e.g., '1.234ms')."
+  rtt: String!
+}
+
+"JetStream account limits and usage."
+type AccountInfo {
+  "Memory limit in bytes (-1 for unlimited)"
+  memory: Int64!
+  "Memory used in bytes"
+  memoryUsed: Int64!
+  "Storage limit in bytes (-1 for unlimited)"
+  storage: Int64!
+  "Storage used in bytes"
+  storageUsed: Int64!
+  "Stream limit (-1 for unlimited)"
+  streams: Int!
+  "Streams in use"
+  streamsUsed: Int!
+  "Consumer limit (-1 for unlimited)"
+  consumers: Int!
+  "Consumers in use"
+  consumersUsed: Int!
+}
+
+"Information about a JetStream stream."
+type StreamInfo {
+  "Stream name."
+  name: String!
+  "Number of messages in the stream."
+  messages: Int64!
+  "Total size in bytes."
+  bytes: Int64!
+  "Number of consumers attached to this stream."
+  consumers: Int!
+  "When the stream was created (RFC3339 timestamp)."
+  created: String!
+  "Sequence number of the first message in the stream."
+  firstSeq: Int64!
+  "Sequence number of the last message in the stream."
+  lastSeq: Int64!
+  "Number of unique subjects in the stream."
+  numSubjects: Int64!
+}
+
+"Information about a JetStream KV bucket."
+type KVBucketInfo {
+  "Bucket name."
+  name: String!
+  "Number of keys in the bucket."
+  keys: Int64!
+  "Total size in bytes."
+  bytes: Int64!
+  "Number of historical values kept per key."
+  history: Int64!
+  "Time-to-live for entries (e.g., '24h0m0s'). Empty string if no TTL."
+  ttl: String!
+}
+
+"Information about a JetStream object store."
+type ObjectStoreInfo {
+  "Object store name."
+  name: String!
+  "Total size of all objects in bytes."
+  size: Int64!
+  "Whether the store is sealed (read-only, no new objects can be added)."
+  sealed: Boolean!
+}
+
+"Overall system information."
+type SystemInfo {
+  "NATS connection status and server info."
+  connection: ConnectionInfo!
+  "JetStream account limits and usage."
+  account: AccountInfo!
+  "All JetStream streams in the account."
+  streams: [StreamInfo!]!
+  "All JetStream KV buckets in the account."
+  kvBuckets: [KVBucketInfo!]!
+  "All JetStream object stores in the account."
+  objectStores: [ObjectStoreInfo!]!
+}
+
+# =============================================================================
+# Runtime Configuration
+# =============================================================================
+
+"Instance configuration section."
+type AdminInstanceConfig {
+  "Whether this instance has been configured (has settings in KV)."
+  isConfigured: Boolean!
+  "Welcome message shown on the login page (markdown supported)."
+  welcomeMessage: String
+  "Instance name, displayed in page titles. Defaults to 'Chatto' if not set."
+  instanceName: String!
+  "Message of the Day, displayed in the header bar."
+  motd: String
+  "Blocked usernames (newline-separated). Users cannot register with these names."
+  blockedUsernames: String
+  "OpenGraph title for link previews. Falls back to instance name if not set."
+  ogTitle: String
+  "OpenGraph description for link previews."
+  ogDescription: String
+  "URL of the OpenGraph image for link previews."
+  ogImageUrl: String @goField(forceResolver: true)
+}
+
+"Input for updating instance configuration."
+input UpdateInstanceConfigInput {
+  "Welcome message shown on the login page. Set to empty string to clear."
+  welcomeMessage: String
+  "Instance name for page titles. Set to empty string to use default."
+  instanceName: String
+  "Message of the Day for the header. Set to empty string to clear."
+  motd: String
+  "Blocked usernames (newline-separated). Set to empty string to clear."
+  blockedUsernames: String
+  "OpenGraph title for link previews. Set to empty string to use instance name."
+  ogTitle: String
+  "OpenGraph description for link previews. Set to empty string to use default."
+  ogDescription: String
+}
+
+extend type AdminQueries {
+  "Get instance configuration."
+  instanceConfig: AdminInstanceConfig! @goField(forceResolver: true)
+}
+
+"Admin mutations for configuration management."
+type AdminMutations {
+  "Update instance configuration. Returns the updated config section."
+  updateInstanceConfig(input: UpdateInstanceConfigInput!): AdminInstanceConfig! @goField(forceResolver: true)
+  "Reset instance configuration to defaults. Returns true on success."
+  resetInstanceConfig: Boolean! @goField(forceResolver: true)
+  "Upload an OpenGraph image for link previews. Returns the updated config section."
+  uploadInstanceOGImage(input: UploadInstanceOGImageInput!): AdminInstanceConfig! @goField(forceResolver: true)
+  "Delete the OpenGraph image. Returns the updated config section."
+  deleteInstanceOGImage: AdminInstanceConfig! @goField(forceResolver: true)
+}
+
+"""
+Input for uploading an OpenGraph image.
+"""
+input UploadInstanceOGImageInput {
+  "The OG image file to upload."
+  file: Upload!
+}
+
+extend type Mutation {
+  "Admin mutations. Returns null if user lacks admin permission."
+  admin: AdminMutations @goField(forceResolver: true)
+}
+

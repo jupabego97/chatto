@@ -1,0 +1,19 @@
+node_modules
+.vscode/settings.json
+*.code-workspace
+.DS_Store
+Thumbs.db
+.playwright-mcp
+.codex/
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Build output
+/dist/
+
+# Test results
+test-results/

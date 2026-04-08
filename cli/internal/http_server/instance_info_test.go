@@ -1,0 +1,221 @@
+package http_server
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/nats-io/nats-server/v2/server"
+	"github.com/nats-io/nats.go"
+	"hmans.de/chatto/internal/config"
+	"hmans.de/chatto/internal/core"
+)
+
+// setupInstanceInfoServer creates a minimal HTTPServer for instance info endpoint tests.
+func setupInstanceInfoServer(t *testing.T, authConfig config.AuthConfig) *HTTPServer {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+
+	// Start embedded NATS server with JetStream
+	opts := &server.Options{
+		JetStream: true,
+		Port:      -1,
+		StoreDir:  t.TempDir(),
+	}
+	ns, err := server.NewServer(opts)
+	if err != nil {
+		t.Fatalf("Failed to create NATS server: %v", err)
+	}
+	go ns.Start()
+	if !ns.ReadyForConnections(5 * 1e9) {
+		t.Fatal("NATS server not ready")
+	}
+	t.Cleanup(func() { ns.Shutdown() })
+
+	nc, err := nats.Connect(ns.ClientURL())
+	if err != nil {
+		t.Fatalf("Failed to connect to NATS: %v", err)
+	}
+	t.Cleanup(func() { nc.Close() })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	t.Cleanup(cancel)
+
+	chattoCore, err := core.NewChattoCore(ctx, nc, config.CoreConfig{})
+	if err != nil {
+		t.Fatalf("Failed to create ChattoCore: %v", err)
+	}
+
+	router := gin.New()
+	s := &HTTPServer{
+		config: config.ChattoConfig{
+			Auth: authConfig,
+		},
+		nc:      nc,
+		router:  router,
+		core:    chattoCore,
+		version: "1.2.3",
+	}
+	s.setupInstanceInfoRoutes()
+
+	return s
+}
+
+func TestInstanceInfo(t *testing.T) {
+	t.Run("returns correct JSON structure with defaults", func(t *testing.T) {
+		s := setupInstanceInfoServer(t, config.AuthConfig{})
+
+		req := httptest.NewRequest("GET", "/api/instance", nil)
+		w := httptest.NewRecorder()
+		s.router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+
+		var resp instanceInfoResponse
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to parse response: %v", err)
+		}
+
+		if resp.Name != "Chatto" {
+			t.Errorf("expected name 'Chatto', got %q", resp.Name)
+		}
+		if resp.Version != "1.2.3" {
+			t.Errorf("expected version '1.2.3', got %q", resp.Version)
+		}
+		if !resp.RegistrationOpen {
+			t.Error("expected registrationOpen true by default")
+		}
+		if resp.NeedsSetup != true {
+			t.Error("expected needsSetup true on fresh instance")
+		}
+	})
+
+	t.Run("includes password in authMethods when direct registration enabled", func(t *testing.T) {
+		s := setupInstanceInfoServer(t, config.AuthConfig{})
+
+		req := httptest.NewRequest("GET", "/api/instance", nil)
+		w := httptest.NewRecorder()
+		s.router.ServeHTTP(w, req)
+
+		var resp instanceInfoResponse
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to parse response: %v", err)
+		}
+
+		if len(resp.AuthMethods) != 1 || resp.AuthMethods[0] != "password" {
+			t.Errorf("expected authMethods [password], got %v", resp.AuthMethods)
+		}
+	})
+
+	t.Run("registration disabled hides password and sets registrationOpen false", func(t *testing.T) {
+		disabled := false
+		s := setupInstanceInfoServer(t, config.AuthConfig{
+			DirectRegistration: &disabled,
+		})
+
+		req := httptest.NewRequest("GET", "/api/instance", nil)
+		w := httptest.NewRecorder()
+		s.router.ServeHTTP(w, req)
+
+		var resp instanceInfoResponse
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to parse response: %v", err)
+		}
+
+		if resp.RegistrationOpen {
+			t.Error("expected registrationOpen false")
+		}
+		// authMethods should be empty (no password, no SSO)
+		if len(resp.AuthMethods) != 0 {
+			t.Errorf("expected empty authMethods, got %v", resp.AuthMethods)
+		}
+	})
+
+	t.Run("returns empty array not null for authMethods", func(t *testing.T) {
+		disabled := false
+		s := setupInstanceInfoServer(t, config.AuthConfig{
+			DirectRegistration: &disabled,
+		})
+
+		req := httptest.NewRequest("GET", "/api/instance", nil)
+		w := httptest.NewRecorder()
+		s.router.ServeHTTP(w, req)
+
+		// Parse raw JSON to check for null vs empty array
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(w.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to parse response: %v", err)
+		}
+		if string(raw["authMethods"]) == "null" {
+			t.Error("authMethods should be [] not null")
+		}
+	})
+
+	t.Run("includes authorizeUrl for OAuth discovery", func(t *testing.T) {
+		s := setupInstanceInfoServer(t, config.AuthConfig{})
+
+		req := httptest.NewRequest("GET", "/api/instance", nil)
+		w := httptest.NewRecorder()
+		s.router.ServeHTTP(w, req)
+
+		var resp instanceInfoResponse
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to parse response: %v", err)
+		}
+
+		if resp.AuthorizeURL != "/oauth/authorize" {
+			t.Errorf("expected authorizeUrl '/oauth/authorize', got %q", resp.AuthorizeURL)
+		}
+	})
+
+	t.Run("sets CORS headers", func(t *testing.T) {
+		s := setupInstanceInfoServer(t, config.AuthConfig{})
+
+		req := httptest.NewRequest("GET", "/api/instance", nil)
+		w := httptest.NewRecorder()
+		s.router.ServeHTTP(w, req)
+
+		if origin := w.Header().Get("Access-Control-Allow-Origin"); origin != "*" {
+			t.Errorf("expected Access-Control-Allow-Origin *, got %q", origin)
+		}
+		if methods := w.Header().Get("Access-Control-Allow-Methods"); methods != "GET, OPTIONS" {
+			t.Errorf("expected Access-Control-Allow-Methods 'GET, OPTIONS', got %q", methods)
+		}
+	})
+
+	t.Run("sets Cache-Control header", func(t *testing.T) {
+		s := setupInstanceInfoServer(t, config.AuthConfig{})
+
+		req := httptest.NewRequest("GET", "/api/instance", nil)
+		w := httptest.NewRecorder()
+		s.router.ServeHTTP(w, req)
+
+		if cc := w.Header().Get("Cache-Control"); cc != "public, max-age=300" {
+			t.Errorf("expected Cache-Control 'public, max-age=300', got %q", cc)
+		}
+	})
+
+	t.Run("OPTIONS preflight returns 204 with CORS headers", func(t *testing.T) {
+		s := setupInstanceInfoServer(t, config.AuthConfig{})
+
+		req := httptest.NewRequest("OPTIONS", "/api/instance", nil)
+		w := httptest.NewRecorder()
+		s.router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d", w.Code)
+		}
+		if origin := w.Header().Get("Access-Control-Allow-Origin"); origin != "*" {
+			t.Errorf("expected Access-Control-Allow-Origin *, got %q", origin)
+		}
+		if maxAge := w.Header().Get("Access-Control-Max-Age"); maxAge != "86400" {
+			t.Errorf("expected Access-Control-Max-Age '86400', got %q", maxAge)
+		}
+	})
+}

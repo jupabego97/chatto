@@ -1,0 +1,43 @@
+"""
+User display preferences for time and date formatting.
+Stored server-side so preferences persist across devices.
+"""
+type UserSettings {
+  "IANA timezone name (e.g., 'Europe/Berlin'). Null means use browser timezone."
+  timezone: String
+  "Preferred time display format."
+  timeFormat: TimeFormat!
+}
+
+"""
+Time display format preference.
+"""
+enum TimeFormat {
+  "Use browser/locale default."
+  UNSPECIFIED
+  "12-hour format (e.g., 2:30 PM)."
+  TWELVE_HOUR
+  "24-hour format (e.g., 14:30)."
+  TWENTY_FOUR_HOUR
+}
+
+"""
+Input for updating user settings. All fields are optional.
+Only provided fields will be updated; omitted fields are left unchanged.
+"""
+input UpdateUserSettingsInput {
+  "IANA timezone name. Set to null to clear (revert to browser default)."
+  timezone: String
+  "Time display format. Set to UNSPECIFIED to use browser locale default."
+  timeFormat: TimeFormat
+}
+
+extend type User {
+  "The user's display preferences. Self-only: returns null for other users."
+  settings: UserSettings @goField(forceResolver: true)
+}
+
+extend type Mutation {
+  "Update the current user's display settings. Returns the updated settings."
+  updateMySettings(input: UpdateUserSettingsInput!): UserSettings!
+}

@@ -1,0 +1,62 @@
+# ADR-025: Multi-Instance Client Architecture
+
+## Status
+
+Accepted
+
+## Context
+
+Chatto's frontend was originally designed as a single-instance client — the SPA was always served by the Chatto instance it connected to, and all state (auth, spaces, rooms, notifications) was implicitly scoped to that one server.
+
+Users wanted to connect to multiple Chatto instances from a single client (similar to how Discord or Slack allow multiple workspaces). This required rethinking how the frontend manages authentication, state, and routing.
+
+## Decision
+
+### Instance-Agnostic UI
+
+The frontend is instance-agnostic by default. It doesn't assume it's served by a Chatto instance. Instead:
+
+1. **Probe-based origin detection**: On init, fetch `/api/instance` on the current origin. If it responds, auto-register the origin as an instance. If it fails (static hosting), skip.
+2. **No `isHome` flag**: The origin instance is identified by comparing `instance.url` to `window.location.origin` at runtime — no stored flag.
+3. **Dual auth**: Origin uses cookie auth (HttpOnly, SameSite). Remote instances use opaque bearer tokens stored in `localStorage`.
+
+### Unified Registry + State
+
+`InstanceRegistry` owns both registration data (`RegisteredInstance[]`) and per-instance state stores (`SvelteMap<string, InstanceStateStore>`). Registration and store creation are atomic — when an instance is added, its store exists immediately. This eliminates the race condition where `$derived` expressions see a registered instance but can't find its store.
+
+### URL-Based Instance Routing
+
+The URL is the sole source of truth for which instance is active:
+
+- `-` segment = origin instance
+- Hostname segment = remote instance (e.g., `chat.example.com`)
+
+The `[instanceId]/+layout.svelte` resolves the segment and provides the instance ID via Svelte context. No mutable "active instance" singleton.
+
+### Per-Instance Permissions
+
+Each `InstanceStateStore` has a `permissions` field loaded from the GraphQL `viewer` query by `InstanceSpaceSection`. This enables features like the Create Space page filtering to instances where the user has `canCreateSpace`.
+
+### Sliding Window Token Expiry
+
+Bearer tokens use NATS KV TTL (default 90 days). Each successful `ValidateAuthToken` re-puts the entry to reset the TTL. Tokens expire after the configured duration of *inactivity*, not from creation time. Active users are never logged out.
+
+## Consequences
+
+### Positive
+
+- Users can connect to multiple Chatto instances from one client
+- The SPA can be served statically (CDN) without a Chatto backend
+- No special-casing for "home" vs "remote" — all instances use the same code paths
+- Token sliding window means active users never get surprise logouts
+
+### Negative
+
+- Remote instance bearer tokens in `localStorage` are vulnerable to XSS (cookie auth is not)
+- `/api/instance` is the only cross-origin endpoint (wildcard CORS) — rich data needed pre-registration must go there, not in GraphQL
+- The probe is async for unauthenticated users, so the origin may not be registered by the time the first render completes
+
+### Trade-offs
+
+- Cookie vs token auth creates two distinct disconnect flows: cookie requires server-side logout + hard reload; token just removes the `localStorage` entry
+- SvelteMap for the store map enables reactive `$derived` reads but requires careful separation of imperative writes (`addInstance`) from pure reads (`getStore`)

@@ -1,0 +1,114 @@
+package cmd
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"os"
+
+	"github.com/c2h5oh/datasize"
+	"github.com/charmbracelet/log"
+	"github.com/pelletier/go-toml/v2"
+	"github.com/spf13/cobra"
+	"hmans.de/chatto/internal/config"
+)
+
+var initConfigFile string
+
+var initCmd = &cobra.Command{
+	Use:   "init",
+	Short: "Initializes the chatto server and generates a configuration file",
+
+	Run: func(cmd *cobra.Command, args []string) {
+		configPath := initConfigFile
+		if configPath == "" {
+			configPath = "chatto.toml"
+		}
+
+		// Check if config file already exists
+		if _, err := os.Stat(configPath); err == nil {
+			log.Error("Config file already exists, aborting to prevent overwrite", "path", configPath)
+			os.Exit(1)
+		}
+
+		// Generate a random session secret (32 bytes = 256 bits)
+		sessionSecret := make([]byte, 32)
+		if _, err := rand.Read(sessionSecret); err != nil {
+			log.Fatal("Failed to generate session secret", "error", err)
+		}
+		sessionSecretString := hex.EncodeToString(sessionSecret)
+
+		// Generate a random signing secret for assets (32 bytes = 256 bits)
+		signingSecret := make([]byte, 32)
+		if _, err := rand.Read(signingSecret); err != nil {
+			log.Fatal("Failed to generate signing secret", "error", err)
+		}
+		signingSecretString := hex.EncodeToString(signingSecret)
+
+		// Generate a random auth token for NATS connections (32 bytes = 256 bits)
+		authToken := make([]byte, 32)
+		if _, err := rand.Read(authToken); err != nil {
+			log.Fatal("Failed to generate auth token", "error", err)
+		}
+		authTokenString := hex.EncodeToString(authToken)
+
+		// Build configuration
+		directRegistration := true
+		cfg := config.ChattoConfig{
+			General: config.GeneralConfig{
+				LogLevel: "debug",
+			},
+			Auth: config.AuthConfig{
+				DirectRegistration: &directRegistration,
+			},
+			Webserver: config.WebserverConfig{
+				Port:                4000,
+				URL:                 "http://localhost:4000",
+				CookieSigningSecret: sessionSecretString,
+			},
+			Core: config.CoreConfig{
+				Assets: config.AssetsConfig{
+					SigningSecret: signingSecretString,
+					MaxUploadSize: 25 * datasize.MB,
+				},
+			},
+			NATS: config.NATSConfig{
+				// Client config for CLI commands to connect to the embedded server
+				Client: config.NATSClientConfig{
+					URL:        "nats://localhost:4222",
+					AuthMethod: config.NATSAuthToken,
+					Token:      authTokenString,
+				},
+				Embedded: config.EmbeddedNATSConfig{
+					Enabled:     true,
+					Port:        4222,
+					BindAddress: "127.0.0.1",
+					HTTPPort:    8222,
+					DataDir:     "./data",
+					AuthToken:   authTokenString,
+				},
+			},
+		}
+
+		// Write config file
+		log.Info("Writing configuration", "path", configPath)
+		b, err := toml.Marshal(cfg)
+		if err != nil {
+			log.Fatal("Failed to marshal config", "error", err)
+		}
+
+		if err := os.WriteFile(configPath, b, 0600); err != nil {
+			log.Fatal("Failed to write config file", "error", err)
+		}
+		fmt.Printf("Configuration written to %s\n", configPath)
+		fmt.Printf("\nSetup complete! Run 'chatto run -c %s' to start the server.\n", configPath)
+		fmt.Println("\nTo connect with NATS CLI for debugging:")
+		fmt.Printf("  nats context save chatto --server localhost:4222 --token %s\n", authTokenString)
+		fmt.Println("  nats context select chatto")
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(initCmd)
+	initCmd.Flags().StringVarP(&initConfigFile, "config", "c", "", "path to configuration file (default: chatto.toml)")
+}

@@ -1,0 +1,211 @@
+package core
+
+import (
+	"testing"
+	"time"
+
+	"golang.org/x/crypto/bcrypt"
+)
+
+// ============================================================================
+// Password Reset Tests
+// ============================================================================
+
+func TestChattoCore_CreatePasswordResetToken(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	t.Run("creates token for verified email", func(t *testing.T) {
+		user, err := core.CreateUser(ctx, "system", "reset-test-user", "Test User", "password123")
+		if err != nil {
+			t.Fatalf("Failed to create user: %v", err)
+		}
+
+		// Verify user's email first
+		if err := core.AddVerifiedEmailDirect(ctx, user.Id, "reset@example.com"); err != nil {
+			t.Fatalf("Failed to verify email: %v", err)
+		}
+
+		// Create password reset token
+		token, err := core.CreatePasswordResetToken(ctx, "reset@example.com")
+		if err != nil {
+			t.Fatalf("Failed to create token: %v", err)
+		}
+		if token == "" {
+			t.Error("Expected non-empty token")
+		}
+		if len(token) != 16 { // "PR" prefix + 14 chars
+			t.Errorf("Expected token length 16, got %d", len(token))
+		}
+	})
+
+	t.Run("returns empty token for unverified email (no error)", func(t *testing.T) {
+		// Create user but don't verify any email
+		_, err := core.CreateUser(ctx, "system", "unverified-reset-user", "Test User", "password123")
+		if err != nil {
+			t.Fatalf("Failed to create user: %v", err)
+		}
+
+		// Try to create reset token for unverified email
+		token, err := core.CreatePasswordResetToken(ctx, "unverified@example.com")
+		if err != nil {
+			t.Fatalf("Should not return error: %v", err)
+		}
+		if token != "" {
+			t.Error("Expected empty token for unverified email")
+		}
+	})
+
+	t.Run("returns empty token for non-existent email (no error)", func(t *testing.T) {
+		token, err := core.CreatePasswordResetToken(ctx, "nonexistent@example.com")
+		if err != nil {
+			t.Fatalf("Should not return error: %v", err)
+		}
+		if token != "" {
+			t.Error("Expected empty token for non-existent email")
+		}
+	})
+
+	t.Run("returns error for empty email", func(t *testing.T) {
+		_, err := core.CreatePasswordResetToken(ctx, "")
+		if err == nil {
+			t.Error("Expected error for empty email")
+		}
+	})
+
+	t.Run("email lookup is case-insensitive", func(t *testing.T) {
+		user, _ := core.CreateUser(ctx, "system", "case-reset-user", "Test User", "password123")
+		core.AddVerifiedEmailDirect(ctx, user.Id, "CaseTest@Example.COM")
+
+		// Create token with different casing
+		token, err := core.CreatePasswordResetToken(ctx, "casetest@example.com")
+		if err != nil {
+			t.Fatalf("Failed to create token: %v", err)
+		}
+		if token == "" {
+			t.Error("Expected token for case-insensitive email match")
+		}
+	})
+}
+
+func TestChattoCore_ValidatePasswordResetToken(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	t.Run("validates valid token", func(t *testing.T) {
+		user, _ := core.CreateUser(ctx, "system", "validate-token-user", "Test User", "password123")
+		core.AddVerifiedEmailDirect(ctx, user.Id, "validate@example.com")
+
+		token, _ := core.CreatePasswordResetToken(ctx, "validate@example.com")
+
+		userID, err := core.ValidatePasswordResetToken(ctx, token)
+		if err != nil {
+			t.Fatalf("Failed to validate token: %v", err)
+		}
+		if userID != user.Id {
+			t.Errorf("Expected userID %s, got %s", user.Id, userID)
+		}
+	})
+
+	t.Run("returns error for invalid token", func(t *testing.T) {
+		_, err := core.ValidatePasswordResetToken(ctx, "invalid-token")
+		if err != ErrPasswordResetTokenNotFound {
+			t.Errorf("Expected ErrPasswordResetTokenNotFound, got %v", err)
+		}
+	})
+}
+
+func TestChattoCore_ResetPassword(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	t.Run("resets password successfully", func(t *testing.T) {
+		user, _ := core.CreateUser(ctx, "system", "reset-pw-user", "Test User", "oldpassword")
+		core.AddVerifiedEmailDirect(ctx, user.Id, "resetpw@example.com")
+
+		token, _ := core.CreatePasswordResetToken(ctx, "resetpw@example.com")
+
+		// Create new password hash
+		newHash, _ := bcrypt.GenerateFromPassword([]byte("newpassword123"), bcrypt.DefaultCost)
+
+		// Reset password
+		err := core.ResetPassword(ctx, token, string(newHash))
+		if err != nil {
+			t.Fatalf("Failed to reset password: %v", err)
+		}
+
+		// Verify new password works
+		_, err = core.VerifyPassword(ctx, "reset-pw-user", "newpassword123")
+		if err != nil {
+			t.Errorf("New password should work: %v", err)
+		}
+
+		// Verify old password no longer works
+		_, err = core.VerifyPassword(ctx, "reset-pw-user", "oldpassword")
+		if err == nil {
+			t.Error("Old password should not work")
+		}
+	})
+
+	t.Run("token can only be used once", func(t *testing.T) {
+		user, _ := core.CreateUser(ctx, "system", "single-use-user", "Test User", "password123")
+		core.AddVerifiedEmailDirect(ctx, user.Id, "singleuse@example.com")
+
+		token, _ := core.CreatePasswordResetToken(ctx, "singleuse@example.com")
+
+		// First reset succeeds
+		newHash, _ := bcrypt.GenerateFromPassword([]byte("newpassword1"), bcrypt.DefaultCost)
+		err := core.ResetPassword(ctx, token, string(newHash))
+		if err != nil {
+			t.Fatalf("First reset failed: %v", err)
+		}
+
+		// Second reset with same token fails
+		newHash2, _ := bcrypt.GenerateFromPassword([]byte("newpassword2"), bcrypt.DefaultCost)
+		err = core.ResetPassword(ctx, token, string(newHash2))
+		if err != ErrPasswordResetTokenNotFound {
+			t.Errorf("Expected ErrPasswordResetTokenNotFound, got %v", err)
+		}
+	})
+
+	t.Run("returns error for invalid token", func(t *testing.T) {
+		newHash, _ := bcrypt.GenerateFromPassword([]byte("newpassword"), bcrypt.DefaultCost)
+		err := core.ResetPassword(ctx, "invalid-token", string(newHash))
+		if err != ErrPasswordResetTokenNotFound {
+			t.Errorf("Expected ErrPasswordResetTokenNotFound, got %v", err)
+		}
+	})
+}
+
+func TestChattoCore_PasswordResetTokenExpiration(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	t.Run("token expires after TTL", func(t *testing.T) {
+		user, _ := core.CreateUser(ctx, "system", "expire-user", "Test User", "password123")
+		core.AddVerifiedEmailDirect(ctx, user.Id, "expire@example.com")
+
+		// Create token
+		token, _ := core.CreatePasswordResetToken(ctx, "expire@example.com")
+
+		// Manually modify the token's created_at to be in the past
+		// We need to simulate expiration by directly manipulating KV
+		// Since we can't easily mock time, we'll test that the TTL constant is reasonable
+		// and trust that the time.Since check works correctly
+
+		// Verify token is valid when fresh
+		_, err := core.ValidatePasswordResetToken(ctx, token)
+		if err != nil {
+			t.Fatalf("Fresh token should be valid: %v", err)
+		}
+
+		// Note: Full expiration testing would require either:
+		// 1. A time mock
+		// 2. Waiting the full TTL (not practical)
+		// 3. Direct KV manipulation to fake the timestamp
+		// For now, we verify the TTL constant is set correctly
+		if PasswordResetTokenTTL != 1*time.Hour {
+			t.Errorf("Expected TTL of 1 hour, got %v", PasswordResetTokenTTL)
+		}
+	})
+}

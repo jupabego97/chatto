@@ -1,0 +1,59 @@
+services:
+  nats:
+    image: nats:latest
+    command: ["--jetstream", "--store_dir=/data", "--auth=${NATS_TOKEN}"]
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD", "nats-server", "--help"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  livekit:
+    image: livekit/livekit-server:latest
+    command:
+      - --config
+      - /etc/livekit.yaml
+    ports:
+      - "50000-50200:50000-50200/udp"  # WebRTC media (UDP, must be direct)
+    expose:
+      - "7880"  # WebSocket signaling (proxied through Caddy)
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:7880"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  chatto:
+    image: ghcr.io/hmans/chatto:latest
+    env_file: .env
+    depends_on:
+      nats:
+        condition: service_healthy
+      livekit:
+        condition: service_healthy
+    expose:
+      - "4000"
+
+  caddy:
+    image: caddy:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      PUBLIC_URL: "${PUBLIC_URL:-chat.example.com}"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - chatto
+      - livekit
+
+volumes:
+  nats_data:
+  caddy_data:
+  caddy_config:

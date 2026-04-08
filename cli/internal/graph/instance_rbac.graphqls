@@ -1,0 +1,268 @@
+
+"A role with its granted and denied permissions."
+type Role {
+  "Role identifier (e.g., 'admin', 'member')."
+  name: String!
+  "Human-readable name."
+  displayName: String!
+  "Role description."
+  description: String!
+  "List of permission identifiers granted (allowed) by this role."
+  permissions: [String!]! @goField(forceResolver: true)
+  "List of permission identifiers denied by this role. Denials override grants from other roles."
+  permissionDenials: [String!]! @goField(forceResolver: true)
+  "Whether this is a system-defined role (cannot be deleted)."
+  isSystem: Boolean!
+  "Hierarchy position: lower = higher rank. Admin=0, Member=MAX_INT."
+  position: Int!
+}
+
+"Input for creating a new role."
+input CreateRoleInput {
+  "Role identifier (lowercase alphanumeric + underscores, max 32 chars)."
+  name: String!
+  "Human-readable display name."
+  displayName: String!
+  "Role description."
+  description: String!
+}
+
+"Input for updating an existing role."
+input UpdateRoleInput {
+  "Role identifier of the role to update."
+  name: String!
+  "Human-readable display name."
+  displayName: String!
+  "Role description."
+  description: String!
+}
+
+"""
+The current authenticated user's instance-level permissions.
+Null if not authenticated.
+"""
+type Viewer {
+  "Whether the viewer can access the admin panel (includes config-admin check)."
+  canViewAdmin: Boolean! @goField(forceResolver: true)
+  "Whether the viewer can create new spaces."
+  canCreateSpace: Boolean! @goField(forceResolver: true)
+  "Whether the viewer can browse the space directory."
+  canListSpaces: Boolean! @goField(forceResolver: true)
+  "Whether the viewer can access direct messages."
+  canViewDMs: Boolean! @goField(forceResolver: true)
+  "Whether the viewer can start DM conversations and send messages."
+  canWriteDMs: Boolean! @goField(forceResolver: true)
+  "Whether the viewer can view the admin users page."
+  canAdminViewUsers: Boolean! @goField(forceResolver: true)
+  "Whether the viewer can manage user role assignments."
+  canAdminManageUsers: Boolean! @goField(forceResolver: true)
+  "Whether the viewer can view the admin spaces page."
+  canAdminViewSpaces: Boolean! @goField(forceResolver: true)
+  "Whether the viewer can view the admin roles page."
+  canAdminViewRoles: Boolean! @goField(forceResolver: true)
+  "Whether the viewer can create and edit instance roles."
+  canAdminManageRoles: Boolean! @goField(forceResolver: true)
+  "Whether the viewer can view admin system and data pages."
+  canAdminViewSystem: Boolean! @goField(forceResolver: true)
+  "Whether the viewer can view the admin audit log."
+  canAdminViewAudit: Boolean! @goField(forceResolver: true)
+}
+
+extend type Query {
+  "The current authenticated user's instance-level permissions. Null if not authenticated."
+  viewer: Viewer @goField(forceResolver: true)
+}
+
+extend type AdminQueries {
+  "List all instance roles with their permissions."
+  roles: [Role!]!
+
+  "Get a single instance role by name."
+  role(name: String!): Role @goField(forceResolver: true)
+
+  "List all available instance permission identifiers."
+  instancePermissions: [String!]!
+
+  "Get users assigned to a specific instance role."
+  instanceRoleUsers(roleName: String!): [User!]! @goField(forceResolver: true)
+
+  "Get instance roles assigned to a specific user."
+  userInstanceRoles(userId: ID!): [String!]! @goField(forceResolver: true)
+
+  "Get the role-based permissions for a user."
+  userRoleBasedPermissions(userId: ID!): [String!]! @goField(forceResolver: true)
+
+  """
+  Get the permissions denied via roles for a user.
+  Used for UI to show when a permission is blocked via roles.
+  """
+  userRoleBasedDenials(userId: ID!): [String!]! @goField(forceResolver: true)
+}
+
+extend type Mutation {
+  """
+  Grant a permission to an instance role. Idempotent - granting an already-granted
+  permission succeeds silently. Returns true on success.
+  Requires: admin.roles.manage permission.
+  Errors: If role doesn't exist or permission is invalid.
+  """
+  grantInstancePermission(input: GrantInstancePermissionInput!): Boolean!
+
+  """
+  Revoke a permission grant from an instance role. Idempotent - revoking a non-granted
+  permission succeeds silently. Returns true on success.
+  Note: This only removes grants, not denials. Use clearInstancePermissionState to remove both.
+  Note: Admin role has all permissions implicitly; revoking from admin has no effect.
+  Requires: admin.roles.manage permission.
+  Errors: If role doesn't exist or permission is invalid.
+  """
+  revokeInstancePermission(input: RevokeInstancePermissionInput!): Boolean!
+
+  """
+  Deny a permission for an instance role. Users with this role will be blocked from this
+  permission, regardless of what other roles grant it (deny-override pattern).
+  Clears any existing grant for the same permission. Returns true on success.
+  Note: Admin role is immune to role denials; denying a permission on admin has no effect.
+  Requires: admin.roles.manage permission.
+  Errors: If role doesn't exist or permission is invalid.
+  """
+  denyInstancePermission(input: DenyInstancePermissionInput!): Boolean!
+
+  """
+  Clear any grant or denial state for a permission on an instance role, restoring neutral state.
+  Idempotent - clearing when no state exists succeeds silently. Returns true on success.
+  After clearing, this role neither grants nor denies the permission.
+  Requires: admin.roles.manage permission.
+  Errors: If role doesn't exist or permission is invalid.
+  """
+  clearInstancePermissionState(input: ClearInstancePermissionStateInput!): Boolean!
+
+  """
+  Create a new custom instance role. Returns the created role with empty permissions.
+  System role names ('instance-owner', 'instance-admin', 'instance-moderator', 'everyone') cannot be used.
+  Requires: admin.roles.manage permission.
+  Errors: If role name already exists or is a system role name.
+  """
+  createRole(input: CreateRoleInput!): Role!
+
+  """
+  Update an instance role's display name and description. Returns the updated role.
+  Role name cannot be changed after creation. System roles cannot be edited.
+  Requires: admin.roles.manage permission.
+  Errors: If role doesn't exist.
+  """
+  updateRole(input: UpdateRoleInput!): Role!
+
+  """
+  Delete a custom instance role and all associated data. Returns true on success.
+  Deletes: role definition, all permission grants, and all user role assignments.
+  System roles ('instance-owner', 'instance-admin', 'instance-moderator', 'everyone') cannot be deleted.
+  Requires: admin.roles.manage permission.
+  Errors: If role doesn't exist or is a system role.
+  """
+  deleteRole(input: DeleteRoleInput!): Boolean!
+
+  """
+  Assign an instance role to a user. Idempotent - assigning an already-assigned
+  role succeeds silently. Returns true on success.
+  Note: The 'everyone' role is implicit for all users and cannot be assigned.
+  Requires: admin.users.manage permission.
+  Errors: If role doesn't exist or is 'everyone'.
+  """
+  assignInstanceRole(input: AssignInstanceRoleInput!): Boolean!
+
+  """
+  Revoke an instance role from a user. Idempotent - revoking a non-assigned
+  role succeeds silently. Returns true on success.
+  Note: Users cannot revoke their own admin role (prevents self-lockout).
+  Note: The 'everyone' role is implicit and cannot be revoked.
+  Requires: admin.users.manage permission.
+  Errors: If role doesn't exist, is 'everyone', or user tries to revoke own admin role.
+  """
+  revokeInstanceRole(input: RevokeInstanceRoleInput!): Boolean!
+
+  """
+  Reorder instance roles. Accepts an ordered list of custom role names.
+  System roles (instance-owner, instance-admin, instance-moderator, everyone) maintain fixed positions and should not be included.
+  Positions are assigned based on array index (first role = position 1, second = 2, etc).
+  Requires: admin.roles.manage permission.
+  Returns: All instance roles, sorted by position.
+  """
+  reorderInstanceRoles(input: ReorderInstanceRolesInput!): [Role!]!
+}
+
+"""
+Input for granting a permission to an instance role.
+"""
+input GrantInstancePermissionInput {
+  "The role to grant the permission to."
+  role: String!
+  "The permission identifier to grant."
+  permission: String!
+}
+
+"""
+Input for revoking a permission from an instance role.
+"""
+input RevokeInstancePermissionInput {
+  "The role to revoke the permission from."
+  role: String!
+  "The permission identifier to revoke."
+  permission: String!
+}
+
+"""
+Input for denying a permission for an instance role.
+"""
+input DenyInstancePermissionInput {
+  "The role to deny the permission for."
+  role: String!
+  "The permission identifier to deny."
+  permission: String!
+}
+
+"""
+Input for clearing permission state on an instance role.
+"""
+input ClearInstancePermissionStateInput {
+  "The role to clear permission state for."
+  role: String!
+  "The permission identifier to clear."
+  permission: String!
+}
+
+"""
+Input for deleting an instance role.
+"""
+input DeleteRoleInput {
+  "The name of the role to delete."
+  name: String!
+}
+
+"""
+Input for assigning an instance role to a user.
+"""
+input AssignInstanceRoleInput {
+  "The ID of the user to assign the role to."
+  userId: ID!
+  "The name of the role to assign."
+  roleName: String!
+}
+
+"""
+Input for revoking an instance role from a user.
+"""
+input RevokeInstanceRoleInput {
+  "The ID of the user to revoke the role from."
+  userId: ID!
+  "The name of the role to revoke."
+  roleName: String!
+}
+
+"""
+Input for reordering instance roles.
+"""
+input ReorderInstanceRolesInput {
+  "Ordered list of custom role names. System roles should not be included."
+  roleNames: [String!]!
+}

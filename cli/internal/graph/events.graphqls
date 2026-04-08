@@ -1,0 +1,700 @@
+"""
+SpaceEvent wraps all space-scoped events.
+
+Events are either:
+- Stored in JetStream streams — persisted events
+- Published to NATS Core for real-time updates — live events
+
+Authorization is determined by NATS subject:
+- Space events: space.{spaceId}.> (JetStream) or live.space.{spaceId}.> (NATS Core)
+"""
+type SpaceEvent {
+  "Universal event identifier."
+  id: ID!
+  "When this event was created."
+  createdAt: Time!
+  "The ID of the user who triggered this event."
+  actorId: ID!
+  "The user who triggered this event. May be null if user was deleted."
+  actor: User @goField(forceResolver: true)
+  "The concrete event data."
+  event: SpaceEventType! @goField(forceResolver: true)
+}
+
+"""
+Union of all space-scoped event types (both persisted and live).
+"""
+union SpaceEventType =
+  # Room lifecycle
+  | RoomCreatedEvent
+  | RoomUpdatedEvent
+  | RoomDeletedEvent
+  | RoomArchivedEvent
+  | RoomUnarchivedEvent
+  # Room membership
+  | UserJoinedRoomEvent
+  | UserLeftRoomEvent
+  | SpaceMemberDeletedEvent
+  # Messages
+  | MessagePostedEvent
+  | MessageUpdatedEvent
+  | MessageDeletedEvent
+  # Reactions
+  | ReactionAddedEvent
+  | ReactionRemovedEvent
+  # Typing indicators
+  | UserTypingEvent
+  # Video processing
+  | VideoProcessingCompletedEvent
+  # Presence
+  | PresenceChangedEvent
+  # Voice calls
+  | CallParticipantJoinedEvent
+  | CallParticipantLeftEvent
+
+"""
+InstanceEvent wraps all instance-scoped events.
+
+All instance events are live-only (published to NATS Core, never persisted).
+Authorization is determined by NATS subject:
+- Instance events: live.instance.{scope}.{id}.{eventType}
+"""
+type InstanceEvent {
+  "Universal event identifier."
+  id: ID!
+  "When this event was created."
+  createdAt: Time!
+  "The ID of the user who triggered this event."
+  actorId: ID!
+  "The user who triggered this event. May be null if user was deleted."
+  actor: User @goField(forceResolver: true)
+  "The concrete event data."
+  event: InstanceEventType! @goField(forceResolver: true)
+}
+
+"""
+Union of all instance-scoped event types.
+"""
+union InstanceEventType =
+  # Instance config
+  | InstanceConfigUpdatedEvent
+  # User lifecycle
+  | UserCreatedEvent
+  | UserDeletedEvent
+  | UserProfileUpdatedEvent
+  | InstanceUserPreferencesUpdatedEvent
+  | NotificationLevelChangedEvent
+  # Space membership (instance-level)
+  | UserJoinedSpaceEvent
+  | UserLeftSpaceEvent
+  # Space lifecycle
+  | SpaceCreatedEvent
+  | SpaceUpdatedEvent
+  | SpaceDeletedEvent
+  # Notifications
+  | MentionNotificationEvent
+  | NewDirectMessageNotificationEvent
+  | NotificationCreatedEvent
+  | NotificationDismissedEvent
+  # Thread follow
+  | ThreadFollowChangedEvent
+  # Space unread
+  | NewMessageInSpaceEvent
+  | RoomMarkedAsReadEvent
+  # Room layout
+  | RoomLayoutUpdatedEvent
+  # Session termination
+  | SessionTerminatedEvent
+
+# ==============================================================================
+# INSTANCE CONFIG EVENTS
+# ==============================================================================
+
+"""
+Event: Instance configuration was updated.
+Clients should refetch instance info to get the new values.
+"""
+type InstanceConfigUpdatedEvent {
+  "The updated instance name."
+  instanceName: String!
+  "The updated MOTD (null if cleared)."
+  motd: String
+  "The updated welcome message (null if cleared)."
+  welcomeMessage: String
+  "The updated blocked usernames (null if cleared)."
+  blockedUsernames: String
+}
+
+# ==============================================================================
+# USER LIFECYCLE EVENTS
+# ==============================================================================
+
+"""
+Event: A user was created
+"""
+type UserCreatedEvent {
+  "The ID of the newly created user."
+  userId: ID!
+  "The user's login name."
+  login: String!
+  "The user's display name."
+  displayName: String!
+}
+
+"""
+Event: A user deleted their account.
+Published for audit logging and admin UI updates.
+"""
+type UserDeletedEvent {
+  "The ID of the deleted user."
+  userId: ID!
+}
+
+"""
+Event: A user's profile was updated.
+Published when avatar, display name, or login changes, allowing real-time updates.
+"""
+type UserProfileUpdatedEvent {
+  "The ID of the user whose profile was updated."
+  userId: ID!
+  "The user's updated display name."
+  displayName: String!
+  "The user's avatar URL (empty string if no avatar)."
+  avatarUrl: String!
+  "The user's current login/username."
+  login: String!
+}
+
+"""
+Event: The current user's display preferences were updated.
+Published to the user across all sessions for multi-tab sync.
+"""
+type InstanceUserPreferencesUpdatedEvent {
+  "IANA timezone name (empty string = browser default)."
+  timezone: String!
+  "Time display format."
+  timeFormat: TimeFormat! @goField(forceResolver: true)
+}
+
+"""
+Event: The user's notification level for a space or room was changed.
+Published to the user for multi-tab/multi-device sync.
+"""
+type NotificationLevelChangedEvent {
+  "The space ID."
+  spaceId: ID!
+  "The room ID (null for space-level changes)."
+  roomId: ID @goField(forceResolver: true)
+  "The new notification level."
+  level: NotificationLevel! @goField(forceResolver: true)
+  "The effective level after inheritance."
+  effectiveLevel: NotificationLevel! @goField(forceResolver: true)
+}
+
+# ==============================================================================
+# SPACE MEMBERSHIP EVENTS (Instance-level)
+# ==============================================================================
+
+"""
+Event: A user joined a space
+"""
+type UserJoinedSpaceEvent {
+  "The ID of the space the user joined."
+  spaceId: ID!
+}
+
+"""
+Event: A user left a space
+"""
+type UserLeftSpaceEvent {
+  "The ID of the space the user left."
+  spaceId: ID!
+}
+
+# ==============================================================================
+# SPACE LIFECYCLE EVENTS
+# ==============================================================================
+
+"""
+Event: A space was created (instance-level for discovery)
+"""
+type SpaceCreatedEvent {
+  "The ID of the newly created space."
+  spaceId: ID!
+  "The space's name."
+  name: String!
+  "The space's description."
+  description: String!
+}
+
+"""
+Event: A space was updated
+"""
+type SpaceUpdatedEvent {
+  "The ID of the updated space."
+  spaceId: ID!
+  "The space's updated name."
+  name: String!
+  "The space's updated description."
+  description: String!
+  "The space's logo URL (empty if no logo)."
+  logoUrl: String!
+  "The space's banner URL (empty if no banner)."
+  bannerUrl: String!
+}
+
+"""
+Event: A space was deleted
+"""
+type SpaceDeletedEvent {
+  "The ID of the deleted space."
+  spaceId: ID!
+}
+
+# ==============================================================================
+# ROOM LIFECYCLE EVENTS
+# ==============================================================================
+
+"""
+Event: A room was created
+"""
+type RoomCreatedEvent {
+  "The ID of the newly created room."
+  roomId: ID!
+  "The room's name."
+  name: String!
+  "The room's description."
+  description: String!
+}
+
+"""
+Event: A room was updated
+"""
+type RoomUpdatedEvent {
+  "The ID of the updated room."
+  roomId: ID!
+  "The room's updated name."
+  name: String!
+  "The room's updated description."
+  description: String!
+}
+
+"""
+Event: A room was deleted
+"""
+type RoomDeletedEvent {
+  "The ID of the deleted room."
+  roomId: ID!
+}
+
+"""
+Event: A room was archived.
+Archived rooms are hidden from sidebars and Browse Rooms.
+"""
+type RoomArchivedEvent {
+  "The ID of the archived room."
+  roomId: ID!
+}
+
+"""
+Event: A room was unarchived.
+The room becomes visible again in sidebars and Browse Rooms.
+"""
+type RoomUnarchivedEvent {
+  "The ID of the unarchived room."
+  roomId: ID!
+}
+
+# ==============================================================================
+# ROOM MEMBERSHIP EVENTS
+# ==============================================================================
+
+"""
+Event: A user joined a room
+"""
+type UserJoinedRoomEvent {
+  "The ID of the space containing the room."
+  spaceId: ID!
+  "The ID of the room the user joined."
+  roomId: ID!
+}
+
+"""
+Event: A user left a room
+"""
+type UserLeftRoomEvent {
+  "The ID of the space containing the room."
+  spaceId: ID!
+  "The ID of the room the user left."
+  roomId: ID!
+}
+
+"""
+Event: A space member's account was deleted.
+Published to notify clients to update member lists and refresh messages
+to show "Deleted User" and unavailable content.
+"""
+type SpaceMemberDeletedEvent {
+  "The ID of the space."
+  spaceId: ID!
+  "The ID of the deleted user."
+  userId: ID!
+}
+
+# ==============================================================================
+# MESSAGE EVENTS
+# ==============================================================================
+
+"""
+Event: A message was posted
+"""
+type MessagePostedEvent {
+  "The ID of the space containing the room."
+  spaceId: ID!
+  "The ID of the room where the message was posted."
+  roomId: ID!
+  "The message content. Lazy-loaded from KV bucket on demand. Null if deleted."
+  body: String @goField(forceResolver: true)
+  "Attachments for this message. Lazy-loaded from KV bucket on demand."
+  attachments: [Attachment!]! @goField(forceResolver: true)
+  "Sequence ID of the message this is replying to (null for top-level messages)."
+  inReplyTo: ID @goField(forceResolver: true)
+  "Sequence ID of the thread root message (null for top-level messages). For direct replies, equals inReplyTo. For nested replies, references the original root."
+  inThread: ID @goField(forceResolver: true)
+  "Emoji reactions on this message, aggregated by emoji."
+  reactions: [Reaction!]! @goField(forceResolver: true)
+  "When the message was last updated (null if never edited). Lazy-loaded from body."
+  updatedAt: Time @goField(forceResolver: true)
+  "Event ID of the original thread reply this echoes (null for non-echo messages)."
+  echoOfEventId: ID @goField(forceResolver: true)
+  "The thread this echo originates from (null for non-echo messages)."
+  echoFromThreadRootEventId: ID @goField(forceResolver: true)
+  "Number of replies in this thread (0 for non-root messages or messages without replies)."
+  replyCount: Int! @goField(forceResolver: true)
+  "Timestamp of the most recent reply (null if no replies or not a root message)."
+  lastReplyAt: Time @goField(forceResolver: true)
+  "Users who have replied in this thread (empty for non-root messages or messages without replies). Returns up to `first` participants (default 5) for preview."
+  threadParticipants(first: Int = 5): [User!]! @goField(forceResolver: true)
+  "Whether the current viewer is following this thread. Null for non-root messages or messages without replies."
+  viewerIsFollowingThread: Boolean @goField(forceResolver: true)
+}
+
+"""
+Event: A message was updated.
+This is a live-only notification event — clients should refetch the affected message
+to get the updated content. Only identifies which message changed.
+"""
+type MessageUpdatedEvent {
+  "The ID of the space containing the room."
+  spaceId: ID!
+  "The ID of the room where the message was updated."
+  roomId: ID!
+  "The event ID of the message that was updated."
+  messageEventId: ID! @goField(forceResolver: true)
+}
+
+"""
+Event: A message was deleted
+"""
+type MessageDeletedEvent {
+  "The ID of the space containing the room."
+  spaceId: ID!
+  "The ID of the room where the message was deleted."
+  roomId: ID!
+  "The event ID of the message that was deleted."
+  messageEventId: ID! @goField(forceResolver: true)
+}
+
+# ==============================================================================
+# REACTION EVENTS (Live-only - KV bucket is source of truth)
+# ==============================================================================
+
+"""
+Event: A reaction was added to a message
+"""
+type ReactionAddedEvent {
+  "The ID of the space containing the message."
+  spaceId: ID!
+  "The ID of the room containing the message."
+  roomId: ID!
+  "The event ID of the message that was reacted to."
+  messageEventId: ID!
+  "The emoji shortcode name (e.g., \"thumbsup\", \"heart\")."
+  emoji: String!
+}
+
+"""
+Event: A reaction was removed from a message
+"""
+type ReactionRemovedEvent {
+  "The ID of the space containing the message."
+  spaceId: ID!
+  "The ID of the room containing the message."
+  roomId: ID!
+  "The event ID of the message the reaction was removed from."
+  messageEventId: ID!
+  "The emoji shortcode name (e.g., \"thumbsup\", \"heart\")."
+  emoji: String!
+}
+
+# ==============================================================================
+# TYPING INDICATOR EVENTS (Live-only)
+# ==============================================================================
+
+"""
+Event: A user is typing in a room or thread.
+This is a live-only event (not stored in JetStream).
+Clients should implement timeout-based clearing (e.g., 6 seconds of inactivity).
+The user who is typing is identified by the parent SpaceEvent's actorId/actor.
+"""
+type UserTypingEvent {
+  "The ID of the space where the user is typing."
+  spaceId: ID!
+  "The ID of the room where the user is typing."
+  roomId: ID!
+  "If typing in a thread, the root message event ID. Null for main room typing."
+  threadRootEventId: ID
+}
+
+# ==============================================================================
+# VIDEO PROCESSING EVENTS
+# ==============================================================================
+
+"""
+Event: Video processing completed (or failed).
+Published when a video attachment finishes transcoding. The frontend uses this
+to refetch the message and display the video player.
+"""
+type VideoProcessingCompletedEvent {
+  "The space ID."
+  spaceId: ID!
+  "The room ID."
+  roomId: ID!
+  "The original attachment ID that was processed."
+  attachmentId: ID!
+  "The event ID of the message containing the processed attachment."
+  messageEventId: ID! @goField(forceResolver: true)
+}
+
+# ==============================================================================
+# PRESENCE EVENTS
+# ==============================================================================
+
+"""
+Event: A user's presence status changed.
+The user whose presence changed is identified by the parent SpaceEvent's actorId/actor.
+Presence is instance-wide; the space context is implicit in the subscription.
+"""
+type PresenceChangedEvent {
+  "The user's new presence status."
+  status: PresenceStatus! @goField(forceResolver: true)
+}
+
+# ==============================================================================
+# NOTIFICATION EVENTS
+# ==============================================================================
+
+"""
+Notification: A user was mentioned in a message.
+This is a live-only notification event for toast displays.
+Persistent state is tracked separately via Room.hasMention.
+"""
+type MentionNotificationEvent {
+  "The ID of the space where the mention occurred."
+  spaceId: ID!
+  "The ID of the room where the mention occurred."
+  roomId: ID!
+  "The space where the mention occurred (for display)."
+  space: Space! @goField(forceResolver: true)
+  "The room where the mention occurred (for display)."
+  room: Room! @goField(forceResolver: true)
+  "The user who mentioned you."
+  actor: User! @goField(forceResolver: true)
+}
+
+"""
+Notification: A new message was posted in a DM conversation.
+Published to all participants except the sender.
+"""
+type NewDirectMessageNotificationEvent {
+  "The ID of the DM conversation."
+  roomId: ID!
+  "The user who sent the message."
+  sender: User! @goField(forceResolver: true)
+  "The name of the conversation (derived from participants)."
+  conversationName: String! @goField(forceResolver: true)
+}
+
+# ==============================================================================
+# THREAD FOLLOW EVENTS
+# ==============================================================================
+
+"""
+Event: The user's thread follow state changed (followed or unfollowed).
+Published to the user for multi-tab/multi-device sync.
+"""
+type ThreadFollowChangedEvent {
+  "The ID of the space containing the thread."
+  spaceId: ID!
+  "The ID of the room containing the thread."
+  roomId: ID!
+  "The root event ID of the thread."
+  threadRootEventId: ID!
+  "Whether the user is now following the thread."
+  isFollowing: Boolean!
+}
+
+# ==============================================================================
+# SPACE UNREAD EVENTS
+# ==============================================================================
+
+"""
+Event: A new message was posted in a space.
+Published to all space members (except the author) when a message is posted.
+Enables real-time unread indicators on space icons without per-space subscriptions.
+"""
+type NewMessageInSpaceEvent {
+  "The ID of the space where the message was posted."
+  spaceId: ID!
+  "The ID of the room where the message was posted."
+  roomId: ID!
+}
+
+"""
+Event: A room was marked as read by the current user.
+Published to the user when they mark a room as read (e.g., by entering it).
+Enables real-time updates to space unread indicators.
+"""
+type RoomMarkedAsReadEvent {
+  "The ID of the space containing the room."
+  spaceId: ID!
+  "The ID of the room that was marked as read."
+  roomId: ID!
+}
+
+# ==============================================================================
+# ROOM LAYOUT EVENTS (Live-only - KV bucket is source of truth)
+# ==============================================================================
+
+"""
+Event: The room layout for a space was updated.
+Clients should refetch the room layout to get the new order/sections.
+This is a live-only event (not stored in JetStream).
+"""
+type RoomLayoutUpdatedEvent {
+  "The ID of the space whose room layout was updated."
+  spaceId: ID!
+}
+
+# ==============================================================================
+# SESSION TERMINATION EVENTS
+# ==============================================================================
+
+"""
+Event: The user's session was terminated.
+Published on logout or admin boot. The subscription stream closes after this event,
+tearing down the WebSocket connection server-side.
+"""
+type SessionTerminatedEvent {
+  "Why the session was terminated (logout, admin_boot, account_deleted)."
+  reason: String!
+}
+
+# ==============================================================================
+# SHARED TYPES
+# ==============================================================================
+
+"""
+A reaction represents emoji responses to a message, aggregated by emoji type.
+Emoji values are shortcode names (e.g., "thumbsup", "heart") — clients convert to Unicode for display.
+"""
+type Reaction {
+  "The emoji shortcode name (e.g., \"thumbsup\", \"heart\")."
+  emoji: String!
+  "Total number of users who reacted with this emoji."
+  count: Int!
+  "List of users who reacted with this emoji."
+  users: [User!]!
+  "Whether the current user has reacted with this emoji."
+  hasReacted: Boolean!
+}
+
+"""
+Fit mode for image transformations.
+"""
+enum FitMode {
+  "Fit within bounds while preserving aspect ratio (letterbox if needed)."
+  CONTAIN
+  "Fill bounds while preserving aspect ratio (center-crop if needed)."
+  COVER
+  "Stretch to exact dimensions (may distort aspect ratio)."
+  EXACT
+}
+
+"""
+An attachment to a message (image, video, etc.).
+"""
+type Attachment {
+  "The attachment's unique ID."
+  id: ID!
+  "The space ID where this attachment is stored."
+  spaceId: ID!
+  "The room ID where this attachment was posted."
+  roomId: ID!
+  "The original filename."
+  filename: String!
+  "The MIME type (e.g., 'image/jpeg', 'video/mp4')."
+  contentType: String!
+  "The file size in bytes."
+  size: Int! @goField(forceResolver: true)
+  "Image width in pixels (0 for non-images)."
+  width: Int!
+  "Image height in pixels (0 for non-images)."
+  height: Int!
+  "URL to download the full attachment. Optional transform parameters for images."
+  url(width: Int, height: Int, fit: FitMode): String! @goField(forceResolver: true)
+  "URL to download the thumbnail (null if no thumbnail). Optional transform parameters."
+  thumbnailUrl(width: Int, height: Int, fit: FitMode): String @goField(forceResolver: true)
+  "Video processing state (null for non-video attachments)."
+  videoProcessing: VideoProcessing @goField(forceResolver: true)
+}
+
+"Video processing state for a video attachment."
+type VideoProcessing {
+  "Current processing status."
+  status: VideoProcessingStatus!
+  "Video duration in milliseconds."
+  durationMs: Int64
+  "Original video width in pixels."
+  width: Int
+  "Original video height in pixels."
+  height: Int
+  "URL for the video thumbnail image."
+  thumbnailUrl: String @goField(forceResolver: true)
+  "Available quality variants."
+  variants: [VideoVariant!]!
+  "Error message if processing failed."
+  errorMessage: String
+}
+
+"A transcoded quality variant of a video."
+type VideoVariant {
+  "URL to stream/download this variant."
+  url: String! @goField(forceResolver: true)
+  "Quality label (e.g., '720p', '480p')."
+  quality: String!
+  "Video width in pixels."
+  width: Int!
+  "Video height in pixels."
+  height: Int!
+  "File size in bytes."
+  size: Int64!
+}
+
+"Status of video processing."
+enum VideoProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}

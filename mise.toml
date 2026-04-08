@@ -1,0 +1,245 @@
+[tools]
+go = "1.26.0"
+node = "22"
+
+[env]
+_.file = '.env'
+
+# =============================================================================
+# Setup
+# =============================================================================
+
+[tasks.setup]
+description = "Set up the development environment"
+run = { task = "deps" }
+
+# =============================================================================
+# Dependencies
+# =============================================================================
+
+[tasks.deps-cli]
+description = "Install Go dependencies"
+dir = "cli"
+run = "go get ./..."
+sources = ["go.mod", "go.sum"]
+
+[tasks.deps-frontend]
+description = "Install frontend dependencies"
+dir = "frontend"
+run = "pnpm install"
+sources = ["package.json", "pnpm-lock.yaml"]
+
+[tasks.deps]
+description = "Install all dependencies"
+run = { task = "deps-*" }
+
+# =============================================================================
+# Code Generation
+# =============================================================================
+
+[tasks.codegen-proto]
+description = "Generate Go code from protobuf schemas"
+dir = "proto"
+run = "buf generate"
+
+[tasks.codegen-cli]
+description = "Generate GraphQL code using gqlgen"
+depends = ["deps-cli", "codegen-proto"]
+dir = "cli"
+run = "go generate ./..."
+
+[tasks.codegen-frontend]
+description = "Generate Frontend code (e.g. GraphQL types)"
+depends = ["deps-frontend"]
+dir = "frontend"
+run = "pnpm codegen"
+
+[tasks.codegen-emoji]
+description = "Generate Go emoji map from gemoji npm package"
+depends = ["deps-frontend"]
+run = "node tools/gen-emoji-map.mjs"
+
+[tasks.codegen-types]
+description = "Generate TypeScript types from Go using tygo"
+depends = ["deps-cli"]
+dir = "cli"
+run = "go tool tygo generate"
+
+[tasks.codegen]
+description = "Run all code generation tasks"
+run = { task = "codegen-*" }
+
+# =============================================================================
+# Build
+# =============================================================================
+
+[tasks.build]
+description = "Build the entire project for all architectures"
+run = [{ task = "build-*" }, "ls -lah cli/bin/*"]
+
+[tasks.build-frontend]
+description = "Build the frontend application"
+depends = ["deps-frontend"]
+dir = "frontend"
+run = [
+    "pnpm svelte-kit sync",
+    "pnpm build",
+    "rm -rf ../cli/internal/http_server/.client",
+    "cp -r build ../cli/internal/http_server/.client",
+]
+sources = [
+    "package.json",
+    "pnpm-lock.yaml",
+    "src/**/*",
+    "static/**/*",
+    "svelte.config.js",
+    "tsconfig.json",
+    "vite.config.ts",
+]
+
+[tasks.build-cli]
+description = "Build the CLI application for the current architecture"
+depends = ["deps-cli", "build-frontend"]
+dir = "cli"
+run = "go build -o bin/chatto ."
+sources = ["**/*.go", "internal/http_server/.client/**/*"]
+outputs = ["bin/chatto"]
+
+[tasks.build-e2e-server]
+description = "Build the E2E test server binary with test endpoints enabled"
+depends = ["deps-cli", "build-frontend"]
+dir = "cli"
+run = "go build -tags test_endpoints -o ../frontend/e2e/fixtures/bin/chatto ."
+sources = ["**/*.go", "internal/http_server/.client/**/*"]
+outputs = ["../frontend/e2e/fixtures/bin/chatto"]
+
+# =============================================================================
+# Development
+# =============================================================================
+
+[tasks._app-server]
+description = "Compile and run the app server in dev mode"
+dir = "cli"
+run = "go run -tags dev . start"
+sources = ["**/*.go", "go.mod", "go.sum"]
+hide = true
+
+[tasks.dev-app]
+description = "Run the application in development mode (with file watching)"
+depends = "build-frontend"
+run = "mise watch _app-server --restart"
+
+[tasks.dev-frontend]
+description = "Run the frontend application in development mode"
+dir = "frontend"
+run = "pnpm dev"
+
+[tasks.dev-frontend-codegen]
+description = "Run graphql-codegen in watch mode"
+dir = "frontend"
+run = "pnpm codegen --watch"
+
+[tasks.dev-livekit]
+description = "Run the LiveKit server in development mode"
+run = "livekit-server --dev --bind 0.0.0.0 --config cli/livekit-dev.yaml"
+
+[tasks.dev]
+description = "Run a complete development environment (backend + frontend + livekit)"
+run = { task = "dev-*" }
+
+[tasks.chatto]
+description = "Runs the CLI app with the given arguments"
+depends = ["deps-cli", "build-frontend"]
+dir = "cli"
+run = "go run -tags dev . ${@}"
+
+# =============================================================================
+# Testing
+# =============================================================================
+
+[tasks.test-cli]
+description = "Run CLI tests"
+depends = ["deps-cli", "build-frontend"]
+dir = "cli"
+run = "go test -tags test_endpoints ./..."
+sources = ["**/*.go"]
+
+[tasks.lint-frontend]
+description = "Run TypeScript and ESLint checks on frontend"
+depends = ["deps-frontend"]
+dir = "frontend"
+run = ["pnpm check", "pnpm lint"]
+
+[tasks.lint]
+description = "Run linters"
+run = [{ task = "lint-*" }]
+
+[tasks.test-frontend]
+description = "Run frontend unit tests"
+depends = ["deps-frontend"]
+dir = "frontend"
+run = "pnpm vitest --run"
+
+[tasks.test-e2e-stable]
+description = "Run stable E2E tests (excluding @flaky)"
+depends = ["deps-frontend"]
+dir = "frontend"
+run = "pnpm exec playwright test --config playwright.config.stable.ts --grep-invert @flaky"
+
+[tasks.test-e2e-flaky]
+description = "Run quarantined flaky E2E tests"
+depends = ["deps-frontend"]
+dir = "frontend"
+run = "pnpm exec playwright test --config playwright.config.flaky.ts --grep @flaky"
+
+[tasks.test]
+description = "Run all tests"
+run = [{ task = "test-cli" }, { task = "test-frontend" }, { task = "test-e2e-stable" }, { task = "test-e2e-flaky" }]
+
+# =============================================================================
+# Utility
+# =============================================================================
+
+[tasks.run]
+description = "Compile and run the project"
+depends = ["build"]
+dir = "cli"
+run = "bin/chatto run"
+
+[tasks.clean]
+description = "Clean all build artifacts"
+run = [
+    "rm -rf cli/bin/*",
+    "rm -rf cli/internal/http_server/.client/*",
+    "rm -rf frontend/build/*",
+]
+
+[tasks.reset-config]
+description = "Delete and reinitialize chatto.toml"
+confirm = "Are you sure you want to re-initialize chatto.toml? This will delete your current configuration."
+dir = "cli"
+run = ["rm chatto.toml", "go run . init"]
+
+[tasks.reset-data]
+description = "Reset the development environment (NATS data etc.)"
+confirm = "Are you sure you want to reset the development environment? This will delete all data."
+dir = "cli"
+run = ["rm -rf data"]
+
+[tasks.docs]
+description = "Start pkgsite documentation server for the CLI"
+dir = "cli"
+run = """
+echo "Starting pkgsite documentation server..."
+echo "Browse to: http://localhost:6060/hmans.de/chatto"
+pkgsite -http=localhost:6060 .
+"""
+
+# =============================================================================
+# Versioning
+# =============================================================================
+
+[tasks.bump]
+description = "Bump version (usage: mise bump patch|minor|major)"
+dir = "cli"
+run = "go tool github.com/bcomnes/goversion/v2 -bump-file ../frontend/package.json ${@}"

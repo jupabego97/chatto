@@ -1,0 +1,41 @@
+{
+  "hooks": {
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "beans prime"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "beans prime"
+          }
+        ]
+      }
+    ]
+  },
+  "extraKnownMarketplaces": {
+    "chattocorp-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "chattocorp/agents"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true,
+    "feature-dev@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "chattocorp-org@chattocorp-plugins": true,
+    "chattocorp-rules@chattocorp-plugins": true
+  }
+}

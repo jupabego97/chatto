@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en" style="color-scheme: light dark">
+  <head>
+    <meta charset="utf-8" />
+    <script>
+      // Prevent flash of white background in dark mode
+      // This runs before CSS loads, setting the background immediately
+      if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.documentElement.style.backgroundColor = '#171717';
+      }
+    </script>
+    <!-- OG_META_PLACEHOLDER -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content"
+    />
+    <meta name="description" content="Real-time chat application" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#e5e7eb" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#262626" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icons/favicon.png" type="image/png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    %sveltekit.head%
+  </head>
+  <body>
+    <div style="display: contents">%sveltekit.body%</div>
+  </body>
+</html>

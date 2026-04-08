@@ -1,0 +1,6 @@
+FROM alpine:latest
+RUN apk add --no-cache ca-certificates tzdata ffmpeg
+COPY chatto /usr/local/bin/chatto
+EXPOSE 4000
+ENTRYPOINT ["chatto"]
+CMD ["start"]

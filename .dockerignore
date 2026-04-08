@@ -1,0 +1,13 @@
+# Ignore everything by default
+*
+
+# Include only what the frontend Docker build needs
+!frontend/package.json
+!frontend/pnpm-lock.yaml
+!frontend/.npmrc
+!frontend/src/
+!frontend/static/
+!frontend/svelte.config.js
+!frontend/tsconfig.json
+!frontend/vite.config.ts
+!frontend/nginx.conf

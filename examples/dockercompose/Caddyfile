@@ -1,0 +1,23 @@
+{$PUBLIC_URL:chat.example.com} {
+	reverse_proxy chatto:4000 {
+		# Load balance across replicas
+		lb_policy round_robin
+
+		# Passive health checks (mark unhealthy after failures)
+		lb_try_duration 5s
+		fail_duration 30s
+
+		# Forward client info
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+
+	# Compression
+	encode gzip zstd
+}
+
+# LiveKit WebSocket signaling (subdomain)
+livekit.{$PUBLIC_URL:chat.example.com} {
+	reverse_proxy livekit:7880
+}

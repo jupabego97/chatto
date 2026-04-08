@@ -1,0 +1,54 @@
+# Chatto Config for local development
+
+[general]
+log_level = 'debug'
+
+[webserver]
+url = 'http://localhost:5173'
+port = 4000
+allowed_origins = []
+cookie_signing_secret = '3ad5f5f911b6865b1a729335f4544d102a99a2847a3d5076431ed43877dd6bd9'
+
+[core.assets]
+signing_secret = 'd4fac8f5c710d419dbb05c00381ca1d0fbbeb007d8da4367d00cbfa212758fc1'
+max_upload_size = '25MB'
+
+# Image resize cache (optional). When enabled, resized images are cached in
+# NATS Object Store to avoid re-processing on subsequent requests.
+[core.assets.cache]
+enabled = true
+ttl = '7d'
+
+[auth.oidc]
+enabled = true
+issuer_url = 'https://chatto.id/realms/chatto-hub'
+client_id = 'chatto-dev'
+client_secret = 'iARXOaPkiIDxdNRX2N9uJmQf0aXIfwUE'
+
+[smtp]
+enabled = true
+host = 'localhost'
+port = 1025
+from = 'Chatto Local Development <chatto@chatto.run>'
+
+[video]
+enabled = true
+
+# LiveKit voice calls. Requires `mise dev-livekit` (or `mise dev` which starts it automatically).
+[livekit]
+enabled = true
+url = 'ws://localhost:7880'
+api_key = 'devkey'
+api_secret = 'secret'
+
+[nats.client]
+url = 'nats://localhost:4555'
+auth_method = 'token'
+token = 'd5ed70d13c4682609dfd0a4f65bf7e59ef22f3be8502762b501d3b7cf0b73b43'
+
+[nats.embedded]
+enabled = true
+port = 4555
+# http_port = 8555
+data_dir = './data'
+auth_token = 'd5ed70d13c4682609dfd0a4f65bf7e59ef22f3be8502762b501d3b7cf0b73b43'

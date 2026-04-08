@@ -1,0 +1,268 @@
+syntax = "proto3";
+
+package chatto.core.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "hmans.de/chatto/internal/pb/chatto/core/v1;corev1";
+
+// Space represents a workspace or organization
+message Space {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+}
+
+// Room represents a chat room within a space
+message Room {
+  string id = 1;
+  string space_id = 2;
+  string name = 3;
+  string description = 4;
+  bool archived = 5;
+  bool auto_join = 6;
+}
+
+// User represents a user account
+message User {
+  string id = 1;
+  string login = 2; // Unique login identifier
+  string display_name = 3;
+  // Avatar is stored separately in KV at key "user:{id}:avatar"
+  google.protobuf.Timestamp created_at = 4; // When the user was created (null for users created before this field was added)
+}
+
+message Asset {
+  oneof asset {
+    NATSAsset nats = 2;
+    S3Asset s3 = 1;
+  }
+}
+
+message S3Asset {
+  string key = 1;
+  optional string bucket = 2; // If absent, use configured default bucket
+}
+
+message NATSAsset {
+  string key = 1;
+}
+
+message SpaceMembership {
+  string user_id = 1;
+  string space_id = 2;
+}
+
+message RoomMembership {
+  string user_id = 1;
+  reserved 2; // was space_id, redundant with KV bucket name
+  string room_id = 3;
+}
+
+// Role represents a named set of permissions.
+message Role {
+  string name = 1; // Unique identifier, lowercase + dashes only, e.g., "owner", "moderator", "content-reviewer"
+  string display_name = 2; // Human-readable name, e.g., "Owner", "Moderator", "Content Reviewer"
+  string description = 3;
+  int32 position = 4; // Hierarchy position: lower = higher rank. Owner=0, Everyone=MAX_INT32
+}
+
+// UserPresenceStatus indicates a user's online presence status.
+// Named to avoid conflict with the GraphQL PresenceStatus enum.
+// Note: OFFLINE is not stored - absence of a key means offline.
+enum UserPresenceStatus {
+  USER_PRESENCE_STATUS_ONLINE = 0;
+  USER_PRESENCE_STATUS_AWAY = 1;
+  USER_PRESENCE_STATUS_DO_NOT_DISTURB = 2;
+}
+
+// UserPresence represents a user's current presence in a space.
+// Stored in USER_PRESENCE KV bucket.
+message UserPresence {
+  UserPresenceStatus status = 1;
+}
+
+// PresenceChange represents a change in a user's presence status.
+// Used by GraphQL subscriptions - the `user` field is resolved separately.
+message PresenceChange {
+  string user_id = 1;
+  string status = 2; // GraphQL PresenceStatus enum value (ONLINE, OFFLINE, AWAY, DO_NOT_DISTURB)
+}
+
+// ThreadMetadata stores aggregated information about a message thread.
+// Stored in KV bucket SPACE_{spaceId}_THREADS with key {roomId}.{rootEventId}.
+// Updated via optimistic locking when replies are posted.
+message ThreadMetadata {
+  // Event ID of the thread root message
+  string root_event_id = 1;
+
+  // Number of replies in this thread
+  int32 reply_count = 2;
+
+  // Timestamp of the most recent reply
+  google.protobuf.Timestamp last_reply_at = 3;
+
+  // Unique user IDs of participants who have replied (capped at 50)
+  repeated string participant_ids = 4;
+}
+
+// Attachment represents a file attached to a message.
+// The actual binary data is stored either in NATS ObjectStore (per-space buckets)
+// or S3, as indicated by the storage field.
+message Attachment {
+  // Unique identifier for this attachment (NanoID)
+  string id = 1;
+
+  // Space ID where this attachment belongs
+  string space_id = 2;
+
+  // Room ID where this attachment was posted (for authorization)
+  string room_id = 3;
+
+  // Original filename
+  string filename = 4;
+
+  // MIME type (e.g., "image/jpeg", "video/mp4")
+  string content_type = 5;
+
+  // File size in bytes
+  int64 size = 6;
+
+  // Image dimensions (0 for non-image files)
+  int32 width = 7;
+  int32 height = 8;
+
+  // Storage location for the attachment binary data.
+  // If not set (nil), defaults to NATS ObjectStore for backwards compatibility.
+  Asset storage = 9;
+}
+
+// MessageBody stores the actual content of a message.
+// Stored separately from events in KV buckets for GDPR compliance.
+// This allows individual message bodies to be deleted while preserving
+// the audit trail in the event stream.
+// Message bodies are always encrypted using per-user ChaCha20-Poly1305 keys.
+message MessageBody {
+  string author_id = 1;
+  google.protobuf.Timestamp created_at = 2;
+  google.protobuf.Timestamp updated_at = 3;
+
+  // Encrypted message body (ChaCha20-Poly1305 ciphertext with auth tag)
+  bytes encrypted_body = 20;
+  // 12-byte nonce for ChaCha20-Poly1305 (must be unique per encryption)
+  bytes encryption_nonce = 21;
+
+  // File attachments (images, videos, etc.)
+  repeated Attachment attachments = 30;
+
+  // Link preview extracted from the first URL in the message body
+  LinkPreview link_preview = 40;
+}
+
+// LinkPreview stores OpenGraph/oEmbed metadata for a URL in a message.
+message LinkPreview {
+  // The original URL that was previewed
+  string url = 1;
+
+  // OpenGraph metadata
+  string title = 2;
+  string description = 3;
+  string site_name = 4;
+
+  // Asset ID for the preview image (stored in instance ObjectStore)
+  optional string image_asset_id = 5;
+
+  // Embed type: "generic", "youtube", "vimeo", etc.
+  string embed_type = 6;
+
+  // Embed ID for rich embeds (e.g., YouTube video ID)
+  optional string embed_id = 7;
+}
+
+// CachedLinkPreview wraps LinkPreview with cache metadata.
+// Stored in LINK_PREVIEW_CACHE KV bucket.
+message CachedLinkPreview {
+  // The original URL (for verification)
+  string url = 1;
+
+  // The preview data (nil if fetch failed)
+  LinkPreview preview = 2;
+
+  // Whether the fetch failed (for negative caching)
+  bool fetch_failed = 3;
+
+  // Reason for failure (e.g., "timeout", "ssrf_blocked", "no_og_tags")
+  string error_reason = 4;
+
+  // When this cache entry was created (Unix timestamp)
+  int64 fetched_at_unix = 5;
+}
+
+// Visual organization of rooms in a space's sidebar.
+// Stored as a single KV entry (key "room_layout") for atomic updates.
+// Rooms not referenced in any section appear as "unsectioned" at the bottom.
+message RoomLayout {
+  repeated RoomLayoutSection sections = 1;
+  // Ordered list of room IDs not assigned to any section.
+  // When present, unsectioned rooms are displayed in this order.
+  // Rooms not in this list appear at the end, sorted alphabetically.
+  repeated string unsorted_room_ids = 2;
+}
+
+// A named group of rooms in the sidebar.
+message RoomLayoutSection {
+  string id = 1;                    // NanoID for stable identity across renames
+  string name = 2;                  // Display name (e.g., "General", "Projects")
+  repeated string room_ids = 3;    // Ordered list of room IDs in this section
+}
+
+// ============================================================================
+// VIDEO PROCESSING
+// ============================================================================
+
+// VideoProcessingState tracks the async processing state of a video attachment.
+// Stored in SPACE_{spaceId}_RUNTIME KV bucket at key "video.{attachmentId}".
+// Kept separate from MessageBody (which is encrypted per-user) so the video
+// service can update processing state without touching encryption.
+message VideoProcessingState {
+  // Current processing status
+  VideoStatus status = 1;
+
+  // Attachment ID of the generated poster/thumbnail image
+  string thumbnail_attachment_id = 2;
+
+  // Video duration in milliseconds
+  int64 duration_ms = 3;
+
+  // Original video dimensions
+  int32 width = 4;
+  int32 height = 5;
+
+  // Error message if processing failed
+  string error_message = 6;
+
+  // Processed video variants (different quality levels)
+  repeated VideoVariant variants = 7;
+}
+
+enum VideoStatus {
+  VIDEO_STATUS_PENDING = 0;
+  VIDEO_STATUS_PROCESSING = 1;
+  VIDEO_STATUS_COMPLETED = 2;
+  VIDEO_STATUS_FAILED = 3;
+}
+
+message VideoVariant {
+  // Attachment ID of this variant (stored as regular attachment in same space)
+  string attachment_id = 1;
+
+  // Quality label (e.g., "720p", "480p")
+  string quality = 2;
+
+  // Dimensions of this variant
+  int32 width = 3;
+  int32 height = 4;
+
+  // File size in bytes
+  int64 size = 5;
+}

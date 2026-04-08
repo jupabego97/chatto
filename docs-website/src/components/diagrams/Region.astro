@@ -1,0 +1,14 @@
+---
+interface Props {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  label: string;
+}
+
+const { x, y, w, h, label } = Astro.props;
+---
+
+<rect class="region" x={x} y={y} width={w} height={h} />
+<text class="region-label" x={x + 20} y={y + 22}>{label}</text>

@@ -1,0 +1,60 @@
+---
+import { EASE, EASE_BOUNCE } from './styles';
+
+interface Props {
+  /** ID of the <path> element to follow. */
+  path: string;
+  color?: 'default' | 'yellow' | 'blue' | 'repl';
+  r?: number;
+  dur?: string;
+  begin?: string;
+  /** Bounce back and forth instead of teleporting to start. */
+  bounce?: boolean;
+  opacity?: number;
+}
+
+const {
+  path,
+  color = 'default',
+  r = 2.5,
+  dur = '2s',
+  begin,
+  bounce = false,
+  opacity,
+} = Astro.props;
+
+const colorClass = color === 'default' ? 'dot' : `dot-${color}`;
+const keyPoints = bounce ? '0;1;0' : '0;1';
+const keyTimes = bounce ? '0;0.5;1' : '0;1';
+const keySplines = bounce ? EASE_BOUNCE : EASE;
+
+// Fade in/out for non-bounce dots so they don't pop in/out of existence.
+// Bounce dots loop continuously at the same position, so no fade needed.
+const fade = !bounce;
+const baseOpacity = opacity ?? 1;
+const fadeValues = `0;${baseOpacity};${baseOpacity};0`;
+---
+
+<circle class={colorClass} r={r} opacity={fade ? 0 : opacity}>
+  <animateMotion
+    dur={dur}
+    repeatCount="indefinite"
+    calcMode="spline"
+    keyPoints={keyPoints}
+    keyTimes={keyTimes}
+    keySplines={keySplines}
+    begin={begin}
+  >
+    <mpath href={`#${path}`} />
+  </animateMotion>
+  {fade && (
+    <animate
+      attributeName="opacity"
+      dur={dur}
+      repeatCount="indefinite"
+      begin={begin}
+      values={fadeValues}
+      keyTimes="0;0.1;0.9;1"
+    />
+  )}
+</circle>

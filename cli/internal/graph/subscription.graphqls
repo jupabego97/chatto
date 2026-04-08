@@ -1,0 +1,62 @@
+"""
+Root subscription type.
+"""
+type Subscription {
+  """
+  Subscribe to events within a specific space, filtered for the current user.
+
+  Requires space membership. Events are server-side filtered so clients only
+  receive what they are authorized to see.
+
+  **Room events** (messages, room creation/deletion, user join/leave):
+  Delivered only for rooms the user is a member of. The membership set is
+  tracked in real-time — when the user joins or leaves a room during the
+  subscription, filtering updates immediately without reconnecting.
+
+  **Transient events** (reactions, message edits/deletes, typing indicators,
+  video processing, call participant changes):
+  Delivered only for rooms the user is a member of. These are live-only
+  (not stored in JetStream) and have no sequence ID. The user's own typing
+  indicators are suppressed server-side.
+
+  **Space-level events** (member removed):
+  Delivered to all space members regardless of room membership.
+
+  **Presence changes** (online/offline/away/DND status):
+  Delivered for users who are members of this space. Non-members' presence
+  changes are filtered out server-side using a lazy membership cache.
+
+  Only streams new events — no replay of historical events.
+  """
+  mySpaceEvents(spaceId: ID!): SpaceEvent!
+
+  """
+  Subscribe to instance-level events, filtered for the current user.
+
+  Requires authentication. Events are server-side filtered based on scope:
+
+  **Config events** (instance name, MOTD, welcome message changes):
+  Delivered to all authenticated users.
+
+  **User events** — two categories based on event type:
+  - Profile updates (avatar, display name): broadcast to all authenticated
+    users, since user profiles are public.
+  - Private events (notification sync, preference changes, session
+    termination, space membership changes): delivered only to the target user.
+    These enable cross-tab/cross-device sync.
+
+  **Space events** (space created/updated, new message indicators):
+  Delivered only to members of the affected space. For new-message-in-space
+  events, an additional room membership check ensures unread indicators
+  only appear for rooms the user has joined.
+
+  **Side effects:**
+  - Subscribing sets the user's presence status to ONLINE.
+  - Presence is refreshed every 30s while active (60s TTL).
+  - When the subscription ends, presence expires via TTL.
+  - Receiving a session termination event closes the stream server-side.
+
+  Only streams new events — no replay of historical events.
+  """
+  myInstanceEvents: InstanceEvent!
+}

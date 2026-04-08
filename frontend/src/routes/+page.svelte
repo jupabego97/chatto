@@ -1,0 +1,49 @@
+<script lang="ts">
+  import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
+  import { instanceIdToSegment } from '$lib/navigation';
+  import { instanceRegistry } from '$lib/state/instance/registry.svelte';
+  import { getInstancePermissions } from '$lib/state/instance/permissions.svelte';
+  import { resolveLastPosition } from '$lib/storage/lastRoom';
+
+  let { data } = $props();
+
+  const instancePerms = getInstancePermissions();
+
+  // Unauthenticated → redirect immediately (no $effect needed)
+  // svelte-ignore state_referenced_locally
+  if (!data.user) {
+    goto(resolve('/login'), { replaceState: true });
+  }
+
+  // Authenticated → use $effect to wait for reactive state (instances, permissions)
+  $effect(() => {
+    if (!data.user) return;
+    if (sessionStorage.getItem('returnUrl')) return;
+
+    if (instanceRegistry.instances.length === 0) {
+      goto(resolve('/instances/add'), { replaceState: true });
+      return;
+    }
+
+    const homeId = instanceRegistry.originInstance?.id ?? '';
+    if (!homeId) return;
+
+    const lastPos = resolveLastPosition(homeId);
+    if (lastPos) {
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- lastPos from resolveLastPosition() is already resolved
+      goto(lastPos, { replaceState: true });
+      return;
+    }
+
+    if (!instancePerms.current.loaded) return;
+
+    if (instancePerms.current.canListSpaces) {
+      goto(resolve('/chat/spaces'), { replaceState: true });
+    } else {
+      goto(resolve('/chat/[instanceId]', { instanceId: instanceIdToSegment(homeId) }), { replaceState: true });
+    }
+  });
+</script>
+
+<!-- Redirect in progress -->

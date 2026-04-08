@@ -1,0 +1,5 @@
+# E2E test data directories (parallel workers create data-worker-N)
+data/
+data-*/
+bin/
+chatto-e2e-server

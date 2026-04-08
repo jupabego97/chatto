@@ -1,0 +1,756 @@
+package core
+
+import (
+	"context"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/nats-io/nats-server/v2/server"
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
+	"hmans.de/chatto/internal/config"
+	corev1 "hmans.de/chatto/internal/pb/chatto/core/v1"
+)
+
+// ============================================================================
+// Test Setup
+// ============================================================================
+
+// testContext returns a context with a reasonable timeout for tests.
+// This prevents tests from hanging indefinitely if something goes wrong.
+func testContext(t *testing.T) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	t.Cleanup(cancel)
+	return ctx
+}
+
+// setupTestCore is a shared test helper that creates a ChattoCore instance
+// with an embedded NATS server for testing. Used by all test files in this package.
+func setupTestCore(t *testing.T) (*ChattoCore, *nats.Conn) {
+	t.Helper()
+
+	// Start embedded NATS server
+	opts := &server.Options{
+		JetStream: true,
+		Port:      -1,
+		StoreDir:  t.TempDir(),
+	}
+
+	ns, err := server.NewServer(opts)
+	if err != nil {
+		t.Fatalf("Failed to create NATS server: %v", err)
+	}
+
+	go ns.Start()
+	if !ns.ReadyForConnections(5 * 1e9) {
+		t.Fatal("NATS server not ready")
+	}
+
+	nc, err := nats.Connect(ns.ClientURL())
+	if err != nil {
+		t.Fatalf("Failed to connect to NATS: %v", err)
+	}
+
+	t.Cleanup(func() {
+		nc.Close()
+		ns.Shutdown()
+		ns.WaitForShutdown()
+	})
+
+	ctx := testContext(t)
+
+	// Create ChattoCore
+	cfg := config.CoreConfig{
+		Assets: config.AssetsConfig{
+			SigningSecret: "test-signing-secret",
+		},
+	}
+	core, err := NewChattoCore(ctx, nc, cfg)
+	if err != nil {
+		t.Fatalf("Failed to create ChattoCore: %v", err)
+	}
+
+	// Start PresenceHub in background (needed by StreamMySpaceEvents)
+	hubCtx, hubCancel := context.WithCancel(context.Background())
+	go core.PresenceHub.Run(hubCtx)
+	t.Cleanup(hubCancel)
+
+	return core, nc
+}
+
+// ============================================================================
+// Integration Tests
+// ============================================================================
+
+// TestChattoCore_FullWorkflow tests an end-to-end workflow demonstrating
+// all core functionality working together.
+func TestChattoCore_FullWorkflow(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	// Create a user
+	user, err := core.CreateUser(ctx, "system", "testuser", "testuser", "password123")
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
+
+	// Create a space
+	space, err := core.CreateSpace(ctx, user.Id, "My Space", "A collaborative workspace")
+	if err != nil {
+		t.Fatalf("Failed to create space: %v", err)
+	}
+
+	// Create multiple rooms
+	room1, err := core.CreateRoom(ctx, user.Id, space.Id, "General", "General discussion")
+	if err != nil {
+		t.Fatalf("Failed to create room 1: %v", err)
+	}
+
+	room2, err := core.CreateRoom(ctx, user.Id, space.Id, "Random", "Random chat")
+	if err != nil {
+		t.Fatalf("Failed to create room 2: %v", err)
+	}
+
+	// Verify rooms can be listed
+	rooms, err := core.ListRoomsBySpace(ctx, space.Id)
+	if err != nil {
+		t.Fatalf("Failed to list rooms: %v", err)
+	}
+	if len(rooms) != 2 {
+		t.Errorf("Expected 2 rooms, got %d", len(rooms))
+	}
+
+	// Join the space first (required for room membership)
+	_, err = core.JoinSpace(ctx, user.Id, space.Id)
+	if err != nil {
+		t.Fatalf("Failed to join space: %v", err)
+	}
+
+	// Join the rooms (required for posting messages)
+	_, err = core.JoinRoom(ctx, user.Id, space.Id, user.Id, room1.Id)
+	if err != nil {
+		t.Fatalf("Failed to join room 1: %v", err)
+	}
+
+	_, err = core.JoinRoom(ctx, user.Id, space.Id, user.Id, room2.Id)
+	if err != nil {
+		t.Fatalf("Failed to join room 2: %v", err)
+	}
+
+	// Post messages to different rooms
+	_, err = core.PostMessage(ctx, space.Id, room1.Id, user.Id, "Hello in General", nil, "", "", nil, false)
+	if err != nil {
+		t.Fatalf("Failed to post message to room 1: %v", err)
+	}
+
+	_, err = core.PostMessage(ctx, space.Id, room2.Id, user.Id, "Hello in Random", nil, "", "", nil, false)
+	if err != nil {
+		t.Fatalf("Failed to post message to room 2: %v", err)
+	}
+
+	// Verify user can authenticate
+	authenticated, err := core.VerifyPassword(ctx, user.Login, "password123")
+	if err != nil {
+		t.Fatalf("Failed to verify password: %v", err)
+	}
+	if authenticated.Id != user.Id {
+		t.Error("Authenticated user doesn't match")
+	}
+}
+
+// ============================================================================
+// Per-Space Bucket Cache Tests
+// ============================================================================
+
+// TestPerSpaceBucketCache_ConcurrentGetOrCreate verifies that concurrent calls to getOrCreate
+// for the same space result in only one bucket being created (double-checked locking works).
+func TestPerSpaceBucketCache_ConcurrentGetOrCreate(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	// Create a test space
+	space, _ := core.CreateSpace(ctx, "test-user", "Test Space", "A test space")
+
+	// Launch 10 goroutines that all try to get the room bucket for the same space
+	const numGoroutines = 10
+	var wg sync.WaitGroup
+	wg.Add(numGoroutines)
+
+	buckets := make([]interface{}, numGoroutines)
+	errors := make([]error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(index int) {
+			defer wg.Done()
+			bucket, err := core.getSpaceConfigBucket(ctx, space.Id)
+			buckets[index] = bucket
+			errors[index] = err
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Verify all calls succeeded
+	for i, err := range errors {
+		if err != nil {
+			t.Errorf("Goroutine %d failed to get bucket: %v", i, err)
+		}
+	}
+
+	// Verify all goroutines got the same bucket instance (pointer equality)
+	firstBucket := buckets[0]
+	for i := 1; i < numGoroutines; i++ {
+		if buckets[i] != firstBucket {
+			t.Errorf("Goroutine %d got different bucket instance: %p vs %p", i, buckets[i], firstBucket)
+		}
+	}
+
+	// Verify the bucket is actually cached now
+	cachedBucket, err := core.getSpaceConfigBucket(ctx, space.Id)
+	if err != nil {
+		t.Fatalf("Failed to get cached bucket: %v", err)
+	}
+	if cachedBucket != firstBucket {
+		t.Error("Subsequent call returned different bucket, cache not working")
+	}
+}
+
+// TestPerSpaceBucketCache_CachingWorks verifies that buckets are actually cached
+// and subsequent calls return the same instance without recreating.
+func TestPerSpaceBucketCache_CachingWorks(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	// Create a test space
+	space, _ := core.CreateSpace(ctx, "test-user", "Test Space", "A test space")
+
+	// First call - should create the bucket
+	bucket1, err := core.getSpaceConfigBucket(ctx, space.Id)
+	if err != nil {
+		t.Fatalf("First call failed: %v", err)
+	}
+	if bucket1 == nil {
+		t.Fatal("First call returned nil bucket")
+	}
+
+	// Second call - should return cached bucket
+	bucket2, err := core.getSpaceConfigBucket(ctx, space.Id)
+	if err != nil {
+		t.Fatalf("Second call failed: %v", err)
+	}
+	if bucket2 == nil {
+		t.Fatal("Second call returned nil bucket")
+	}
+
+	// Verify same instance (pointer equality)
+	if bucket1 != bucket2 {
+		t.Errorf("Second call returned different bucket: %p vs %p", bucket1, bucket2)
+	}
+
+	// Third call for good measure
+	bucket3, err := core.getSpaceConfigBucket(ctx, space.Id)
+	if err != nil {
+		t.Fatalf("Third call failed: %v", err)
+	}
+	if bucket3 != bucket1 {
+		t.Errorf("Third call returned different bucket: %p vs %p", bucket3, bucket1)
+	}
+}
+
+// TestPerSpaceBucketCache_DeleteAndRecreate verifies that cache deletion works
+// and that a new bucket is created after deletion.
+func TestPerSpaceBucketCache_DeleteAndRecreate(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	// Create a test space
+	space, _ := core.CreateSpace(ctx, "test-user", "Test Space", "A test space")
+
+	// Create and cache the bucket
+	originalBucket, err := core.getSpaceConfigBucket(ctx, space.Id)
+	if err != nil {
+		t.Fatalf("Failed to create bucket: %v", err)
+	}
+
+	// Delete from cache (simulating space deletion cleanup)
+	core.storage.spaceConfigKV.Delete(space.Id)
+
+	// Get bucket again - should create a new one since cache was cleared
+	newBucket, err := core.getSpaceConfigBucket(ctx, space.Id)
+	if err != nil {
+		t.Fatalf("Failed to recreate bucket: %v", err)
+	}
+
+	// Verify it's a different instance (cache was cleared and recreated)
+	// Note: In production, the underlying NATS bucket might be the same,
+	// but the Go interface instance should be different
+	if newBucket == originalBucket {
+		t.Error("Expected new bucket instance after cache deletion, got same instance")
+	}
+
+	// Verify the new bucket is now cached
+	cachedBucket, err := core.getSpaceConfigBucket(ctx, space.Id)
+	if err != nil {
+		t.Fatalf("Failed to get cached bucket: %v", err)
+	}
+	if cachedBucket != newBucket {
+		t.Error("New bucket should be cached")
+	}
+}
+
+// TestPerSpaceBucketCache_BucketConfigured verifies that storage buckets are correctly configured.
+func TestPerSpaceBucketCache_BucketConfigured(t *testing.T) {
+	_, nc := setupTestCore(t)
+	ctx := testContext(t)
+
+	js, err := jetstream.New(nc)
+	if err != nil {
+		t.Fatalf("Failed to create JetStream context: %v", err)
+	}
+
+	// Get the bucket to inspect its configuration
+	kv, err := js.KeyValue(ctx, "INSTANCE")
+	if err != nil {
+		t.Fatalf("Failed to get INSTANCE bucket: %v", err)
+	}
+
+	status, err := kv.Status(ctx)
+	if err != nil {
+		t.Fatalf("Failed to get bucket status: %v", err)
+	}
+
+	if status.Bucket() != "INSTANCE" {
+		t.Errorf("Expected bucket name 'INSTANCE', got '%s'", status.Bucket())
+	}
+
+	// Verify it's using file storage (not memory)
+	if status.BackingStore() != "JetStream" {
+		t.Logf("Backing store: %s", status.BackingStore())
+	}
+}
+
+// ============================================================================
+// Instance Event Authorization Tests
+// ============================================================================
+
+// TestChattoCore_isAuthorizedForInstanceEvent verifies the authorization logic
+// for instance-level events based on subject patterns.
+func TestChattoCore_isAuthorizedForInstanceEvent(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	// Create two users for testing
+	userA, _ := core.CreateUser(ctx, "system", "userA", "User A", "")
+	userB, _ := core.CreateUser(ctx, "system", "userB", "User B", "")
+
+	// Create a space that only userA is a member of
+	space, _ := core.CreateSpace(ctx, userA.Id, "Test Space", "")
+	core.JoinSpace(ctx, userA.Id, space.Id)
+
+	tests := []struct {
+		name       string
+		userID     string
+		subject    string
+		wantResult bool
+	}{
+		// User-scoped events: private by default
+		{
+			name:       "user event - same user receives their own registration_completed",
+			userID:     userA.Id,
+			subject:    "live.instance.user." + userA.Id + ".registration_completed",
+			wantResult: true,
+		},
+		{
+			name:       "user event - other user does NOT receive registration_completed",
+			userID:     userB.Id,
+			subject:    "live.instance.user." + userA.Id + ".registration_completed",
+			wantResult: false,
+		},
+		{
+			name:       "user event - same user receives their own user_deleted",
+			userID:     userA.Id,
+			subject:    "live.instance.user." + userA.Id + ".user_deleted",
+			wantResult: true,
+		},
+		{
+			name:       "user event - other user does NOT receive user_deleted",
+			userID:     userB.Id,
+			subject:    "live.instance.user." + userA.Id + ".user_deleted",
+			wantResult: false,
+		},
+
+		// Profile updates: broadcast to everyone (since profiles are public)
+		{
+			name:       "profile_updated - same user receives it",
+			userID:     userA.Id,
+			subject:    "live.instance.user." + userA.Id + ".profile_updated",
+			wantResult: true,
+		},
+		{
+			name:       "profile_updated - other user ALSO receives it (broadcast)",
+			userID:     userB.Id,
+			subject:    "live.instance.user." + userA.Id + ".profile_updated",
+			wantResult: true,
+		},
+
+		// Space-scoped events: only members
+		{
+			name:       "space event - space member receives it",
+			userID:     userA.Id,
+			subject:    "live.instance.space." + space.Id + ".updated",
+			wantResult: true,
+		},
+		{
+			name:       "space event - non-member does NOT receive it",
+			userID:     userB.Id,
+			subject:    "live.instance.space." + space.Id + ".updated",
+			wantResult: false,
+		},
+
+		// Invalid subjects
+		{
+			name:       "invalid subject format - too few parts",
+			userID:     userA.Id,
+			subject:    "live.instance.user",
+			wantResult: false,
+		},
+		{
+			name:       "invalid subject format - wrong prefix",
+			userID:     userA.Id,
+			subject:    "wrong.prefix.user." + userA.Id + ".event",
+			wantResult: false,
+		},
+		{
+			name:       "unknown scope",
+			userID:     userA.Id,
+			subject:    "live.instance.unknown.someid.event",
+			wantResult: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := core.isAuthorizedForInstanceEvent(ctx, tt.userID, tt.subject)
+			if result != tt.wantResult {
+				t.Errorf("isAuthorizedForInstanceEvent(%s, %s) = %v, want %v",
+					tt.userID, tt.subject, result, tt.wantResult)
+			}
+		})
+	}
+}
+
+// ============================================================================
+// newSpaceEvent Tests
+// ============================================================================
+
+func TestNewSpaceEvent_PopulatesId(t *testing.T) {
+	event := newSpaceEvent("test-actor", &corev1.SpaceEvent{
+		Event: &corev1.SpaceEvent_RoomCreated{
+			RoomCreated: &corev1.RoomCreatedEvent{
+				RoomId:  "test-room",
+				Name:    "Test Room",
+				SpaceId: "test-space",
+			},
+		},
+	})
+
+	if event.Id == "" {
+		t.Error("newSpaceEvent() should populate Id field")
+	}
+
+	if !strings.HasPrefix(event.Id, "E") {
+		t.Errorf("newSpaceEvent() Id should start with 'E', got %s", event.Id)
+	}
+
+	if len(event.Id) != 15 {
+		t.Errorf("newSpaceEvent() Id should be 15 characters, got %d", len(event.Id))
+	}
+}
+
+func TestNewSpaceEvent_DoesNotOverwriteExistingId(t *testing.T) {
+	existingId := "E12345678901234"
+	event := newSpaceEvent("test-actor", &corev1.SpaceEvent{
+		Id: existingId,
+		Event: &corev1.SpaceEvent_RoomCreated{
+			RoomCreated: &corev1.RoomCreatedEvent{
+				RoomId:  "test-room",
+				Name:    "Test Room",
+				SpaceId: "test-space",
+			},
+		},
+	})
+
+	if event.Id != existingId {
+		t.Errorf("newSpaceEvent() should not overwrite existing Id, got %s", event.Id)
+	}
+}
+
+func TestNewSpaceEvent_PopulatesActorId(t *testing.T) {
+	event := newSpaceEvent("test-actor", &corev1.SpaceEvent{
+		Event: &corev1.SpaceEvent_RoomCreated{
+			RoomCreated: &corev1.RoomCreatedEvent{},
+		},
+	})
+
+	if event.ActorId != "test-actor" {
+		t.Errorf("newSpaceEvent() should populate ActorId, got %s", event.ActorId)
+	}
+}
+
+func TestNewSpaceEvent_PopulatesCreatedAt(t *testing.T) {
+	event := newSpaceEvent("test-actor", &corev1.SpaceEvent{
+		Event: &corev1.SpaceEvent_RoomCreated{
+			RoomCreated: &corev1.RoomCreatedEvent{},
+		},
+	})
+
+	if event.CreatedAt == nil {
+		t.Error("newSpaceEvent() should populate CreatedAt field")
+	}
+}
+
+// ============================================================================
+// StreamMyInstanceEvents Tests
+// ============================================================================
+
+// TestStreamMyInstanceEvents_FiltersNewMessageByRoomMembership verifies that
+// NewMessageInSpaceEvent is only delivered to users who are room members,
+// not just space members.
+func TestStreamMyInstanceEvents_FiltersNewMessageByRoomMembership(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	// Create two users
+	user1, _ := core.CreateUser(ctx, "system", "roomfilter1", "Room Filter User 1", "")
+	user2, _ := core.CreateUser(ctx, "system", "roomfilter2", "Room Filter User 2", "")
+
+	// Create a space - user1 is owner and member
+	space, err := core.CreateSpace(ctx, user1.Id, "Test Space", "")
+	if err != nil {
+		t.Fatalf("CreateSpace failed: %v", err)
+	}
+
+	// user2 joins space (but not any rooms)
+	_, err = core.JoinSpace(ctx, user2.Id, space.Id)
+	if err != nil {
+		t.Fatalf("JoinSpace failed: %v", err)
+	}
+
+	// user1 creates a room (becomes member automatically)
+	room, err := core.CreateRoom(ctx, user1.Id, space.Id, "test-room", "")
+	if err != nil {
+		t.Fatalf("CreateRoom failed: %v", err)
+	}
+
+	// Start streaming instance events for user2 (space member, NOT room member)
+	subCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	eventChan, err := core.StreamMyInstanceEvents(subCtx, user2.Id)
+	if err != nil {
+		t.Fatalf("StreamMyInstanceEvents failed: %v", err)
+	}
+
+	// Give subscription time to establish
+	time.Sleep(100 * time.Millisecond)
+
+	// Post a message in the room (user2 is NOT a member)
+	_, err = core.PostMessage(ctx, space.Id, room.Id, user1.Id, "Hello from room", nil, "", "", nil, false)
+	if err != nil {
+		t.Fatalf("PostMessage failed: %v", err)
+	}
+
+	// user2 should NOT receive NewMessageInSpaceEvent (not a room member)
+	select {
+	case event := <-eventChan:
+		if event.GetNewMessageInSpace() != nil {
+			t.Error("Space member who is NOT a room member received NewMessageInSpaceEvent - filtering failed")
+		}
+		// Other events (like space join) might come through, that's fine
+	case <-time.After(500 * time.Millisecond):
+		// Expected: no NewMessageInSpaceEvent for non-room-member
+	}
+
+	// Now user2 joins the room
+	_, err = core.JoinRoom(ctx, user2.Id, space.Id, user2.Id, room.Id)
+	if err != nil {
+		t.Fatalf("JoinRoom failed: %v", err)
+	}
+
+	// Post another message
+	_, err = core.PostMessage(ctx, space.Id, room.Id, user1.Id, "Hello again", nil, "", "", nil, false)
+	if err != nil {
+		t.Fatalf("PostMessage failed: %v", err)
+	}
+
+	// Now user2 SHOULD receive NewMessageInSpaceEvent
+	timeout := time.After(2 * time.Second)
+	for {
+		select {
+		case event := <-eventChan:
+			if newMsg := event.GetNewMessageInSpace(); newMsg != nil {
+				if newMsg.SpaceId != space.Id || newMsg.RoomId != room.Id {
+					t.Errorf("Unexpected NewMessageInSpaceEvent: space=%s room=%s", newMsg.SpaceId, newMsg.RoomId)
+				}
+				return // Success!
+			}
+			// Other events might come through (join events), keep waiting
+		case <-timeout:
+			t.Fatal("Timeout waiting for NewMessageInSpaceEvent after user joined room")
+		}
+	}
+}
+
+// TestStreamMyInstanceEvents_ClosesOnSessionTerminated verifies that
+// the instance event stream closes after receiving a SessionTerminatedEvent,
+// and that the event is delivered to the channel before it closes.
+func TestStreamMyInstanceEvents_ClosesOnSessionTerminated(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	user, _ := core.CreateUser(ctx, "system", "sessionterm1", "Session Term User", "")
+
+	// Start streaming instance events
+	subCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	eventChan, err := core.StreamMyInstanceEvents(subCtx, user.Id)
+	if err != nil {
+		t.Fatalf("StreamMyInstanceEvents failed: %v", err)
+	}
+
+	// Give subscription time to establish
+	time.Sleep(100 * time.Millisecond)
+
+	// Publish session terminated event
+	if err := core.PublishSessionTerminated(ctx, user.Id, "logout"); err != nil {
+		t.Fatalf("PublishSessionTerminated failed: %v", err)
+	}
+
+	// Should receive the SessionTerminatedEvent, then the channel should close
+	receivedEvent := false
+	timeout := time.After(2 * time.Second)
+
+	for {
+		select {
+		case event, ok := <-eventChan:
+			if !ok {
+				// Channel closed — expected after session terminated
+				if !receivedEvent {
+					t.Fatal("Channel closed before receiving SessionTerminatedEvent")
+				}
+				return // Success!
+			}
+			if st := event.GetSessionTerminated(); st != nil {
+				if st.Reason != "logout" {
+					t.Errorf("Expected reason 'logout', got %q", st.Reason)
+				}
+				receivedEvent = true
+				// Channel should close shortly after — keep reading
+			}
+		case <-timeout:
+			if receivedEvent {
+				t.Fatal("Received SessionTerminatedEvent but channel was not closed")
+			}
+			t.Fatal("Timeout waiting for SessionTerminatedEvent")
+		}
+	}
+}
+
+// ============================================================================
+// StreamMySpaceEvents Typing Indicator Tests
+// ============================================================================
+
+// TestStreamMySpaceEvents_FiltersOwnTypingEvents verifies that typing indicator
+// events are NOT delivered back to the user who published them. This is critical
+// for multi-instance clients where the frontend's currentUserId may differ from
+// the remote instance user ID, making client-side filtering unreliable.
+func TestStreamMySpaceEvents_FiltersOwnTypingEvents(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	// Create two users
+	user1, _ := core.CreateUser(ctx, "system", "typing1", "Typing User 1", "")
+	user2, _ := core.CreateUser(ctx, "system", "typing2", "Typing User 2", "")
+
+	// Create a space and room
+	space, err := core.CreateSpace(ctx, user1.Id, "Test Space", "")
+	if err != nil {
+		t.Fatalf("CreateSpace failed: %v", err)
+	}
+
+	_, err = core.JoinSpace(ctx, user2.Id, space.Id)
+	if err != nil {
+		t.Fatalf("JoinSpace failed: %v", err)
+	}
+
+	room, err := core.CreateRoom(ctx, user1.Id, space.Id, "test-room", "")
+	if err != nil {
+		t.Fatalf("CreateRoom failed: %v", err)
+	}
+
+	// Both users must explicitly join the room (CreateRoom doesn't auto-join)
+	_, err = core.JoinRoom(ctx, user1.Id, space.Id, user1.Id, room.Id)
+	if err != nil {
+		t.Fatalf("JoinRoom (user1) failed: %v", err)
+	}
+
+	_, err = core.JoinRoom(ctx, user2.Id, space.Id, user2.Id, room.Id)
+	if err != nil {
+		t.Fatalf("JoinRoom (user2) failed: %v", err)
+	}
+
+	// Start streaming space events for user1 (the one who will type)
+	subCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	eventChan, err := core.StreamMySpaceEvents(subCtx, space.Id, user1.Id)
+	if err != nil {
+		t.Fatalf("StreamMySpaceEvents failed: %v", err)
+	}
+
+	// Give subscription time to establish
+	time.Sleep(100 * time.Millisecond)
+
+	// user1 publishes a typing indicator (their own typing)
+	err = core.PublishTypingIndicator(ctx, user1.Id, space.Id, room.Id, nil)
+	if err != nil {
+		t.Fatalf("PublishTypingIndicator failed: %v", err)
+	}
+
+	// user1 should NOT receive their own typing event
+	select {
+	case event := <-eventChan:
+		if event.GetUserTyping() != nil {
+			t.Error("User received their own typing event — should be filtered server-side")
+		}
+	case <-time.After(500 * time.Millisecond):
+		// Expected: no typing event for self
+	}
+
+	// Now user2 publishes a typing indicator
+	err = core.PublishTypingIndicator(ctx, user2.Id, space.Id, room.Id, nil)
+	if err != nil {
+		t.Fatalf("PublishTypingIndicator failed: %v", err)
+	}
+
+	// user1 SHOULD receive user2's typing event
+	timeout := time.After(2 * time.Second)
+	for {
+		select {
+		case event := <-eventChan:
+			if typing := event.GetUserTyping(); typing != nil {
+				if event.ActorId != user2.Id {
+					t.Errorf("Expected typing event from user2 (%s), got %s", user2.Id, event.ActorId)
+				}
+				return // Success!
+			}
+			// Other events might come through, keep waiting
+		case <-timeout:
+			t.Fatal("Timeout waiting for user2's typing event")
+		}
+	}
+}

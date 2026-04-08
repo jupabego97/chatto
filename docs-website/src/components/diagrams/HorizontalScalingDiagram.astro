@@ -1,0 +1,47 @@
+---
+import { baseStyles } from './styles';
+import Box from './Box.astro';
+import Region from './Region.astro';
+import Dot from './Dot.astro';
+---
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 280" fill="none">
+  <style set:html={baseStyles} />
+
+  <Region x={310} y={15} w={170} h={250} label="STATELESS REPLICAS" />
+
+  <Box type="browser" x={16} y={110} w={120} label="Browser" sublabel="SvelteKit SPA" />
+  <Box type="caddy" x={175} y={110} w={105} label="Caddy" sublabel="Load Balancer" />
+
+  <Box type="chatto" x={325} y={45} w={140} h={48} label="Chatto" sublabel="replica 1" />
+  <Box type="chatto" x={325} y={113} w={140} h={48} label="Chatto" sublabel="replica 2" />
+  <Box type="chatto" x={325} y={181} w={140} h={48} label="Chatto" sublabel="replica 3" />
+
+  <!-- NATS (custom layout with 3 sublabel lines) -->
+  <rect class="box box-nats" x="535" y="95" width="145" height="85"/>
+  <text class="label" x="607" y="130" text-anchor="middle">NATS</text>
+  <text class="sublabel" x="607" y="146" text-anchor="middle">JetStream</text>
+  <text class="sublabel" x="607" y="162" text-anchor="middle">shared state</text>
+
+  <!-- Connections -->
+  <path id="p-browser-lb" class="conn" d="M136,137 L173,137"/>
+  <path id="p-lb-r1" class="conn" d="M280,125 L323,69"/>
+  <path id="p-lb-r2" class="conn" d="M280,137 L323,137"/>
+  <path id="p-lb-r3" class="conn" d="M280,149 L323,205"/>
+  <path id="p-r1-nats" class="conn" d="M465,69 L533,125"/>
+  <path id="p-r2-nats" class="conn" d="M465,137 L533,137"/>
+  <path id="p-r3-nats" class="conn" d="M465,205 L533,155"/>
+
+  <!-- Browser → LB -->
+  <Dot path="p-browser-lb" r={3} dur="1s" />
+
+  <!-- LB → Replicas -->
+  <Dot path="p-lb-r1" dur="1.2s" />
+  <Dot path="p-lb-r2" dur="1.2s" begin="0.4s" />
+  <Dot path="p-lb-r3" dur="1.2s" begin="0.8s" />
+
+  <!-- Replicas ↔ NATS -->
+  <Dot path="p-r1-nats" color="blue" bounce dur="2s" />
+  <Dot path="p-r2-nats" color="blue" bounce dur="2s" begin="0.3s" />
+  <Dot path="p-r3-nats" color="blue" bounce dur="2s" begin="0.6s" />
+</svg>

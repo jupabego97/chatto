@@ -1,0 +1,7 @@
+/data/
+/bin/
+/backups/
+/chatto
+
+chatto-*.toml
+coverage*.out

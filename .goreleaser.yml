@@ -1,0 +1,97 @@
+version: 2
+project_name: chatto
+
+before:
+  hooks:
+    - mise build-frontend
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    dir: ./cli
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - formats: [tar.gz]
+    # this name template makes the OS and Arch compatible with the results of `uname`.
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    # use zip for windows archives
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    # Only include conventional commits (feat, fix, perf, refactor)
+    # This filters out non-conventional commits from merged branches
+    include:
+      - "^feat"
+      - "^fix"
+      - "^perf"
+      - "^refactor"
+  groups:
+    - title: "⚠️ Breaking Changes"
+      regexp: "!:"
+      order: 0
+    - title: Features
+      regexp: "^feat"
+      order: 1
+    - title: Bug Fixes
+      regexp: "^fix"
+      order: 2
+    - title: Performance
+      regexp: "^perf"
+      order: 3
+    - title: Other
+      order: 999
+
+dockers:
+  - image_templates:
+      - "ghcr.io/hmans/chatto:{{ .Version }}"
+      - "ghcr.io/hmans/chatto:{{ .Major }}.{{ .Minor }}"
+      - "ghcr.io/hmans/chatto:latest"
+    dockerfile: Dockerfile.goreleaser
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.source=https://github.com/hmans/chatto"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+    use: buildx
+    goarch: amd64
+    goos: linux
+
+## R2 blob upload disabled until R2 API tokens are configured
+## See: https://github.com/hmans/chatto/actions/runs/21843246346
+# blobs:
+#   - provider: s3
+#     bucket: "{{ .Env.R2_BUCKET }}"
+#     region: auto
+#     endpoint: "https://{{ .Env.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+#     directory: "releases/{{ .Version }}"
+#     include_meta: true
+
+release:
+  github:
+    owner: hmans
+    name: chatto
+  footer: >-
+
+    ---
+
+    Released by [GoReleaser](https://github.com/goreleaser/goreleaser).

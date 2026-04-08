@@ -1,0 +1,25 @@
+# Requires an Ingress controller and cert-manager (see README)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: chatto
+  namespace: chatto
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - chat.example.com  # Change to your domain
+      secretName: chatto-tls
+  rules:
+    - host: chat.example.com  # Change to your domain
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: chatto
+                port:
+                  number: 4000

@@ -1,0 +1,70 @@
+"""
+Root query type for fetching data.
+"""
+type Query {
+  "Get a specific room by space and room ID."
+  room(spaceId: ID!, roomId: ID!): Room
+
+  "Fetch historical events for a specific room (default limit: 50). Use 'before' for backward pagination, 'after' for forward pagination."
+  roomEvents(spaceId: ID!, roomId: ID!, limit: Int = 50, before: Time, after: Time): RoomEventsConnection!
+
+  "Fetch a single room event by event ID (O(1) subject lookup). Returns null if not found."
+  roomEventByEventId(spaceId: ID!, roomId: ID!, eventId: ID!): SpaceEvent
+
+  """
+  Fetch thread messages for a specific thread.
+  Returns the root message plus all replies in chronological order.
+  """
+  threadEvents(spaceId: ID!, roomId: ID!, threadRootEventId: ID!): [SpaceEvent!]!
+
+  """
+  Fetch room events centered around a specific event.
+  Returns a window of events with the target event roughly in the middle.
+  Used for "jump to message" when clicking reply links to messages not in the loaded range.
+  """
+  roomEventsAround(spaceId: ID!, roomId: ID!, eventId: ID!, limit: Int = 50): RoomEventsAroundResult!
+
+  "List all spaces the current user has access to."
+  spaces: [Space!]!
+
+  "Get a specific space by ID. Does not require authentication for discovery."
+  space(id: ID!): Space
+
+  "Get the currently authenticated user."
+  me: User
+
+  "Get a specific user by ID."
+  user(id: ID!): User
+
+  "Get a specific user by login. Returns null if not found."
+  userByLogin(login: String!): User
+
+  "List all users on this instance. Requires instance admin."
+  users: [User!]!
+}
+
+"""
+Paginated room events with metadata indicating whether more events exist in either direction.
+"""
+type RoomEventsConnection {
+  "The events in chronological order."
+  events: [SpaceEvent!]!
+  "Whether there are older events before this page."
+  hasOlder: Boolean!
+  "Whether there are newer events after this page."
+  hasNewer: Boolean!
+}
+
+"""
+Result of fetching events around a specific target event.
+"""
+type RoomEventsAroundResult {
+  "The events in the window, in chronological order."
+  events: [SpaceEvent!]!
+  "The index of the target event within the events array."
+  targetIndex: Int!
+  "Whether there are older events before this window."
+  hasOlder: Boolean!
+  "Whether there are newer events after this window."
+  hasNewer: Boolean!
+}

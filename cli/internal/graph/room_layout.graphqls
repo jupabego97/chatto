@@ -1,0 +1,25 @@
+"""
+A named section of rooms in the sidebar layout.
+Sections allow space admins to organize rooms into visual groups.
+"""
+type RoomLayoutSection {
+  "Unique ID for this section."
+  id: ID!
+  "Display name for this section (e.g., 'General', 'Projects')."
+  name: String!
+  "Ordered list of rooms in this section."
+  rooms: [Room!]! @goField(forceResolver: true)
+}
+
+"""
+The visual organization of rooms in a space's sidebar.
+Defines sections and room ordering. Rooms not in any section appear as unsectioned.
+"""
+type RoomLayout {
+  "Ordered sections of rooms."
+  sections: [RoomLayoutSection!]!
+  "Rooms not assigned to any section (appear at bottom of sidebar)."
+  unsectioned: [Room!]! @goField(forceResolver: true)
+  "Ordered list of unsectioned room IDs. When present, unsectioned rooms are displayed in this order."
+  unsectionedRoomIds: [ID!]!
+}

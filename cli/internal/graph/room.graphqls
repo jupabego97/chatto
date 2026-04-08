@@ -1,0 +1,52 @@
+"""
+A Room is a chat channel within a Space where users can exchange messages.
+"""
+type Room {
+  "The room's unique ID."
+  id: ID!
+  "The ID of the space this room belongs to."
+  spaceId: ID!
+  "The room's name."
+  name: String!
+  "Optional description of the room's purpose."
+  description: String
+  "List of members in this room."
+  members: [User!]! @goField(forceResolver: true)
+  """
+  Whether the room has unread messages for the current user.
+  Returns false if user is not a member or room has no new messages.
+  """
+  hasUnread: Boolean! @goField(forceResolver: true)
+  """
+  Whether the current user has an unread @mention in this room.
+  Returns false if user is not a member or has no unread mentions.
+  More prominent than hasUnread - indicates user was directly addressed.
+  """
+  hasMention: Boolean! @goField(forceResolver: true)
+  "Whether the current user can post new root messages in this room."
+  viewerCanPostMessage: Boolean! @goField(forceResolver: true)
+  "Whether the current user can post messages in threads in this room."
+  viewerCanPostInThread: Boolean! @goField(forceResolver: true)
+  "Whether the current user can use reply attribution on room-level messages."
+  viewerCanReply: Boolean! @goField(forceResolver: true)
+  "Whether the current user can use reply attribution on thread messages."
+  viewerCanReplyInThread: Boolean! @goField(forceResolver: true)
+  "Whether the current user can add/remove reactions in this room."
+  viewerCanReact: Boolean! @goField(forceResolver: true)
+  "Whether the current user can edit their own messages in this room."
+  viewerCanEditOwnMessage: Boolean! @goField(forceResolver: true)
+  "Whether the current user can edit any user's messages in this room."
+  viewerCanEditAnyMessage: Boolean! @goField(forceResolver: true)
+  "Whether the current user can delete their own messages in this room."
+  viewerCanDeleteOwnMessage: Boolean! @goField(forceResolver: true)
+  "Whether the current user can delete any user's messages in this room."
+  viewerCanDeleteAnyMessage: Boolean! @goField(forceResolver: true)
+  "Whether the current user can join this room (has room.join permission)."
+  viewerCanJoinRoom: Boolean! @goField(forceResolver: true)
+  "Whether the current user can echo thread replies to the main channel."
+  viewerCanEchoMessage: Boolean! @goField(forceResolver: true)
+  "Whether this room is archived. Archived rooms are hidden from sidebar and Browse Rooms."
+  archived: Boolean!
+  "Whether new space members automatically join this room."
+  autoJoin: Boolean!
+}
