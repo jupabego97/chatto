@@ -35,7 +35,7 @@ export default defineConfig({
     // Proxy some URL routes to the Go backend process in development.
     port: process.env.VITE_PORT ? parseInt(process.env.VITE_PORT) : undefined,
     host: true,
-    allowedHosts: ['fatso.fritz.box'],
+    allowedHosts: ['fatso.fritz.box', '.orb.local'],
     proxy: {
       '/playground': {
         target: backendTarget,

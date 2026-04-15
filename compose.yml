@@ -1,0 +1,38 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    working_dir: /app/cli
+    command: ["watchexec", "-r", "-e", "go", "--", "go", "run", "-tags", "dev", ".", "start"]
+    environment:
+      CHATTO_WEBSERVER_URL: https://${COMPOSE_PROJECT_NAME}.orb.local
+      CHATTO_SMTP_HOST: mailpit.chatto-tools.orb.local
+      CHATTO_SMTP_PORT: "1025"
+      CHATTO_LIVEKIT_URL: ws://livekit.chatto-tools.orb.local:7880
+    volumes:
+      - ./cli:/app/cli
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+      - chatto-data:/app/cli/data
+
+  frontend:
+    image: node:22-alpine
+    working_dir: /app
+    labels:
+      dev.orbstack.http-port: 5173
+      dev.orbstack.domains: ${COMPOSE_PROJECT_NAME}.orb.local
+    command: sh -c "corepack enable pnpm && pnpm config set store-dir /pnpm-store && CI=true pnpm install && pnpm dev --host"
+    environment:
+      CHATTO_BACKEND_URL: http://app:4000
+    volumes:
+      - ./frontend:/app
+      - node_modules:/app/node_modules
+      - pnpm_store:/pnpm-store
+
+volumes:
+  go-mod-cache:
+  go-build-cache:
+  chatto-data:
+  node_modules:
+  pnpm_store:
