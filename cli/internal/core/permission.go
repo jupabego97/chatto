@@ -436,6 +436,51 @@ func DefaultSpaceAdminPermissions() []Permission {
 	}
 }
 
+// DefaultSpaceModerationPermissions returns the heavy moderation grants that
+// live on the dedicated `moderation` role. Admins and moderators get this
+// role assigned on demand rather than carrying these permissions implicitly.
+func DefaultSpaceModerationPermissions() []Permission {
+	return []Permission{
+		PermMemberRemove,
+		PermMessageDeleteAny,
+	}
+}
+
+// DefaultSpaceSuspendedDenials returns the user-behavior permissions that the
+// space `suspended` role explicitly denies. Sits at PositionSuspended so the
+// denies can't be overridden by lower-ranked roles (everyone, custom roles).
+// Suspended users can still leave the space.
+func DefaultSpaceSuspendedDenials() []Permission {
+	return []Permission{
+		PermMessagePost,
+		PermMessagePostInThread,
+		PermMessageReply,
+		PermMessageReplyInThread,
+		PermMessageEditOwn,
+		PermMessageDeleteOwn,
+		PermMessageReact,
+		PermMessageEcho,
+		PermRoomCreate,
+		PermRoomJoin,
+	}
+}
+
+// DefaultInstanceSuspendedDenials returns the instance-level permissions
+// the `instance-suspended` role denies. Suspended users keep no access to
+// space/DM/admin surfaces. They can still log in (and leave their account),
+// but everything else is blocked.
+func DefaultInstanceSuspendedDenials() []Permission {
+	return []Permission{
+		PermSpaceCreate,
+		PermSpaceJoin,
+		PermSpaceList,
+		PermDMView,
+		PermDMWrite,
+		PermAdminAccess,
+		PermUserDeleteSelf,
+	}
+}
+
 // ============================================================================
 // Role Naming
 // ============================================================================

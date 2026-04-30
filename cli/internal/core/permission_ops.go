@@ -357,6 +357,13 @@ func (c *ChattoCore) InitSpaceDefaults(ctx context.Context, spaceID string) erro
 		}
 	}
 
+	// Grant default moderation permissions (the on-demand moderation role)
+	for _, perm := range DefaultSpaceModerationPermissions() {
+		if err := c.GrantSpaceRolePermission(ctx, spaceID, SpaceRoleModeration, perm); err != nil {
+			return fmt.Errorf("failed to grant moderation permission %s: %w", perm, err)
+		}
+	}
+
 	// Grant default moderator permissions
 	for _, perm := range DefaultSpaceModeratorPermissions() {
 		if err := c.GrantSpaceRolePermission(ctx, spaceID, SpaceRoleModerator, perm); err != nil {
@@ -368,6 +375,14 @@ func (c *ChattoCore) InitSpaceDefaults(ctx context.Context, spaceID string) erro
 	for _, perm := range DefaultSpaceEveryonePermissions() {
 		if err := c.GrantSpaceRolePermission(ctx, spaceID, SpaceRoleEveryone, perm); err != nil {
 			return fmt.Errorf("failed to grant everyone permission %s: %w", perm, err)
+		}
+	}
+
+	// Seed suspended denials so the role does its job from the moment it's
+	// assigned. Sits at PositionSuspended (above admin) so the denies stick.
+	for _, perm := range DefaultSpaceSuspendedDenials() {
+		if err := c.DenySpaceRolePermission(ctx, spaceID, SpaceRoleSuspended, perm); err != nil {
+			return fmt.Errorf("failed to deny suspended permission %s: %w", perm, err)
 		}
 	}
 
@@ -402,6 +417,12 @@ func (c *ChattoCore) InitInstanceDefaults(ctx context.Context) error {
 	for _, perm := range DefaultInstanceEveryonePermissions() {
 		if err := c.GrantInstanceRolePermission(ctx, InstRoleEveryone, perm); err != nil {
 			return fmt.Errorf("failed to grant everyone permission %s: %w", perm, err)
+		}
+	}
+
+	for _, perm := range DefaultInstanceSuspendedDenials() {
+		if err := c.DenyInstanceRolePermission(ctx, InstRoleSuspended, perm); err != nil {
+			return fmt.Errorf("failed to deny suspended permission %s: %w", perm, err)
 		}
 	}
 
