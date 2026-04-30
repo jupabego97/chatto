@@ -191,6 +191,13 @@ func (c *ChattoCore) VerifyEmail(ctx context.Context, token string) (userID stri
 
 // addVerifiedEmail adds an email to a user's verified emails list.
 // Idempotent - won't add duplicates.
+//
+// On the unverified→verified transition (i.e. when this is the user's first
+// verified email), atomically increments the verified-users counter via
+// IncrementStatIfBelow against the configured max_users limit. This is the
+// race-safe hard gate; the soft check in CreateUser is only there for UX. If
+// the post-increment KV write fails, the counter is rolled back so it doesn't
+// leak.
 func (c *ChattoCore) addVerifiedEmail(ctx context.Context, userID, email string) error {
 	// Get existing verified emails
 	emails, err := c.GetVerifiedEmails(ctx, userID)
@@ -207,6 +214,15 @@ func (c *ChattoCore) addVerifiedEmail(ctx context.Context, userID, email string)
 		}
 	}
 
+	// Atomic limit gate, fired only on the unverified→verified transition.
+	// Subsequent verified emails for an already-verified user don't re-increment.
+	transitioning := len(emails) == 0
+	if transitioning {
+		if _, err := c.IncrementStatIfBelow(ctx, StatVerifiedUsers, int64(c.config.Limits.MaxUsersOrDefault())); err != nil {
+			return err
+		}
+	}
+
 	// Add new email
 	emails = append(emails, VerifiedEmail{
 		Email:      email,
@@ -216,11 +232,21 @@ func (c *ChattoCore) addVerifiedEmail(ctx context.Context, userID, email string)
 	// Store updated list
 	data, err := json.Marshal(emails)
 	if err != nil {
+		// Roll back the counter we just incremented on failure to keep stats honest.
+		if transitioning {
+			if _, decErr := c.DecrementStat(ctx, StatVerifiedUsers); decErr != nil {
+				c.logger.Warn("failed to roll back verified_users stat", "error", decErr)
+			}
+		}
 		return fmt.Errorf("failed to marshal verified emails: %w", err)
 	}
 
-	_, err = c.storage.instanceKV.Put(ctx, userVerifiedEmailsKey(userID), data)
-	if err != nil {
+	if _, err := c.storage.instanceKV.Put(ctx, userVerifiedEmailsKey(userID), data); err != nil {
+		if transitioning {
+			if _, decErr := c.DecrementStat(ctx, StatVerifiedUsers); decErr != nil {
+				c.logger.Warn("failed to roll back verified_users stat", "error", decErr)
+			}
+		}
 		return fmt.Errorf("failed to store verified emails: %w", err)
 	}
 

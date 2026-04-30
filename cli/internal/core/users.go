@@ -62,14 +62,15 @@ func (c *ChattoCore) CreateUser(ctx context.Context, actorID string, login, disp
 	}
 
 	// Enforce instance-wide user limit at signup as a UX gate so people don't sign up
-	// only to be blocked at verification. The verification check (in addVerifiedEmail)
-	// remains the race-safe hard gate.
+	// only to be blocked at verification. Uses the cached counter for an O(1) read;
+	// the *atomic* gate lives in addVerifiedEmail (CAS-incrementing the same counter
+	// on the unverified→verified transition).
 	if max := c.config.Limits.MaxUsersOrDefault(); max >= 0 {
-		count, err := c.CountVerifiedUsers(ctx)
+		count, err := c.GetStat(ctx, StatVerifiedUsers)
 		if err != nil {
-			return nil, fmt.Errorf("failed to count verified users: %w", err)
+			return nil, fmt.Errorf("failed to read verified-users stat: %w", err)
 		}
-		if count >= max {
+		if count >= int64(max) {
 			return nil, ErrLimitExceeded
 		}
 	}
@@ -1007,6 +1008,15 @@ func (c *ChattoCore) DeleteUser(ctx context.Context, actorID, userID string) err
 		emailKey := userByEmailKey(email.Email)
 		if err := c.storage.instanceKV.Delete(ctx, emailKey); err != nil {
 			c.logger.Warn("Failed to delete email index", "user_id", userID, "email", email.Email, "error", err)
+		}
+	}
+
+	// Decrement the verified-users counter if this user had any verified emails.
+	// (A user with no verified emails was never counted toward the limit.) Best-
+	// effort — drift recoverable via RecomputeStats.
+	if len(verifiedEmails) > 0 {
+		if _, err := c.DecrementStat(ctx, StatVerifiedUsers); err != nil {
+			c.logger.Warn("failed to decrement verified_users stat", "error", err, "user_id", userID)
 		}
 	}
 

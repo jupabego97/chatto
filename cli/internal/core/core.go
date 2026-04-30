@@ -376,6 +376,13 @@ func NewChattoCore(ctx context.Context, nc *nats.Conn, cfg config.CoreConfig) (*
 		return nil, fmt.Errorf("failed to initialize instance RBAC: %w", err)
 	}
 
+	// Seed instance stats counters from authoritative state if missing. Handles
+	// the upgrade path from instances that predate the stats counter system, and
+	// is a one-shot O(N) scan that's idempotent on subsequent boots.
+	if err := core.EnsureStatsInitialized(ctx); err != nil {
+		return nil, fmt.Errorf("failed to initialize instance stats: %w", err)
+	}
+
 	// Initialize presence hub (single KV watcher per process).
 	// Caller must start core.PresenceHub.Run(ctx) in an errgroup.
 	core.PresenceHub = NewPresenceHub(storage.presenceKV, logger)

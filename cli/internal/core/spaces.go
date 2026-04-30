@@ -95,15 +95,11 @@ func (c *ChattoCore) CreateSpace(ctx context.Context, actorID string, name strin
 		return nil, ErrDescriptionTooLong
 	}
 
-	// Enforce instance-wide space limit (-1 = unlimited).
-	if max := c.config.Limits.MaxSpacesOrDefault(); max >= 0 {
-		count, err := c.CountSpaces(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to count spaces: %w", err)
-		}
-		if count >= max {
-			return nil, ErrLimitExceeded
-		}
+	// Enforce instance-wide space limit atomically via the cached counter.
+	// MaxSpacesOrDefault returns -1 for "unlimited", which IncrementStatIfBelow
+	// treats as "no gate" and just increments. ErrLimitExceeded propagates.
+	if _, err := c.IncrementStatIfBelow(ctx, StatSpaces, int64(c.config.Limits.MaxSpacesOrDefault())); err != nil {
+		return nil, err
 	}
 
 	space := &corev1.Space{
@@ -113,6 +109,11 @@ func (c *ChattoCore) CreateSpace(ctx context.Context, actorID string, name strin
 	}
 
 	if _, err := c.storeSpaceAndCreateStream(ctx, space, false); err != nil {
+		// We've already counted this space; roll back so the counter doesn't leak.
+		// Best-effort — drift in either direction is recoverable via RecomputeStats.
+		if _, decErr := c.DecrementStat(ctx, StatSpaces); decErr != nil {
+			c.logger.Warn("failed to roll back spaces stat after CreateSpace failure", "error", decErr)
+		}
 		return nil, err
 	}
 
@@ -210,6 +211,12 @@ func (c *ChattoCore) DeleteSpace(ctx context.Context, actorID string, space_id s
 	// Delete from KV store (source of truth)
 	if err := c.storage.instanceKV.Delete(ctx, spaceKey(space_id)); err != nil {
 		return fmt.Errorf("failed to delete space: %w", err)
+	}
+
+	// Decrement the cached spaces counter. Best-effort — drift recoverable via
+	// RecomputeStats.
+	if _, err := c.DecrementStat(ctx, StatSpaces); err != nil {
+		c.logger.Warn("failed to decrement spaces stat", "error", err, "space_id", space_id)
 	}
 
 	// Delete the space stream (best-effort cleanup)
@@ -325,7 +332,8 @@ func (c *ChattoCore) GetSpace(ctx context.Context, space_id string) (*corev1.Spa
 	return space, nil
 }
 
-// CountSpaces returns the number of live (non-deleted) spaces in the INSTANCE KV bucket.
+// CountSpaces returns the number of live, user-created spaces. Excludes the DM
+// system space (created automatically at startup, not user-facing for limits).
 //
 // Why this isn't a single stream.Info call: NATS exposes server-side per-subject
 // counts via stream.Info(WithSubjectFilter("$KV.INSTANCE.space.*")), but kv.Delete
@@ -343,8 +351,12 @@ func (c *ChattoCore) CountSpaces(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, nil
 	}
+	systemKey := spaceKey(DMSpaceID)
 	count := 0
-	for range keyLister.Keys() {
+	for key := range keyLister.Keys() {
+		if key == systemKey {
+			continue
+		}
 		count++
 	}
 	return count, nil
