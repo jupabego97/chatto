@@ -309,7 +309,7 @@ func NewChattoCore(ctx context.Context, nc *nats.Conn, cfg config.CoreConfig) (*
 	// Initialize instance RBAC engine with virtual roles
 	// Owner, admin, and moderator are explicitly created in KV; everyone is virtual
 	instanceRBACEngine := rbac.NewEngine(storage.instanceRBACKV, rbac.Config{
-		SystemRoles:  []string{InstRoleOwner, InstRoleAdmin, InstRoleModerator, InstRoleEveryone},
+		SystemRoles:  []string{InstRoleOwner, InstRoleSuspended, InstRoleAdmin, InstRoleModerator, InstRoleEveryone},
 		AdminRole:    InstRoleOwner, // Owner is the top admin role for instance
 		VirtualRoles: InstanceVirtualRoles(),
 		ValidateVerbObjectType: func(verb, objectType string) error {
@@ -374,6 +374,13 @@ func NewChattoCore(ctx context.Context, nc *nats.Conn, cfg config.CoreConfig) (*
 	// Initialize instance-level RBAC (roles and permissions)
 	if err := core.initInstanceRBAC(ctx); err != nil {
 		return nil, fmt.Errorf("failed to initialize instance RBAC: %w", err)
+	}
+
+	// Migrate existing spaces' system roles. New spaces get clean defaults via
+	// CreateDefaultRoles; this loop fixes positions and creates missing system
+	// roles (suspended, moderation) on spaces created before commit 2.
+	if err := core.migrateSpaceSystemRoles(ctx); err != nil {
+		return nil, fmt.Errorf("failed to migrate space system roles: %w", err)
 	}
 
 	// Initialize presence hub (single KV watcher per process).
@@ -705,7 +712,10 @@ func (c *ChattoCore) getSpaceRBACEngine(ctx context.Context, spaceID string) (*r
 			return nil, fmt.Errorf("failed to get space RBAC bucket: %w", err)
 		}
 		engine := rbac.NewEngine(kv, rbac.Config{
-			SystemRoles:  []string{SpaceRoleOwner, SpaceRoleModerator, SpaceRoleEveryone},
+			SystemRoles: []string{
+				SpaceRoleOwner, SpaceRoleSuspended, SpaceRoleAdmin,
+				SpaceRoleModeration, SpaceRoleModerator, SpaceRoleEveryone,
+			},
 			AdminRole:    SpaceRoleOwner,
 			VirtualRoles: SpaceVirtualRoles(),
 			ValidateVerbObjectType: func(verb, objectType string) error {

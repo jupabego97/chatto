@@ -177,26 +177,27 @@ func TestChattoCore_ListRoles(t *testing.T) {
 
 	space, _ := core.CreateSpace(ctx, "test-user", "Test Space", "A test space")
 
-	// Initially should have 4 default roles (owner, admin, moderator, everyone) created by CreateSpace
+	// CreateSpace seeds 6 system roles: owner, suspended, admin, moderation,
+	// moderator, everyone (the last is virtual but ListRoles includes it).
 	roles, err := core.ListRoles(ctx, space.Id)
 	if err != nil {
 		t.Fatalf("Failed to list roles: %v", err)
 	}
-	if len(roles) != 4 {
-		t.Errorf("Expected 4 default roles, got %d", len(roles))
+	if len(roles) != 6 {
+		t.Errorf("Expected 6 default roles, got %d", len(roles))
 	}
 
 	// Create some additional roles
 	core.CreateRole(ctx, "test-user", space.Id, "testmod", "Test Mod", "Test mod role")
 	core.CreateRole(ctx, "test-user", space.Id, "vip", "VIP", "VIP role")
 
-	// List again - should have 6 total (4 default + 2 custom)
+	// List again - should have 8 total (6 default + 2 custom)
 	roles, err = core.ListRoles(ctx, space.Id)
 	if err != nil {
 		t.Fatalf("Failed to list roles: %v", err)
 	}
-	if len(roles) != 6 {
-		t.Errorf("Expected 6 roles, got %d", len(roles))
+	if len(roles) != 8 {
+		t.Errorf("Expected 8 roles, got %d", len(roles))
 	}
 }
 

@@ -643,8 +643,9 @@ func (c *ChattoCore) getUserHighestPositionWithMember(ctx context.Context, engin
 }
 
 // ReorderSpaceRoles reorders custom roles in a space.
-// System roles (owner, moderator, everyone) maintain fixed positions and should not be included.
-// Positions are assigned based on array index (first role = position 1, second = 2, etc).
+// System roles (owner, suspended, admin, moderation, moderator, everyone)
+// maintain fixed positions and should not be included. Custom roles always
+// rank below the lowest system role.
 // Returns all roles sorted by position.
 func (c *ChattoCore) ReorderSpaceRoles(ctx context.Context, actorID, spaceID string, roleNames []string) ([]*corev1.Role, error) {
 	// Check permission
@@ -826,6 +827,62 @@ func (c *ChattoCore) requireSpacePermission(ctx context.Context, spaceID, userID
 // Default Roles Setup
 // ============================================================================
 
+// spaceSystemRoleSeeds defines the system roles every space should have.
+// Order doesn't matter — each entry's position constant places it.
+var spaceSystemRoleSeeds = []struct {
+	name        string
+	displayName string
+	description string
+	position    int32
+}{
+	{SpaceRoleOwner, "Owner", "Full space control", rbac.PositionOwner},
+	{SpaceRoleSuspended, "Suspended", "Blocks user-behavior permissions; outranks admin so denies stick", rbac.PositionSuspended},
+	{SpaceRoleAdmin, "Admin", "Can manage space settings, roles, and members", rbac.PositionAdmin},
+	{SpaceRoleModeration, "Moderation", "Heavy moderation grants (delete-any, member.remove); granted on demand", rbac.PositionModeration},
+	{SpaceRoleModerator, "Moderator", "Can manage rooms", rbac.PositionModerator},
+}
+
+// migrateSpaceSystemRoles iterates every existing space and ensures its
+// system roles match the current set + positions. Skips the DM space.
+func (c *ChattoCore) migrateSpaceSystemRoles(ctx context.Context) error {
+	spaces, err := c.ListSpaces(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list spaces for RBAC migration: %w", err)
+	}
+	for _, space := range spaces {
+		if IsDMSpace(space.Id) {
+			continue
+		}
+		engine, err := c.spaceRBACEngine(ctx, space.Id)
+		if err != nil {
+			return fmt.Errorf("failed to get RBAC engine for space %s: %w", space.Id, err)
+		}
+		if err := c.ensureSpaceSystemRoles(ctx, engine); err != nil {
+			return fmt.Errorf("space %s: %w", space.Id, err)
+		}
+	}
+	return nil
+}
+
+// ensureSpaceSystemRoles creates each system role if missing and migrates its
+// stored position to match the current constants. Idempotent.
+func (c *ChattoCore) ensureSpaceSystemRoles(ctx context.Context, engine *rbac.Engine) error {
+	for _, r := range spaceSystemRoleSeeds {
+		if _, err := engine.CreateRoleWithPosition(ctx, r.name, r.displayName, r.description, r.position); err != nil {
+			if !errors.Is(err, rbac.ErrRoleAlreadyExists) {
+				return fmt.Errorf("failed to create %s role: %w", r.name, err)
+			}
+			if existing, getErr := engine.GetRole(ctx, r.name); getErr == nil && existing != nil && existing.Position != r.position {
+				if _, err := engine.UpdateRolePosition(ctx, r.name, r.position); err != nil {
+					return fmt.Errorf("failed to migrate %s position: %w", r.name, err)
+				}
+				c.logger.Info("Migrated space system role position", "role", r.name, "from", existing.Position, "to", r.position)
+			}
+		}
+	}
+	return nil
+}
+
 // CreateDefaultRoles creates the default roles and permissions for a space.
 // Owner, admin, and moderator are explicitly created in KV.
 // Everyone role is virtual (not stored in KV).
@@ -836,26 +893,10 @@ func (c *ChattoCore) CreateDefaultRoles(ctx context.Context, spaceID string) err
 		return fmt.Errorf("failed to get space RBAC engine: %w", err)
 	}
 
-	// Create owner role (position 0) - explicitly stored in KV
-	if _, err := engine.CreateRoleWithPosition(ctx, SpaceRoleOwner, "Owner", "Full space control", rbac.PositionOwner); err != nil {
-		// Ignore if already exists (idempotent)
-		if !errors.Is(err, rbac.ErrRoleAlreadyExists) {
-			return fmt.Errorf("failed to create owner role: %w", err)
-		}
-	}
-
-	// Create admin role (position 1) - explicitly stored in KV
-	if _, err := engine.CreateRoleWithPosition(ctx, SpaceRoleAdmin, "Admin", "Can manage space settings, roles, and members", rbac.PositionAdmin); err != nil {
-		if !errors.Is(err, rbac.ErrRoleAlreadyExists) {
-			return fmt.Errorf("failed to create admin role: %w", err)
-		}
-	}
-
-	// Create moderator role (position 2) - explicitly stored in KV
-	if _, err := engine.CreateRoleWithPosition(ctx, SpaceRoleModerator, "Moderator", "Can manage rooms and remove members", rbac.PositionModerator); err != nil {
-		if !errors.Is(err, rbac.ErrRoleAlreadyExists) {
-			return fmt.Errorf("failed to create moderator role: %w", err)
-		}
+	// Create or migrate system roles. ensureSpaceSystemRoles is idempotent and
+	// also fixes positions on existing spaces created with older constants.
+	if err := c.ensureSpaceSystemRoles(ctx, engine); err != nil {
+		return err
 	}
 
 	// Initialize permissions using the permission model

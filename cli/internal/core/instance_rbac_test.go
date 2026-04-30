@@ -7,6 +7,7 @@ import (
 	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
 	"hmans.de/chatto/internal/config"
+	"hmans.de/chatto/internal/core/rbac"
 )
 
 // ============================================================================
@@ -1352,15 +1353,15 @@ func TestChattoCore_ReorderInstanceRoles(t *testing.T) {
 			}
 		}
 
-		// System roles should have fixed positions: owner=0, admin=1, moderator=2
-		if ownerPos != 0 {
-			t.Errorf("Expected owner position 0, got %d", ownerPos)
+		// System roles should keep their canonical positions.
+		if ownerPos != rbac.PositionOwner {
+			t.Errorf("Expected owner position %d, got %d", rbac.PositionOwner, ownerPos)
 		}
-		if adminPos != 1 {
-			t.Errorf("Expected admin position 1, got %d", adminPos)
+		if adminPos != rbac.PositionAdmin {
+			t.Errorf("Expected admin position %d, got %d", rbac.PositionAdmin, adminPos)
 		}
-		if modPos != 2 {
-			t.Errorf("Expected moderator position 2, got %d", modPos)
+		if modPos != rbac.PositionModerator {
+			t.Errorf("Expected moderator position %d, got %d", rbac.PositionModerator, modPos)
 		}
 	})
 }
@@ -1375,14 +1376,11 @@ func TestChattoCore_CreateInstanceRole_PositionAssignment(t *testing.T) {
 			t.Fatalf("Failed to create role: %v", err)
 		}
 
-		// Custom roles should have position > 2 (after owner, admin, moderator)
-		// They get position from GetNextAvailablePosition which returns MaxInt32
-		// for custom roles when using the standard initialization
+		// Custom roles should sit below the moderator system role (higher number).
 		t.Logf("Custom role 'instance-reviewer' got position %d", role.Position)
 
-		// The role should be lower rank than system roles (higher position number)
-		if role.Position <= 2 {
-			t.Errorf("Expected custom role position > 2, got %d", role.Position)
+		if role.Position <= rbac.PositionModerator {
+			t.Errorf("Expected custom role position > %d, got %d", rbac.PositionModerator, role.Position)
 		}
 	})
 

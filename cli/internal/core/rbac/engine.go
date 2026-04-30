@@ -21,10 +21,12 @@ import (
 // as it uses MaxInt32 to ensure it's always the lowest rank.
 // Adding to PositionEveryone would cause integer overflow.
 const (
-	PositionOwner     int32 = 0             // Owner is highest rank
-	PositionAdmin     int32 = 1             // Admin is second-highest (instance only)
-	PositionModerator int32 = 2             // Moderator (instance: 2, space: 1)
-	PositionEveryone  int32 = math.MaxInt32 // Everyone is always the lowest rank
+	PositionOwner      int32 = 0             // Owner is highest rank
+	PositionSuspended  int32 = 1             // Suspended sits above admin so denies can't be overridden by lower roles
+	PositionAdmin      int32 = 2             // Admin is below suspended (instance only)
+	PositionModeration int32 = 3             // Moderation grants on demand (space only)
+	PositionModerator  int32 = 4             // Moderator badge
+	PositionEveryone   int32 = math.MaxInt32 // Everyone is always the lowest rank
 )
 
 // Engine provides generic RBAC operations against a KV bucket.
@@ -874,9 +876,11 @@ func (e *Engine) ReorderRoles(ctx context.Context, orderedNames []string) ([]*co
 		}
 	}
 
-	// Assign positions based on order (starting from 1, since admin is 0)
+	// Custom roles always rank below the lowest system role so they can't
+	// collide with owner/suspended/admin/moderation/moderator.
+	base := PositionModerator + 1
 	for i, name := range orderedNames {
-		position := int32(i + 1) // 1, 2, 3, ...
+		position := base + int32(i)
 		if _, err := e.UpdateRolePosition(ctx, name, position); err != nil {
 			return nil, fmt.Errorf("failed to update position for %s: %w", name, err)
 		}

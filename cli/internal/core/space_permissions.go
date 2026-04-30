@@ -11,9 +11,18 @@ const (
 	// Must be explicitly assigned. Space creator gets this role.
 	SpaceRoleOwner = "owner"
 
+	// SpaceRoleSuspended carries explicit denies for user-behavior permissions
+	// inside a space. Sits above admin so the denies can't be overridden.
+	SpaceRoleSuspended = "suspended"
+
 	// SpaceRoleAdmin has administrative permissions.
-	// Must be explicitly assigned. Second-highest role after owner.
+	// Must be explicitly assigned.
 	SpaceRoleAdmin = "admin"
+
+	// SpaceRoleModeration carries the heavy moderation grants (delete-any,
+	// member.remove). Sits between admin and moderator in the hierarchy and
+	// is granted on demand rather than baked into the moderator badge.
+	SpaceRoleModeration = "moderation"
 
 	// SpaceRoleModerator has moderation permissions.
 	// Must be explicitly assigned.
@@ -25,7 +34,9 @@ const (
 
 // IsSpaceSystemRole returns true if the role name is a system role that cannot be deleted.
 func IsSpaceSystemRole(name string) bool {
-	return name == SpaceRoleOwner || name == SpaceRoleAdmin || name == SpaceRoleModerator || name == SpaceRoleEveryone
+	return name == SpaceRoleOwner || name == SpaceRoleSuspended ||
+		name == SpaceRoleAdmin || name == SpaceRoleModeration ||
+		name == SpaceRoleModerator || name == SpaceRoleEveryone
 }
 
 // IsSpaceUniversalRole returns true if the role is a universal role (same name at instance and space scope).
@@ -37,7 +48,7 @@ func IsSpaceUniversalRole(name string) bool {
 
 // SpaceVirtualRoles returns the virtual role definitions for space RBAC.
 // Only everyone is virtual - owner, admin, and moderator are explicitly created in KV.
-// Position scheme: owner=0, admin=1, moderator=2, custom=3..n, everyone=MAX
+// Position scheme: owner=0, suspended=1, admin=2, moderation=3, moderator=4, custom=5..n, everyone=MAX
 func SpaceVirtualRoles() []*corev1.Role {
 	return []*corev1.Role{
 		{

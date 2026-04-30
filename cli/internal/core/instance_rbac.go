@@ -28,25 +28,33 @@ const rbacDefaultsSentinel = "defaults_initialized"
 func (c *ChattoCore) initInstanceRBAC(ctx context.Context) error {
 	engine := c.instanceRBACEngine
 
-	// Create owner role (position 0) - explicitly stored in KV
-	if _, err := engine.CreateRoleWithPosition(ctx, InstRoleOwner, "Instance Owner", "Full instance control", rbac.PositionOwner); err != nil {
-		// Ignore if already exists (idempotent)
-		if !errors.Is(err, rbac.ErrRoleAlreadyExists) {
-			return fmt.Errorf("failed to create instance-owner role: %w", err)
-		}
+	// System roles to create/migrate. The migration helper below ensures their
+	// stored positions match these constants — required because earlier
+	// versions used different position numbers.
+	systemRoles := []struct {
+		name        string
+		displayName string
+		description string
+		position    int32
+	}{
+		{InstRoleOwner, "Instance Owner", "Full instance control", rbac.PositionOwner},
+		{InstRoleSuspended, "Instance Suspended", "Blocks user-behavior permissions; outranks admin so denies stick", rbac.PositionSuspended},
+		{InstRoleAdmin, "Instance Admin", "Full access to all instance-level features", rbac.PositionAdmin},
+		{InstRoleModerator, "Instance Moderator", "View access to admin panels without management permissions", rbac.PositionModerator},
 	}
 
-	// Create admin role (position 1) - explicitly stored in KV
-	if _, err := engine.CreateRoleWithPosition(ctx, InstRoleAdmin, "Instance Admin", "Full access to all instance-level features", rbac.PositionAdmin); err != nil {
-		if !errors.Is(err, rbac.ErrRoleAlreadyExists) {
-			return fmt.Errorf("failed to create instance-admin role: %w", err)
-		}
-	}
-
-	// Create moderator role (position 2) - explicitly stored in KV
-	if _, err := engine.CreateRoleWithPosition(ctx, InstRoleModerator, "Instance Moderator", "View access to admin panels without management permissions", rbac.PositionModerator); err != nil {
-		if !errors.Is(err, rbac.ErrRoleAlreadyExists) {
-			return fmt.Errorf("failed to create instance-moderator role: %w", err)
+	for _, r := range systemRoles {
+		if _, err := engine.CreateRoleWithPosition(ctx, r.name, r.displayName, r.description, r.position); err != nil {
+			if !errors.Is(err, rbac.ErrRoleAlreadyExists) {
+				return fmt.Errorf("failed to create %s role: %w", r.name, err)
+			}
+			// Already exists — migrate position if it has drifted.
+			if existing, getErr := engine.GetRole(ctx, r.name); getErr == nil && existing != nil && existing.Position != r.position {
+				if _, err := engine.UpdateRolePosition(ctx, r.name, r.position); err != nil {
+					return fmt.Errorf("failed to migrate %s position: %w", r.name, err)
+				}
+				c.logger.Info("Migrated instance system role position", "role", r.name, "from", existing.Position, "to", r.position)
+			}
 		}
 	}
 
@@ -675,9 +683,9 @@ func (c *ChattoCore) DeleteInstanceRole(ctx context.Context, name string) error 
 }
 
 // ReorderInstanceRoles reorders custom instance roles.
-// System roles (owner, admin, moderator, everyone) maintain fixed positions and should not be included.
-// Positions are assigned based on array index (first role = position 3, second = 4, etc).
-// Note: Position 0 = owner, 1 = admin, 2 = moderator, position MAX = everyone.
+// System roles (owner, suspended, admin, moderator, everyone) maintain fixed
+// positions and should not be included. Custom roles get positions strictly
+// below the lowest system role so they always rank below moderator.
 // Returns all roles sorted by position.
 func (c *ChattoCore) ReorderInstanceRoles(ctx context.Context, roleNames []string) ([]RoleWithPermissions, error) {
 	// Validate no system roles in the list
@@ -687,8 +695,8 @@ func (c *ChattoCore) ReorderInstanceRoles(ctx context.Context, roleNames []strin
 		}
 	}
 
-	// Reorder in engine (custom roles get positions 3+; system roles have fixed positions:
-	// owner=0, admin=1, moderator=2, verified=MaxInt32-1, everyone=MaxInt32)
+	// Reorder in engine. System roles keep their canonical positions; custom
+	// roles get positions strictly below moderator.
 	roles, err := c.instanceRBACEngine.ReorderRoles(ctx, roleNames)
 	if err != nil {
 		return nil, err
