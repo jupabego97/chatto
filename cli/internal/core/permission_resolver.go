@@ -68,10 +68,11 @@ const (
 // actually backed by a KV value are emitted (allow or deny); roles with no
 // KV entry at the level being checked are silent.
 type TraceEntry struct {
-	Level    PermissionLevel
-	RoleName string
-	Decision DecisionKind // Allow or Deny only
-	ObjectID string       // "any" for instance/space scope; roomID for room overrides
+	Level        PermissionLevel
+	RoleName     string
+	RolePosition int32        // Lower = higher rank; explains why a role won contention.
+	Decision     DecisionKind // Allow or Deny only
+	ObjectID     string       // "any" for instance/space scope; roomID for room overrides
 }
 
 // visitOutcome controls walker iteration.
@@ -216,7 +217,7 @@ func (r *PermissionResolver) walkRoleUpward(
 		}
 		if granted {
 			r.core.logger.Debug("Permission granted", "role", role.name, "position", role.position, "permission", parts.Verb+"."+parts.ObjectType, "level", level)
-			return visit(TraceEntry{Level: level, RoleName: role.name, Decision: DecisionAllow, ObjectID: objectID}) == visitStop, nil
+			return visit(TraceEntry{Level: level, RoleName: role.name, RolePosition: role.position, Decision: DecisionAllow, ObjectID: objectID}) == visitStop, nil
 		}
 
 		denied, err := r.keyExists(ctx, kv, rbac.DenyKey(role.name, parts.Verb, parts.ObjectType, objectID))
@@ -225,7 +226,7 @@ func (r *PermissionResolver) walkRoleUpward(
 		}
 		if denied {
 			r.core.logger.Debug("Permission denied", "role", role.name, "position", role.position, "permission", parts.Verb+"."+parts.ObjectType, "level", level)
-			return visit(TraceEntry{Level: level, RoleName: role.name, Decision: DecisionDeny, ObjectID: objectID}) == visitStop, nil
+			return visit(TraceEntry{Level: level, RoleName: role.name, RolePosition: role.position, Decision: DecisionDeny, ObjectID: objectID}) == visitStop, nil
 		}
 	}
 	return false, nil

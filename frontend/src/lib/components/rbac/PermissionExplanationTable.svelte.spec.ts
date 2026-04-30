@@ -12,7 +12,13 @@ type Explanation = {
   state: DecisionKind;
   decidedAt?: Level | null;
   decidedByRole?: string | null;
-  trace: { level: Level; roleName: string; decision: DecisionKind; applied: boolean }[];
+  trace: {
+    level: Level;
+    roleName: string;
+    rolePosition: number;
+    decision: DecisionKind;
+    applied: boolean;
+  }[];
 };
 
 function granted(roleName: string, level: Level): Explanation {
@@ -21,7 +27,7 @@ function granted(roleName: string, level: Level): Explanation {
     state: 'ALLOW',
     decidedAt: level,
     decidedByRole: roleName,
-    trace: [{ level, roleName, decision: 'ALLOW', applied: true }]
+    trace: [{ level, roleName, rolePosition: 2, decision: 'ALLOW', applied: true }]
   };
 }
 
@@ -31,7 +37,7 @@ function denied(roleName: string, level: Level): Explanation {
     state: 'DENY',
     decidedAt: level,
     decidedByRole: roleName,
-    trace: [{ level, roleName, decision: 'DENY', applied: true }]
+    trace: [{ level, roleName, rolePosition: 2, decision: 'DENY', applied: true }]
   };
 }
 
@@ -83,8 +89,20 @@ describe('PermissionExplanationTable', () => {
       decidedAt: 'INSTANCE',
       decidedByRole: 'instance-admin',
       trace: [
-        { level: 'INSTANCE', roleName: 'instance-admin', decision: 'ALLOW', applied: true },
-        { level: 'SPACE', roleName: 'everyone', decision: 'DENY', applied: false }
+        {
+          level: 'INSTANCE',
+          roleName: 'instance-admin',
+          rolePosition: 2,
+          decision: 'ALLOW',
+          applied: true
+        },
+        {
+          level: 'SPACE',
+          roleName: 'everyone',
+          rolePosition: 2147483647,
+          decision: 'DENY',
+          applied: false
+        }
       ]
     };
     const { container } = render(PermissionExplanationTable, {

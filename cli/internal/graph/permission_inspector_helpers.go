@@ -102,10 +102,11 @@ func toModelExplanation(exp core.PermissionExplanation) *model.PermissionExplana
 	out.Trace = make([]*model.PermissionTraceEntry, 0, len(exp.Trace))
 	for i, entry := range exp.Trace {
 		out.Trace = append(out.Trace, &model.PermissionTraceEntry{
-			Level:    toModelLevel(entry.Level),
-			RoleName: entry.RoleName,
-			Decision: toModelDecision(entry.Decision),
-			Applied:  i == 0,
+			Level:        toModelLevel(entry.Level),
+			RoleName:     entry.RoleName,
+			RolePosition: entry.RolePosition,
+			Decision:     toModelDecision(entry.Decision),
+			Applied:      i == 0,
 		})
 	}
 	return out

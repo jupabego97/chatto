@@ -603,6 +603,8 @@ type PermissionTraceEntry struct {
 	Level PermissionLevel `json:"level"`
 	// The role whose KV produced this decision.
 	RoleName string `json:"roleName"`
+	// The role's hierarchy position (lower = higher rank). Explains why one role outranked another.
+	RolePosition int32 `json:"rolePosition"`
 	// Whether the role's KV said allow or deny at this level.
 	Decision PermissionDecisionKind `json:"decision"`
 	// Whether this entry is the winning decision (matches the trace head).

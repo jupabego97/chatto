@@ -9,6 +9,7 @@
   type TraceEntry = {
     level: Level;
     roleName: string;
+    rolePosition: number;
     decision: DecisionKind;
     applied: boolean;
   };
@@ -75,8 +76,12 @@
       {#if exp.state === 'NONE' || !exp.decidedAt}
         <span class="text-muted italic">No role decided</span>
       {:else}
+        {@const winning = exp.trace[0]}
         <Pill tone="muted">{levelLabel(exp.decidedAt)}</Pill>
         <span class="font-medium">{exp.decidedByRole}</span>
+        {#if winning}
+          <span class="text-muted/70">(rank {winning.rolePosition})</span>
+        {/if}
       {/if}
     </div>
 
@@ -110,6 +115,7 @@
             <li class="flex items-center gap-2">
               <Pill tone="muted">{levelLabel(entry.level)}</Pill>
               <span class="font-medium">{entry.roleName}</span>
+              <span class="text-muted/70">rank {entry.rolePosition}</span>
               <Pill tone={entry.decision === 'ALLOW' ? 'success' : 'danger'}>
                 {entry.decision === 'ALLOW' ? 'allow' : 'deny'}
               </Pill>

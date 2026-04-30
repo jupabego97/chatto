@@ -414,10 +414,11 @@ type ComplexityRoot struct {
 	}
 
 	PermissionTraceEntry struct {
-		Applied  func(childComplexity int) int
-		Decision func(childComplexity int) int
-		Level    func(childComplexity int) int
-		RoleName func(childComplexity int) int
+		Applied      func(childComplexity int) int
+		Decision     func(childComplexity int) int
+		Level        func(childComplexity int) int
+		RoleName     func(childComplexity int) int
+		RolePosition func(childComplexity int) int
 	}
 
 	PresenceChangedEvent struct {
@@ -3059,6 +3060,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.PermissionTraceEntry.RoleName(childComplexity), true
+	case "PermissionTraceEntry.rolePosition":
+		if e.complexity.PermissionTraceEntry.RolePosition == nil {
+			break
+		}
+
+		return e.complexity.PermissionTraceEntry.RolePosition(childComplexity), true
 
 	case "PresenceChangedEvent.status":
 		if e.complexity.PresenceChangedEvent.Status == nil {
@@ -16101,6 +16108,8 @@ func (ec *executionContext) fieldContext_PermissionExplanation_trace(_ context.C
 				return ec.fieldContext_PermissionTraceEntry_level(ctx, field)
 			case "roleName":
 				return ec.fieldContext_PermissionTraceEntry_roleName(ctx, field)
+			case "rolePosition":
+				return ec.fieldContext_PermissionTraceEntry_rolePosition(ctx, field)
 			case "decision":
 				return ec.fieldContext_PermissionTraceEntry_decision(ctx, field)
 			case "applied":
@@ -16165,6 +16174,35 @@ func (ec *executionContext) fieldContext_PermissionTraceEntry_roleName(_ context
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PermissionTraceEntry_rolePosition(ctx context.Context, field graphql.CollectedField, obj *model.PermissionTraceEntry) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PermissionTraceEntry_rolePosition,
+		func(ctx context.Context) (any, error) {
+			return obj.RolePosition, nil
+		},
+		nil,
+		ec.marshalNInt2int32,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PermissionTraceEntry_rolePosition(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PermissionTraceEntry",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
 		},
 	}
 	return fc, nil
@@ -34878,6 +34916,11 @@ func (ec *executionContext) _PermissionTraceEntry(ctx context.Context, sel ast.S
 			}
 		case "roleName":
 			out.Values[i] = ec._PermissionTraceEntry_roleName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "rolePosition":
+			out.Values[i] = ec._PermissionTraceEntry_rolePosition(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

@@ -322,7 +322,7 @@ under it. Column headers are clickable when `onRoleClick` is provided
                 <th
                   class="px-0 py-3 text-center align-bottom font-medium"
                   style="width: 2rem; min-width: 2rem; height: 12rem"
-                  title={`${role.displayName} (${role.isInstanceRole ? 'Instance' : 'Space'} role) — click to manage`}
+                  title={`${role.displayName} (${role.isInstanceRole ? 'Instance' : 'Space'} role, rank ${role.position}) — click to manage`}
                   data-role={role.roleName}
                 >
                   {#if handle}

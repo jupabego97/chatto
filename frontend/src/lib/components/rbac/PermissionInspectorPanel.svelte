@@ -12,7 +12,13 @@
     state: DecisionKind;
     decidedAt?: Level | null;
     decidedByRole?: string | null;
-    trace: { level: Level; roleName: string; decision: DecisionKind; applied: boolean }[];
+    trace: {
+      level: Level;
+      roleName: string;
+      rolePosition: number;
+      decision: DecisionKind;
+      applied: boolean;
+    }[];
   };
 
   type Props = {
@@ -56,6 +62,7 @@
               trace {
                 level
                 roleName
+                rolePosition
                 decision
                 applied
               }
