@@ -598,6 +598,41 @@ func TestAuthRoutes_Register_EmailEnumeration(t *testing.T) {
 	}
 }
 
+func TestAuthRoutes_Register_RateLimitedPerEmail(t *testing.T) {
+	ts, client, _, _ := setupTestHTTPServerWithMailer(t)
+
+	// Per-email limit is 5/hour. After 5 successful calls for the same email,
+	// the 6th must be rejected with 429.
+	send := func() *http.Response {
+		reqBody := map[string]string{"email": "ratelimit-target@example.com"}
+		body, _ := json.Marshal(reqBody)
+		resp, err := client.Post(ts.URL+"/auth/register", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		return resp
+	}
+
+	for i := 0; i < 5; i++ {
+		resp := send()
+		if resp.StatusCode != http.StatusOK {
+			respBody, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			t.Fatalf("call %d: expected 200, got %d: %s", i, resp.StatusCode, string(respBody))
+		}
+		resp.Body.Close()
+	}
+
+	resp := send()
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusTooManyRequests {
+		t.Errorf("6th call: expected 429, got %d", resp.StatusCode)
+	}
+	if retryAfter := resp.Header.Get("Retry-After"); retryAfter == "" {
+		t.Errorf("expected Retry-After header on 429 response")
+	}
+}
+
 func TestAuthRoutes_RegisterComplete_Success(t *testing.T) {
 	ts, client, chattoCore, _ := setupTestHTTPServerWithMailer(t)
 	ctx := testContext(t)

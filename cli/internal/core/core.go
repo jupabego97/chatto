@@ -417,6 +417,7 @@ type storage struct {
 	notificationsKV       jetstream.KeyValue     // User notifications with TTL
 	callStateKV           jetstream.KeyValue     // Active voice call participants (ephemeral, memory-backed)
 	authTokensKV          jetstream.KeyValue     // Bearer auth tokens with TTL
+	ratelimitKV           jetstream.KeyValue     // Rate-limit counters (ephemeral, memory-backed)
 }
 
 // newStorage initializes all JetStream KV buckets and streams.
@@ -560,6 +561,22 @@ func newStorage(js jetstream.JetStream, ctx context.Context, cfg config.CoreConf
 		return nil, fmt.Errorf("failed to create AUTH_TOKENS KV bucket: %w", err)
 	}
 
+	// Initialize rate-limit KV bucket (memory-backed, ephemeral).
+	// Stores per-(scope,key) windowed counters. Memory storage is intentional —
+	// rate-limit state losing its memory on restart is fine (limits reset). Per-key
+	// TTL via LimitMarkerTTL keeps cleanup automatic so the bucket doesn't grow.
+	ratelimitKV, err := js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:         "RATELIMITS",
+		Description:    "Rate-limit counters (ephemeral, memory-backed)",
+		Storage:        jetstream.MemoryStorage,
+		History:        1,
+		Replicas:       cfg.Replicas,
+		LimitMarkerTTL: time.Hour,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create RATELIMITS KV bucket: %w", err)
+	}
+
 	// Return initialized storage and whether RBAC bucket was newly created
 	return &storage{
 		instanceKV:       instanceKV,
@@ -580,6 +597,7 @@ func newStorage(js jetstream.JetStream, ctx context.Context, cfg config.CoreConf
 		notificationsKV:       notificationsKV,
 		callStateKV:           callStateKV,
 		authTokensKV:          authTokensKV,
+		ratelimitKV:           ratelimitKV,
 	}, nil
 }
 

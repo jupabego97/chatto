@@ -333,6 +333,8 @@ func skipReason(name string) string {
 		return "ephemeral (memory storage)"
 	case "KV_CALL_STATE":
 		return "ephemeral (memory storage)"
+	case "KV_RATELIMITS":
+		return "ephemeral (memory storage)"
 	case "KV_ENCRYPTION_KEYS":
 		return "security (keys excluded from backups)"
 	case "KV_LINK_PREVIEW_CACHE":

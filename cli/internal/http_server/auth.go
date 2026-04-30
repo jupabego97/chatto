@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/gin-contrib/sessions"
@@ -19,6 +21,15 @@ import (
 var (
 	validLoginRegex   = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 	invalidCharsRegex = regexp.MustCompile(`[^a-z0-9._-]`)
+)
+
+// Rate limits for POST /auth/register. Hardcoded for now; if operators ask to tune,
+// promote to LimitsConfig. Per-IP catches a single attacker pumping many emails;
+// per-email catches IP-rotating attacks targeting one inbox.
+const (
+	registerRateLimitWindow      = time.Hour
+	registerRateLimitPerIPMax    = 30
+	registerRateLimitPerEmailMax = 5
 )
 
 func (s *HTTPServer) setupAuthRoutes() {
@@ -176,6 +187,22 @@ func (s *HTTPServer) setupAuthRoutes() {
 		}
 
 		ctx := c.Request.Context()
+
+		// Rate limit: per-IP first, then per-email-target. We gate before the email-claimed
+		// check so the registration endpoint can't be used to probe for valid emails by
+		// timing differences, and so an attacker can't burn through SMTP credit hammering
+		// any address. "Resend" is just calling this endpoint again, naturally subject to
+		// the same limits.
+		if allowed, retryAfter, _ := s.core.RateLimitCheck(ctx, "register.ip", c.ClientIP(), registerRateLimitPerIPMax, registerRateLimitWindow); !allowed {
+			c.Header("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "Too many registration attempts from this address. Please try again later."})
+			return
+		}
+		if allowed, retryAfter, _ := s.core.RateLimitCheck(ctx, "register.email", req.Email, registerRateLimitPerEmailMax, registerRateLimitWindow); !allowed {
+			c.Header("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "Too many registration attempts for this email. Please try again later."})
+			return
+		}
 
 		// Check if email is already claimed — but always return 200 to prevent enumeration
 		emailClaimed, err := s.core.IsEmailClaimed(ctx, req.Email)
