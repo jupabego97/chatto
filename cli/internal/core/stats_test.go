@@ -212,38 +212,22 @@ func TestStats_RecomputeFromAuthoritativeState(t *testing.T) {
 	}
 }
 
-func TestStats_EnsureInitialized_NoOpWhenPresent(t *testing.T) {
+func TestStats_RecomputeRunsOnStartup(t *testing.T) {
+	// setupTestCore runs NewChattoCore, which calls RecomputeStats on every
+	// boot. After setup, the well-known counters must already exist and reflect
+	// reality (zero on a fresh test instance).
 	core, _ := setupTestCore(t)
 	ctx := testContext(t)
 
-	core.setStat(ctx, StatSpaces, 42)
-	core.setStat(ctx, StatVerifiedUsers, 7)
-
-	if err := core.EnsureStatsInitialized(ctx); err != nil {
-		t.Fatalf("ensure: %v", err)
-	}
-
-	// Existing values must NOT have been overwritten by recompute.
-	got, _ := core.GetStat(ctx, StatSpaces)
-	if got != 42 {
-		t.Errorf("spaces stat overwritten: got %d, want 42 (preserved)", got)
-	}
-}
-
-func TestStats_EnsureInitialized_SeedsWhenMissing(t *testing.T) {
-	core, _ := setupTestCore(t)
-	ctx := testContext(t)
-
-	// Don't pre-set any stats. Create some real state so recompute has data.
-	user, _ := core.CreateUser(ctx, "system", "seed-user", "Seed", "password123")
-	core.AddVerifiedEmailDirect(ctx, user.Id, "seed@example.com")
-
-	if err := core.EnsureStatsInitialized(ctx); err != nil {
-		t.Fatalf("ensure: %v", err)
-	}
-
-	got, _ := core.GetStat(ctx, StatVerifiedUsers)
-	if got < 1 {
-		t.Errorf("verified_users stat after seed = %d, want >= 1", got)
+	// Both well-known counters should be present and zero.
+	for _, name := range []string{StatSpaces, StatVerifiedUsers} {
+		entry, err := core.storage.instanceKV.Get(ctx, statKey(name))
+		if err != nil {
+			t.Errorf("%s should exist after startup recompute, got %v", name, err)
+			continue
+		}
+		if string(entry.Value()) != "0" {
+			t.Errorf("%s = %q after startup, want \"0\"", name, string(entry.Value()))
+		}
 	}
 }

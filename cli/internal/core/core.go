@@ -376,11 +376,13 @@ func NewChattoCore(ctx context.Context, nc *nats.Conn, cfg config.CoreConfig) (*
 		return nil, fmt.Errorf("failed to initialize instance RBAC: %w", err)
 	}
 
-	// Seed instance stats counters from authoritative state if missing. Handles
-	// the upgrade path from instances that predate the stats counter system, and
-	// is a one-shot O(N) scan that's idempotent on subsequent boots.
-	if err := core.EnsureStatsInitialized(ctx); err != nil {
-		return nil, fmt.Errorf("failed to initialize instance stats: %w", err)
+	// Recompute instance stats counters from authoritative state on every boot.
+	// Two ListKeysFiltered scans, milliseconds. Always running it on startup
+	// means drift recovery is just "restart the server" (or `nats kv del` for
+	// the misbehaving counter and restart for finer control); we don't need a
+	// dedicated CLI command or admin endpoint for the recompute path.
+	if err := core.RecomputeStats(ctx); err != nil {
+		return nil, fmt.Errorf("failed to recompute instance stats: %w", err)
 	}
 
 	// Initialize presence hub (single KV watcher per process).

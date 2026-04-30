@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/nats-io/nats.go/jetstream"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
-	corev1 "hmans.de/chatto/internal/pb/chatto/core/v1"
 )
 
 // Names of the well-known instance counters. Add new ones here so they're
@@ -29,17 +27,26 @@ func statKey(name string) string {
 // 32 covers realistic contention against a single counter without busy-looping.
 const statMaxRetries = 32
 
+// Counter values are stored as ASCII decimal bytes in the KV entry — `nats kv
+// get KV_INSTANCE instance.stats.spaces` returns "42". Plain bytes were chosen
+// over a proto wrapper because the value is just a number; no need for a
+// marshal/unmarshal step or codegen to add a new counter.
+
 // GetStat returns the current value of a counter. Returns 0 if the counter
 // hasn't been initialized yet (callers can treat that as the empty state).
 func (c *ChattoCore) GetStat(ctx context.Context, name string) (int64, error) {
-	stat, err := c.getStatProto(ctx, name)
+	entry, err := c.storage.instanceKV.Get(ctx, statKey(name))
 	if err != nil {
 		if errors.Is(err, jetstream.ErrKeyNotFound) {
 			return 0, nil
 		}
-		return 0, err
+		return 0, fmt.Errorf("get stat: %w", err)
 	}
-	return stat.Count, nil
+	count, err := strconv.ParseInt(string(entry.Value()), 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("parse stat %q: %w", name, err)
+	}
+	return count, nil
 }
 
 // IncrementStat increments a counter by 1 and returns the new count. CAS-loops
@@ -82,12 +89,7 @@ func (c *ChattoCore) adjustStat(ctx context.Context, name string, delta int, max
 			if max == 0 {
 				return 0, ErrLimitExceeded
 			}
-			stat := &corev1.InstanceStat{Count: 1, UpdatedAt: timestamppb.Now()}
-			data, err := proto.Marshal(stat)
-			if err != nil {
-				return 0, fmt.Errorf("marshal stat: %w", err)
-			}
-			if _, err := c.storage.instanceKV.Create(ctx, key, data); err != nil {
+			if _, err := c.storage.instanceKV.Create(ctx, key, []byte("1")); err != nil {
 				if errors.Is(err, jetstream.ErrKeyExists) {
 					continue // raced with another caller; retry through the Update path
 				}
@@ -99,26 +101,20 @@ func (c *ChattoCore) adjustStat(ctx context.Context, name string, delta int, max
 			return 0, fmt.Errorf("get stat: %w", err)
 		}
 
-		var stat corev1.InstanceStat
-		if err := proto.Unmarshal(entry.Value(), &stat); err != nil {
-			return 0, fmt.Errorf("unmarshal stat: %w", err)
+		current, err := strconv.ParseInt(string(entry.Value()), 10, 64)
+		if err != nil {
+			return 0, fmt.Errorf("parse stat %q: %w", name, err)
 		}
 
-		newCount := stat.Count + int64(delta)
+		newCount := current + int64(delta)
 		if newCount < 0 {
 			newCount = 0 // floor decrements; never store negative
 		}
 		if delta > 0 && max >= 0 && newCount > max {
-			return stat.Count, ErrLimitExceeded
+			return current, ErrLimitExceeded
 		}
 
-		stat.Count = newCount
-		stat.UpdatedAt = timestamppb.Now()
-		data, err := proto.Marshal(&stat)
-		if err != nil {
-			return 0, fmt.Errorf("marshal stat: %w", err)
-		}
-		if _, err := c.storage.instanceKV.Update(ctx, key, data, entry.Revision()); err != nil {
+		if _, err := c.storage.instanceKV.Update(ctx, key, []byte(strconv.FormatInt(newCount, 10)), entry.Revision()); err != nil {
 			if errors.Is(err, jetstream.ErrKeyExists) {
 				continue // revision mismatch; another caller won the race
 			}
@@ -129,43 +125,20 @@ func (c *ChattoCore) adjustStat(ctx context.Context, name string, delta int, max
 	return 0, fmt.Errorf("stat %q: exhausted %d CAS retries", name, statMaxRetries)
 }
 
-// getStatProto fetches the raw InstanceStat. Internal helper.
-func (c *ChattoCore) getStatProto(ctx context.Context, name string) (*corev1.InstanceStat, error) {
-	entry, err := c.storage.instanceKV.Get(ctx, statKey(name))
-	if err != nil {
-		return nil, err
-	}
-	var stat corev1.InstanceStat
-	if err := proto.Unmarshal(entry.Value(), &stat); err != nil {
-		return nil, fmt.Errorf("unmarshal stat: %w", err)
-	}
-	return &stat, nil
-}
-
 // setStat overwrites a counter to the given value. Used by RecomputeStats to
-// re-establish truth from authoritative state. Updates RecomputedAt so admins
-// can see when the counter was last reconciled.
+// re-establish truth from authoritative state.
 func (c *ChattoCore) setStat(ctx context.Context, name string, count int64) error {
-	now := timestamppb.Now()
-	stat := &corev1.InstanceStat{
-		Count:        count,
-		UpdatedAt:    now,
-		RecomputedAt: now,
-	}
-	data, err := proto.Marshal(stat)
-	if err != nil {
-		return fmt.Errorf("marshal stat: %w", err)
-	}
-	if _, err := c.storage.instanceKV.Put(ctx, statKey(name), data); err != nil {
+	if _, err := c.storage.instanceKV.Put(ctx, statKey(name), []byte(strconv.FormatInt(count, 10))); err != nil {
 		return fmt.Errorf("put stat: %w", err)
 	}
 	return nil
 }
 
 // RecomputeStats scans authoritative state and overwrites the well-known
-// counters with truth. Run on startup to seed counters on instances upgraded
-// from versions that predate this system, and exposed via `chatto stats
-// recompute` for manual repair if drift is suspected.
+// counters with truth. Called from NewChattoCore on every startup so a fresh
+// process always boots with counters that match reality — drift recovery is
+// "restart the server" (or `nats kv del` for the misbehaving counter and
+// restart for finer control). Two ListKeysFiltered scans; cheap.
 func (c *ChattoCore) RecomputeStats(ctx context.Context) error {
 	spaces, err := c.CountSpaces(ctx)
 	if err != nil {
@@ -184,24 +157,5 @@ func (c *ChattoCore) RecomputeStats(ctx context.Context) error {
 	}
 
 	c.logger.Info("recomputed instance stats", "spaces", spaces, "verified_users", users)
-	return nil
-}
-
-// EnsureStatsInitialized seeds counters on first run by recomputing if any of
-// the well-known stat keys are missing. Idempotent and cheap when stats already
-// exist.
-func (c *ChattoCore) EnsureStatsInitialized(ctx context.Context) error {
-	for _, name := range []string{StatSpaces, StatVerifiedUsers} {
-		_, err := c.storage.instanceKV.Get(ctx, statKey(name))
-		if err == nil {
-			continue
-		}
-		if !errors.Is(err, jetstream.ErrKeyNotFound) {
-			return fmt.Errorf("check stat %q: %w", name, err)
-		}
-		// At least one is missing — recompute the lot.
-		c.logger.Info("instance stats missing; recomputing from authoritative state", "missing", name)
-		return c.RecomputeStats(ctx)
-	}
 	return nil
 }
