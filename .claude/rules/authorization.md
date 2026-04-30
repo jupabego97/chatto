@@ -29,21 +29,37 @@ Authorization is enforced at the **API boundary**, not in core:
 
 ## Permission System
 
-Permissions are granted through roles assigned to space members. Use `Can*` functions in `core/can.go` to check permissions.
+Permissions are granted through roles assigned to instance users and space members. Use the `Can*` functions in `core/instance_can.go` and `core/space_can.go`, or check directly via `core.HasInstancePermission` / `core.HasSpacePermission` / `core.HasRoomPermission`.
 
-### Hierarchy-Wins Resolution
+### Harmonized Resolution Model
 
-Permission resolution follows role hierarchy order (lower position = higher rank):
+Resolution is the **same algorithm at every tier** (`PermissionResolver.walk` in `permission_resolver.go`):
 
-1. Get user's roles sorted by position (lower = higher rank)
-2. For each role in order, check for explicit grant or deny
-3. First explicit decision found wins
+1. Walk the user's applicable roles in hierarchy order (lower position = higher rank).
+2. For each role, look up its decision at the requested tier; if no entry exists, walk **upward** (room → space → instance) along that role's chain.
+3. The first role to produce **any** explicit decision (allow or deny) wins.
+4. If no role decides anywhere, the answer is deny.
 
-This enables patterns like:
-- `#announcements` rooms where `everyone` is denied `message.post` but `owner/admin/moderator` can still post (higher rank checked first), while everyone retains `message.post-in-thread` to discuss in threads
-- Instance admin not being blocked by an `everyone` denial
+Two consequences worth internalizing:
 
-**Testing implication:** Denying a permission on the `everyone` role does NOT block users with higher-rank roles (like `admin`). To test permission denial, deny on the user's actual highest-rank role or a role with equal/higher rank.
+- **Higher-rank roles always override lower-rank roles**, regardless of which tier the decision lives in. An `instance-admin` allow at instance scope beats an `everyone` deny at space scope, because admin is checked first.
+- **A role's grants cascade down by default.** Granting `message.post` to `instance-everyone` at instance scope is visible inside every space the user joins until something at a lower tier (or higher-rank role at any tier) overrides it.
+
+### Role Hierarchy
+
+| Position | Instance role        | Space role  | Notes |
+|----------|----------------------|-------------|-------|
+| 0        | `instance-owner`     | `owner`     | All permissions; cannot be denied |
+| 1        | `instance-suspended` | `suspended` | Carries explicit denies on user-behavior perms; outranks admin so denies stick |
+| 2        | `instance-admin`     | `admin`     | All permissions at instance / space-management at space |
+| 3        | —                    | `moderation`| Heavy moderation grants (delete-any, member.remove); space scope only |
+| 4        | `instance-moderator` | `moderator` | Read-only admin / room.manage |
+| 5+       | custom roles                       || Custom roles always rank below moderator |
+| MaxInt32 | `everyone`           | `everyone`  | Universal floor role |
+
+System roles get their canonical positions from constants in `cli/internal/core/rbac/engine.go` and are migrated automatically on every boot (`initInstanceRBAC` and `migrateSpaceSystemRoles`).
+
+**Testing implication:** Denying a permission on a low-rank role (like `everyone`) does **not** block users with a higher-rank role unless that role doesn't have an explicit allow. To reliably block a permission, deny on a role that ranks at or above any role that grants it (e.g. `instance-suspended`).
 
 ### Permission Constant Naming
 
@@ -68,18 +84,23 @@ Permission strings use **hyphens** as word separators (e.g., `message.post-in-th
 
 ### Built-in Permissions
 
+The full list lives in `cli/internal/core/permission.go` (`allPermissions`). Highlights:
+
 | Permission | Description |
 |------------|-------------|
 | `space.manage` | Update space settings (name, description) |
 | `space.delete` | Delete the space |
-| `roles.manage` | Create/edit/delete roles |
-| `roles.assign` | Assign roles to users |
-| `members.invite` | Invite new members |
-| `members.remove` | Remove members from space |
-| `rooms.browse` | View list of rooms in space |
-| `rooms.create` | Create new rooms |
-| `rooms.manage` | Update/delete any room |
-| `rooms.join` | Join existing rooms |
+| `role.manage` | Create/edit/delete roles |
+| `role.assign` | Assign roles to users |
+| `member.invite` | Invite new members |
+| `member.remove` | Remove members from space (lives on the `moderation` role by default) |
+| `room.list` | View the list of rooms |
+| `room.create` | Create new rooms |
+| `room.join` | Join existing rooms |
+| `room.manage` | Update/delete any room |
+| `message.delete-any` | Delete any user's messages (lives on the `moderation` role by default) |
+
+**Every permission can be configured at instance scope.** A grant or deny at instance scope propagates down through the resolver's parent-tier fallback to every space and room (subject to membership). Space- and room-scoped configuration overrides the inherited baseline for that specific scope.
 
 ## GraphQL Authorization Reference
 
@@ -189,30 +210,10 @@ if caller.Id != obj.Id {
 
 ## Customizable Permissions
 
-Default member permissions (`rooms.browse`, `rooms.create`, `rooms.join`) can be revoked from the member role. When implementing or modifying permission checks:
+Default permissions are seeded by `InitInstanceDefaults` and `InitSpaceDefaults` (in `permission_ops.go`) — including the user-behavior floor on `instance-everyone`, the moderation grants on `space.moderation`, and the suspended denies on `*-suspended`. All of them can be granted, denied, or cleared at any tier through the matrix UI. Two rules to keep in mind when adding permission checks:
 
-1. **Always use the RBAC engine** - Never hardcode permission grants based on role names or "default" lists
-2. **Test both grant and revoke** - Permissions must work when granted AND when revoked
-3. **Follow the instance RBAC pattern** - Use `engine.RoleHasPermission(ctx, RoleMember, permStr)` to check actual KV state
-
-**Anti-pattern (avoid):**
-```go
-// BAD: Hardcoded bypass that ignores actual role permissions
-if isMember && isDefaultPermission(perm) {
-    return true, nil  // Bypasses RBAC engine!
-}
-```
-
-**Correct pattern:**
-```go
-// GOOD: Always check actual role permissions via RBAC engine
-if isMember {
-    hasPerm, err := engine.RoleHasPermission(ctx, RoleMember, string(perm))
-    if hasPerm {
-        return true, nil
-    }
-}
-```
+1. **Always go through `PermissionResolver`.** Never hardcode "this role implicitly has X" — admins are not exempt from `everyone`-role denies, only out-ranked by them.
+2. **Test both grant and revoke at the actually-effective tier.** A test that denies `message.post` on `everyone` will not block an `admin` user; deny on the user's highest-rank role (or use the `suspended` role) instead.
 
 ## Instance Admin
 
