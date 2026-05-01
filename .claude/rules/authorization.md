@@ -215,12 +215,13 @@ Default permissions are seeded by `InitInstanceDefaults` and `InitSpaceDefaults`
 1. **Always go through `PermissionResolver`.** Never hardcode "this role implicitly has X" — admins are not exempt from `everyone`-role denies, only out-ranked by them.
 2. **Test both grant and revoke at the actually-effective tier.** A test that denies `message.post` on `everyone` will not block an `admin` user; deny on the user's highest-rank role (or use the `suspended` role) instead.
 
-## Instance Admin
+## Instance Owner via Config
 
-Instance admins are configured via `admin.emails` in `chatto.toml`. They have access to:
+Instance owners can be designated via `owners.emails` in `chatto.toml`. A user with any matching verified email is treated as having owner-level access (which short-circuits all instance-permission checks). Owners have access to:
 
 - `/admin` routes in the frontend
 - `Query.admin` and `Query.users` in GraphQL
 - System monitoring data (NATS stats, streams, KV buckets)
+- Everything else (owner role grants all permissions)
 
-Instance admin is separate from space admin roles - see `admin.md` for details.
+Config-designated owner status is separate from space admin roles — see `admin.md` for details.

@@ -12,13 +12,6 @@ func TestPermissionResolver_HasInstancePermission(t *testing.T) {
 	core, _ := setupTestCore(t)
 	ctx := testContext(t)
 
-	// Create a "bootstrap" owner first to absorb the auto-promotion
-	// (the first user in any instance is auto-promoted to owner)
-	_, err := core.CreateUser(ctx, SystemActorID, "bootstrap-owner", "Bootstrap Owner", "password123")
-	if err != nil {
-		t.Fatalf("failed to create bootstrap owner: %v", err)
-	}
-
 	// Create a user
 	user, _ := core.CreateUser(ctx, "system", "testuser", "Test User", "password123")
 
@@ -77,13 +70,6 @@ func TestPermissionResolver_HasInstancePermission_DenyWins(t *testing.T) {
 	core, _ := setupTestCore(t)
 	ctx := testContext(t)
 
-	// Create a "bootstrap" owner first to absorb the auto-promotion
-	// (the first user in any instance is auto-promoted to owner)
-	_, err := core.CreateUser(ctx, SystemActorID, "bootstrap-owner", "Bootstrap Owner", "password123")
-	if err != nil {
-		t.Fatalf("failed to create bootstrap owner: %v", err)
-	}
-
 	user, _ := core.CreateUser(ctx, "system", "testuser", "Test User", "password123")
 
 	t.Run("same-role denial replaces grant", func(t *testing.T) {
@@ -116,12 +102,6 @@ func TestPermissionResolver_HasInstancePermission_DenyWins(t *testing.T) {
 func TestPermissionResolver_HasInstancePermission_CustomDenyRole(t *testing.T) {
 	core, _ := setupTestCore(t)
 	ctx := testContext(t)
-
-	// Create bootstrap owner
-	_, err := core.CreateUser(ctx, SystemActorID, "bootstrap-owner", "Bootstrap Owner", "password123")
-	if err != nil {
-		t.Fatalf("failed to create bootstrap owner: %v", err)
-	}
 
 	// Create a user (has everyone role)
 	user, _ := core.CreateUser(ctx, "system", "testuser-denyrole", "Test User", "password123")
@@ -180,13 +160,6 @@ func TestPermissionResolver_HasInstancePermission_CustomDenyRole(t *testing.T) {
 func TestPermissionResolver_HasInstancePermission_Hierarchy(t *testing.T) {
 	core, _ := setupTestCore(t)
 	ctx := testContext(t)
-
-	// Create a "bootstrap" owner first to absorb the auto-promotion
-	// (the first user in any instance is auto-promoted to owner)
-	_, err := core.CreateUser(ctx, SystemActorID, "bootstrap-owner", "Bootstrap Owner", "password123")
-	if err != nil {
-		t.Fatalf("failed to create bootstrap owner: %v", err)
-	}
 
 	// Create a user and assign admin role
 	user, _ := core.CreateUser(ctx, "system", "testuser", "Test User", "password123")
@@ -257,13 +230,6 @@ func TestPermissionResolver_HasInstancePermission_Hierarchy(t *testing.T) {
 func TestPermissionResolver_HasSpacePermission(t *testing.T) {
 	core, _ := setupTestCore(t)
 	ctx := testContext(t)
-
-	// Create a "bootstrap" owner first to absorb the auto-promotion
-	// (the first user in any instance is auto-promoted to owner)
-	_, err := core.CreateUser(ctx, SystemActorID, "bootstrap-owner", "Bootstrap Owner", "password123")
-	if err != nil {
-		t.Fatalf("failed to create bootstrap owner: %v", err)
-	}
 
 	// Create user and space
 	user, _ := core.CreateUser(ctx, "system", "testuser", "Test User", "password123")

@@ -61,6 +61,19 @@ func (c *ChattoCore) CreateUser(ctx context.Context, actorID string, login, disp
 		return nil, ErrUsernameBlocked
 	}
 
+	// Enforce instance-wide user limit at signup as a UX gate so people don't sign up
+	// only to be blocked at verification. The verification check (in addVerifiedEmail)
+	// remains the race-safe hard gate.
+	if max := c.config.Limits.MaxUsersOrDefault(); max >= 0 {
+		count, err := c.CountVerifiedUsers(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to count verified users: %w", err)
+		}
+		if count >= max {
+			return nil, ErrLimitExceeded
+		}
+	}
+
 	// Generate user ID upfront
 	userID := NewUserID()
 
@@ -144,16 +157,47 @@ func (c *ChattoCore) CreateUser(ctx context.Context, actorID string, login, disp
 
 	c.logger.Info("Created user", "id", userID, "login", login)
 
-	// Auto-promote first user to instance owner (atomic operation)
-	// This is a best-effort operation - if it fails, the user is still created
-	promoted, err := c.PromoteFirstUserToOwner(ctx, userID)
+	return user, nil
+}
+
+// CreateVerifiedUser creates a user and registers an already-verified email for them
+// in a single best-effort transaction. If verification fails after the user record is
+// written, the user record is rolled back so signup paths don't produce orphan accounts.
+//
+// Used by signup-completion (post email-link click) and OIDC callbacks, where the email
+// has already been proven (via clicking the link or via an OIDC `email_verified` claim).
+func (c *ChattoCore) CreateVerifiedUser(ctx context.Context, actorID, login, displayName, password, email string) (*corev1.User, error) {
+	user, err := c.CreateUser(ctx, actorID, login, displayName, password)
 	if err != nil {
-		c.logger.Warn("Failed to promote first user to owner", "error", err)
-	} else if promoted {
-		c.logger.Info("First user promoted to instance owner", "user_id", userID)
+		return nil, err
+	}
+
+	if err := c.AddVerifiedEmailDirect(ctx, user.Id, email); err != nil {
+		c.rollbackUserCreation(ctx, user)
+		return nil, fmt.Errorf("failed to verify email for new user: %w", err)
 	}
 
 	return user, nil
+}
+
+// rollbackUserCreation undoes the KV writes performed by CreateUser. Best-effort —
+// failures are logged but not returned, since the caller is already in an error path.
+func (c *ChattoCore) rollbackUserCreation(ctx context.Context, user *corev1.User) {
+	c.logger.Warn("rolling back user creation", "user_id", user.Id, "login", user.Login)
+
+	keys := []string{
+		userKey(user.Id),
+		userByLoginKey(user.Login),
+		userAuthPasswordKey(user.Id),
+	}
+	for _, key := range keys {
+		if err := c.storage.instanceKV.Delete(ctx, key); err != nil && !errors.Is(err, jetstream.ErrKeyNotFound) {
+			c.logger.Warn("rollback delete failed", "key", key, "error", err)
+		}
+	}
+	if err := c.DeleteUserEncryptionKey(ctx, user.Id); err != nil {
+		c.logger.Warn("rollback encryption key delete failed", "user_id", user.Id, "error", err)
+	}
 }
 
 // GetUser retrieves a user from the INSTANCE KV bucket.

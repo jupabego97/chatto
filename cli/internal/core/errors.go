@@ -68,6 +68,11 @@ var (
 	// disallowed characters (control chars, zero-width chars, consecutive spaces).
 	ErrDisplayNameInvalidCharacter = errors.New("display name contains invalid characters")
 
+	// ErrDisplayNameInvalidStart is returned when a display name does not start
+	// with a letter or digit. Required so the auto-generated avatar placeholder
+	// (which uses the first character) renders sensibly.
+	ErrDisplayNameInvalidStart = errors.New("display name must start with a letter or digit")
+
 	// ErrDescriptionTooLong is returned when a description exceeds the maximum length.
 	ErrDescriptionTooLong = errors.New("description exceeds maximum length")
 
@@ -99,6 +104,10 @@ var (
 	// ErrInvalidEvent is returned when an event publish helper receives an invalid
 	// event payload (e.g. nil pointer or missing protobuf oneof payload).
 	ErrInvalidEvent = errors.New("invalid event")
+
+	// ErrLimitExceeded is returned when an operation would exceed an instance-wide
+	// resource limit configured via [limits] (e.g. max_spaces, max_users).
+	ErrLimitExceeded = errors.New("instance limit reached")
 )
 
 // Input validation limits.
