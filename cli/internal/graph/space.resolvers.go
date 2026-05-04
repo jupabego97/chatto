@@ -263,12 +263,16 @@ func (r *spaceResolver) ViewerHasUnreadRooms(ctx context.Context, obj *corev1.Sp
 }
 
 // ViewerCanJoinSpace is the resolver for the viewerCanJoinSpace field.
+//
+// Per ADR-028 the space.join permission is dropped — joining the server is
+// equivalent to registering, not a separately-gated action. We just gate on
+// authentication during the transitional period; the field itself is removed
+// in PR 10 alongside the schema flip.
 func (r *spaceResolver) ViewerCanJoinSpace(ctx context.Context, obj *corev1.Space) (bool, error) {
-	user := auth.ForContext(ctx)
-	if user == nil {
+	if user := auth.ForContext(ctx); user == nil {
 		return false, nil
 	}
-	return r.core.CanJoinSpace(ctx, user.Id, obj.Id)
+	return true, nil
 }
 
 // Space returns SpaceResolver implementation.

@@ -39,7 +39,6 @@ func TestCanHelpers(t *testing.T) {
 		expect bool
 	}{
 		{"CanAdminSpaceManage", func() (bool, error) { return core.CanAdminSpaceManage(ctx, creator.Id, space.Id) }, true},
-		{"CanAdminSpaceDelete", func() (bool, error) { return core.CanAdminSpaceDelete(ctx, creator.Id, space.Id) }, true},
 		{"CanSpaceRolesManage", func() (bool, error) { return core.CanSpaceRolesManage(ctx, creator.Id, space.Id) }, true},
 		{"CanSpaceRolesAssign", func() (bool, error) { return core.CanSpaceRolesAssign(ctx, creator.Id, space.Id) }, true},
 		{"CanAdminMembersInvite", func() (bool, error) { return core.CanAdminMembersInvite(ctx, creator.Id, space.Id) }, true},
@@ -77,7 +76,6 @@ func TestCanHelpers(t *testing.T) {
 		// Admin/elevated permissions (should be false) - room.create is opt-in
 		{"CanCreateRoom", func() (bool, error) { return core.CanCreateRoom(ctx, member.Id, space.Id) }, false},
 		{"CanAdminSpaceManage", func() (bool, error) { return core.CanAdminSpaceManage(ctx, member.Id, space.Id) }, false},
-		{"CanAdminSpaceDelete", func() (bool, error) { return core.CanAdminSpaceDelete(ctx, member.Id, space.Id) }, false},
 		{"CanSpaceRolesManage", func() (bool, error) { return core.CanSpaceRolesManage(ctx, member.Id, space.Id) }, false},
 		{"CanSpaceRolesAssign", func() (bool, error) { return core.CanSpaceRolesAssign(ctx, member.Id, space.Id) }, false},
 		{"CanAdminMembersInvite", func() (bool, error) { return core.CanAdminMembersInvite(ctx, member.Id, space.Id) }, false},

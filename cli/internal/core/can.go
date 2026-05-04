@@ -2,24 +2,95 @@ package core
 
 import "context"
 
-// This file provides semantic helper functions for permission checks.
-// These wrap the low-level HasPermission function with business-meaningful names,
-// making code more readable and permission usage easier to audit.
+// This file provides semantic helper functions wrapping the low-level
+// HasInstancePermission / hasSpacePermission / hasRoomPermission calls with
+// business-meaningful names. Each function returns (bool, error) where
+// `error` is non-nil only on a system error.
 //
-// Each function returns (bool, error) where:
-//   - bool indicates whether the user has the permission
-//   - error is non-nil only if there was a system error checking permissions
+// Per ADR-028 the post-merge permission model has just two scopes (`server`
+// and `room`); the dual-RBAC engines collapse in PR 4 of the Phase 2 refactor.
+// Until then this file is the unified surface.
 //
-// Example usage:
-//
-//	if can, err := c.CanAdminSpaceManage(ctx, userID, spaceID); err != nil {
-//	    return fmt.Errorf("failed to check permission: %w", err)
-//	} else if !can {
-//	    return ErrPermissionDenied
-//	}
+// Note: these helpers check RBAC permissions only. Config-based admin checks
+// (owners.emails) are layered on by the caller, typically at the GraphQL
+// resolver boundary.
 
 // ============================================================================
-// Admin Permissions
+// Server-level permissions (formerly instance-level)
+// ============================================================================
+
+// CanAdminAccess checks if a user can access the admin panel.
+func (c *ChattoCore) CanAdminAccess(ctx context.Context, userID string) (bool, error) {
+	return c.HasInstancePermission(ctx, userID, PermAdminAccess)
+}
+
+// CanAdminUsersView checks if a user can view the users page in admin.
+func (c *ChattoCore) CanAdminUsersView(ctx context.Context, userID string) (bool, error) {
+	return c.HasInstancePermission(ctx, userID, PermAdminUsersView)
+}
+
+// CanAdminUsersManage checks if a user can edit user role assignments.
+func (c *ChattoCore) CanAdminUsersManage(ctx context.Context, userID string) (bool, error) {
+	return c.HasInstancePermission(ctx, userID, PermAdminUsersManage)
+}
+
+// CanAdminRolesView checks if a user can view the roles page in admin.
+func (c *ChattoCore) CanAdminRolesView(ctx context.Context, userID string) (bool, error) {
+	return c.HasInstancePermission(ctx, userID, PermAdminRolesView)
+}
+
+// CanAdminRolesManage checks if a user can create/edit instance roles and their permissions.
+func (c *ChattoCore) CanAdminRolesManage(ctx context.Context, userID string) (bool, error) {
+	return c.HasInstancePermission(ctx, userID, PermAdminRolesManage)
+}
+
+// CanAdminSystemView checks if a user can view the system and data pages in admin.
+func (c *ChattoCore) CanAdminSystemView(ctx context.Context, userID string) (bool, error) {
+	return c.HasInstancePermission(ctx, userID, PermAdminSystemView)
+}
+
+// CanDMView checks if a user can access DM conversations and read direct messages.
+func (c *ChattoCore) CanDMView(ctx context.Context, userID string) (bool, error) {
+	return c.HasInstancePermission(ctx, userID, PermDMView)
+}
+
+// CanDMWrite checks if a user can start DM conversations and send messages.
+func (c *ChattoCore) CanDMWrite(ctx context.Context, userID string) (bool, error) {
+	return c.HasInstancePermission(ctx, userID, PermDMWrite)
+}
+
+// CanAdminManageUser checks if an actor can perform admin user-management
+// actions (e.g. editing identity, clearing cooldowns) on a target user based
+// on instance role hierarchy. Self-management is always allowed; otherwise
+// the actor's highest role must outrank the target's highest role.
+//
+// Note: this checks RBAC hierarchy only. Config-based admins (owners.emails)
+// are not visible to the RBAC engine and should bypass this check at the
+// resolver layer (they outrank everyone).
+func (c *ChattoCore) CanAdminManageUser(ctx context.Context, actorID, targetID string) (bool, error) {
+	if actorID == targetID {
+		return true, nil
+	}
+	return c.instanceRBACEngine.CanUserManageUser(ctx, actorID, targetID)
+}
+
+// CanDeleteUser checks if an actor can delete a specific user account.
+// Returns true if:
+//   - The actor is deleting their own account and has user.delete-self, OR
+//   - The actor has the user.delete permission (admin capability)
+func (c *ChattoCore) CanDeleteUser(ctx context.Context, actorID, targetUserID string) (bool, error) {
+	if actorID == targetUserID {
+		return c.HasInstancePermission(ctx, actorID, PermUserDeleteSelf)
+	}
+	return c.HasInstancePermission(ctx, actorID, PermUserDelete)
+}
+
+// ============================================================================
+// Space-scoped permissions (server admin actions inside a particular space)
+//
+// These keep their existing names through the dual-RBAC transition. The
+// CanAdminSpace* / CanSpace* / CanXxxRoom split mirrors the GraphQL surface
+// and gets renamed alongside that surface in PR 10.
 // ============================================================================
 
 // spaceAdminPermissions is the set of admin-level space permissions.
@@ -51,20 +122,10 @@ func (c *ChattoCore) HasAnyAdminPermission(ctx context.Context, userID, spaceID 
 	return false, nil
 }
 
-// CanAdminSpaceManage checks if a user can update space settings (name, description, logo).
+// CanAdminSpaceManage checks if a user can update space settings (name, description, branding).
 // Backed by the renamed PermServerManage permission per ADR-028.
 func (c *ChattoCore) CanAdminSpaceManage(ctx context.Context, userID, spaceID string) (bool, error) {
 	return c.hasSpacePermission(ctx, spaceID, userID, PermServerManage)
-}
-
-// CanAdminSpaceDelete checks if a user can delete a space entirely.
-//
-// Transitional shim: the underlying space.delete permission is dropped per ADR-028
-// (server lifecycle is operator-controlled). We delegate to CanAdminSpaceManage so
-// space-admins can still delete during the transition; the helper goes away in PR 10
-// along with the deleteSpace mutation.
-func (c *ChattoCore) CanAdminSpaceDelete(ctx context.Context, userID, spaceID string) (bool, error) {
-	return c.CanAdminSpaceManage(ctx, userID, spaceID)
 }
 
 // CanSpaceRolesManage checks if a user can create, update, delete roles and grant/revoke permissions in a space.
@@ -92,10 +153,6 @@ func (c *ChattoCore) CanAdminRoomsManage(ctx context.Context, userID, spaceID st
 	return c.hasSpacePermission(ctx, spaceID, userID, PermRoomManage)
 }
 
-// ============================================================================
-// Normal Permissions
-// ============================================================================
-
 // CanBrowseRooms checks if a user can view the list of rooms in the space.
 func (c *ChattoCore) CanBrowseRooms(ctx context.Context, userID, spaceID string) (bool, error) {
 	return c.hasSpacePermission(ctx, spaceID, userID, PermRoomList)
@@ -111,30 +168,32 @@ func (c *ChattoCore) CanJoinRoom(ctx context.Context, userID, spaceID string) (b
 	return c.hasSpacePermission(ctx, spaceID, userID, PermRoomJoin)
 }
 
+// CanLeaveSpace checks if a user can leave a specific space.
+// Backed by the renamed PermServerLeave permission per ADR-028.
+func (c *ChattoCore) CanLeaveSpace(ctx context.Context, userID, spaceID string) (bool, error) {
+	return c.hasSpacePermission(ctx, spaceID, userID, PermServerLeave)
+}
+
 // ============================================================================
-// Room-Scoped Permissions
+// Room-scoped permissions
 // ============================================================================
 
 // CanPostMessage checks if a user can post new root messages in a specific room.
-// Uses room-level permission resolution (checks room overrides, then space defaults).
 func (c *ChattoCore) CanPostMessage(ctx context.Context, userID, spaceID, roomID string) (bool, error) {
 	return c.hasRoomPermission(ctx, spaceID, roomID, userID, PermMessagePost)
 }
 
 // CanPostInThread checks if a user can post messages in a thread.
-// Uses room-level permission resolution (checks room overrides, then space defaults).
 func (c *ChattoCore) CanPostInThread(ctx context.Context, userID, spaceID, roomID string) (bool, error) {
 	return c.hasRoomPermission(ctx, spaceID, roomID, userID, PermMessagePostInThread)
 }
 
 // CanReply checks if a user can use reply attribution (inReplyTo) on room-level messages.
-// Uses room-level permission resolution (checks room overrides, then space defaults).
 func (c *ChattoCore) CanReply(ctx context.Context, userID, spaceID, roomID string) (bool, error) {
 	return c.hasRoomPermission(ctx, spaceID, roomID, userID, PermMessageReply)
 }
 
 // CanReplyInThread checks if a user can use reply attribution (inReplyTo) on thread messages.
-// Uses room-level permission resolution (checks room overrides, then space defaults).
 func (c *ChattoCore) CanReplyInThread(ctx context.Context, userID, spaceID, roomID string) (bool, error) {
 	return c.hasRoomPermission(ctx, spaceID, roomID, userID, PermMessageReplyInThread)
 }
@@ -167,32 +226,4 @@ func (c *ChattoCore) CanDeleteOwnMessage(ctx context.Context, userID, spaceID, r
 // CanDeleteAnyMessage checks if a user can delete any user's messages in a specific room.
 func (c *ChattoCore) CanDeleteAnyMessage(ctx context.Context, userID, spaceID, roomID string) (bool, error) {
 	return c.hasRoomPermission(ctx, spaceID, roomID, userID, PermMessageDeleteAny)
-}
-
-// ============================================================================
-// Space Access Permissions
-// ============================================================================
-
-// CanListSpace checks if a user can see a specific space in the browse/discovery list.
-//
-// Transitional shim: the underlying space.list permission is dropped per ADR-028.
-// Discovery is unrestricted post-consolidation; this helper returns true so the
-// existing browse UI keeps working. Removed in PR 10 along with the spaces query.
-func (c *ChattoCore) CanListSpace(ctx context.Context, userID, spaceID string) (bool, error) {
-	return true, nil
-}
-
-// CanJoinSpace checks if a user can join a specific space.
-//
-// Transitional shim: the underlying space.join permission is dropped per ADR-028.
-// Returning true preserves the existing dev workflow during PRs 1–9 while spaces
-// still exist as a transitional concept; removed in PR 10.
-func (c *ChattoCore) CanJoinSpace(ctx context.Context, userID, spaceID string) (bool, error) {
-	return true, nil
-}
-
-// CanLeaveSpace checks if a user can leave a specific space.
-// Backed by the renamed PermServerLeave permission per ADR-028.
-func (c *ChattoCore) CanLeaveSpace(ctx context.Context, userID, spaceID string) (bool, error) {
-	return c.hasSpacePermission(ctx, spaceID, userID, PermServerLeave)
 }

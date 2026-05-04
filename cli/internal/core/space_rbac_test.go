@@ -1289,46 +1289,10 @@ func TestChattoCore_ListInstanceRolesWithSpacePermissions(t *testing.T) {
 // Space Join/Leave Permission Tests
 // =============================================================================
 
-func TestSpaceJoinPermission(t *testing.T) {
-	core, _ := setupTestCore(t)
-	ctx := testContext(t)
-
-	creator, _ := core.CreateUser(ctx, "system", "creator", "Creator", "password")
-
-	// Create a space (creator is automatically an admin)
-	space, err := core.CreateSpace(ctx, creator.Id, "Test Space", "A test space")
-	if err != nil {
-		t.Fatalf("Failed to create space: %v", err)
-	}
-
-	t.Run("space.join is granted to everyone at instance level", func(t *testing.T) {
-		joiner, _ := core.CreateUser(ctx, "system", "checker", "Checker", "password")
-
-		canJoin, err := core.CanJoinSpace(ctx, joiner.Id, space.Id)
-		if err != nil {
-			t.Fatalf("Failed to check CanJoinSpace: %v", err)
-		}
-		if !canJoin {
-			t.Error("Expected user to be able to join space via instance-level grant")
-		}
-	})
-
-	t.Run("any user can join space (CanJoinSpace returns true)", func(t *testing.T) {
-		joiner, _ := core.CreateUser(ctx, "system", "joiner", "Joiner", "password")
-
-		canJoin, err := core.CanJoinSpace(ctx, joiner.Id, space.Id)
-		if err != nil {
-			t.Fatalf("Failed to check CanJoinSpace: %v", err)
-		}
-		if !canJoin {
-			t.Error("Expected user to be able to join space")
-		}
-	})
-
-	// Per ADR-028 the space.join permission is dropped — CanJoinSpace is a
-	// transitional shim that always returns true, so the "deny space.join
-	// blocks join" scenario no longer applies.
-}
+// TestSpaceJoinPermission tested CanJoinSpace, which is removed in PR 3 of
+// the Phase 2 refactor: per ADR-028 the underlying space.join permission is
+// dropped (joining the server is registering, not a separately-gated action).
+// The joinSpace mutation itself stays alive until PR 10.
 
 func TestSpaceLeavePermission(t *testing.T) {
 	core, _ := setupTestCore(t)

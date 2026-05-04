@@ -405,20 +405,11 @@ func TestChattoCore_HasPermission_Member(t *testing.T) {
 // Can* Helper Tests
 // ============================================================================
 
-func TestChattoCore_CanCreateSpace(t *testing.T) {
-	core, _ := setupTestCore(t)
-	ctx := testContext(t)
-
-	t.Run("any user can create spaces", func(t *testing.T) {
-		can, err := core.CanSpaceCreate(ctx, "any-user")
-		if err != nil {
-			t.Fatalf("Failed to check CanSpaceCreate: %v", err)
-		}
-		if !can {
-			t.Error("Expected CanSpaceCreate to return true for any user")
-		}
-	})
-}
+// TestChattoCore_CanCreateSpace tested the CanSpaceCreate helper, which is
+// removed in PR 3 of the Phase 2 refactor: per ADR-028 the underlying
+// space.create permission is dropped (no nested servers post-consolidation).
+// The createSpace mutation itself stays alive until PR 10 alongside the
+// schema flip.
 
 func TestChattoCore_CanAdminAccess(t *testing.T) {
 	core, _ := setupTestCore(t)

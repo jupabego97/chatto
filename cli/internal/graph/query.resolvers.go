@@ -195,24 +195,10 @@ func (r *queryResolver) Spaces(ctx context.Context) ([]*corev1.Space, error) {
 			continue
 		}
 
-		// For authenticated users, check if they are a member OR have space.list permission
-		isMember, err := r.core.SpaceMembershipExists(ctx, actorID, space.Id)
-		if err != nil {
-			continue
-		}
-		if isMember {
-			filteredSpaces = append(filteredSpaces, space)
-			continue
-		}
-
-		// Non-members need space.list permission to see the space in browse
-		canSee, err := r.core.CanListSpace(ctx, actorID, space.Id)
-		if err != nil {
-			continue
-		}
-		if canSee {
-			filteredSpaces = append(filteredSpaces, space)
-		}
+		// Per ADR-028 the space.list permission is dropped — discovery is
+		// unrestricted post-consolidation, so members and non-members alike
+		// see every space.
+		filteredSpaces = append(filteredSpaces, space)
 	}
 
 	return filteredSpaces, nil

@@ -401,19 +401,22 @@ func (r *viewerResolver) CanViewAdmin(ctx context.Context, obj *model.Viewer) (b
 }
 
 // CanCreateSpace is the resolver for the canCreateSpace field.
+//
+// Per ADR-028 the space.create permission is dropped (no nested servers
+// post-consolidation). Returning true preserves the existing dev workflow
+// while spaces still exist as a transitional concept; the field itself is
+// removed in PR 10 alongside the schema flip.
 func (r *viewerResolver) CanCreateSpace(ctx context.Context, obj *model.Viewer) (bool, error) {
-	if obj.IsConfigOwner {
-		return true, nil
-	}
-	return r.core.CanSpaceCreate(ctx, obj.UserID)
+	return true, nil
 }
 
 // CanListSpaces is the resolver for the canListSpaces field.
+//
+// Per ADR-028 the space.list permission is dropped (server discovery is
+// unrestricted post-consolidation). The field is removed in PR 10 alongside
+// the schema flip.
 func (r *viewerResolver) CanListSpaces(ctx context.Context, obj *model.Viewer) (bool, error) {
-	if obj.IsConfigOwner {
-		return true, nil
-	}
-	return r.core.CanSpaceList(ctx, obj.UserID)
+	return true, nil
 }
 
 // CanViewDMs is the resolver for the canViewDMs field.
@@ -449,11 +452,16 @@ func (r *viewerResolver) CanAdminManageUsers(ctx context.Context, obj *model.Vie
 }
 
 // CanAdminViewSpaces is the resolver for the canAdminViewSpaces field.
+//
+// Per ADR-028 the admin.view-spaces permission is dropped (no spaces admin
+// page post-consolidation). For now we delegate to plain admin access so the
+// existing nav still works; the field is removed in PR 10 alongside the
+// schema flip.
 func (r *viewerResolver) CanAdminViewSpaces(ctx context.Context, obj *model.Viewer) (bool, error) {
 	if obj.IsConfigOwner {
 		return true, nil
 	}
-	return r.core.CanAdminSpacesView(ctx, obj.UserID)
+	return r.core.CanAdminAccess(ctx, obj.UserID)
 }
 
 // CanAdminViewRoles is the resolver for the canAdminViewRoles field.
