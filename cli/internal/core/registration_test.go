@@ -150,7 +150,7 @@ func TestChattoCore_RegistrationTokenExpiration(t *testing.T) {
 
 		// Verify the underlying KV message carries a per-key TTL header.
 		// The Nats-TTL header is what NATS uses to enforce per-message expiry.
-		rawMsg, err := core.js.Stream(ctx, "KV_INSTANCE")
+		rawMsg, err := core.js.Stream(ctx, "KV_SERVER")
 		if err != nil {
 			t.Fatalf("Failed to get stream: %v", err)
 		}

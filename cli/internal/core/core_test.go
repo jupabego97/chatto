@@ -276,9 +276,9 @@ func TestPerSpaceBucketCache_BucketConfigured(t *testing.T) {
 	}
 
 	// Get the bucket to inspect its configuration
-	kv, err := js.KeyValue(ctx, "INSTANCE")
+	kv, err := js.KeyValue(ctx, "SERVER")
 	if err != nil {
-		t.Fatalf("Failed to get INSTANCE bucket: %v", err)
+		t.Fatalf("Failed to get SERVER bucket: %v", err)
 	}
 
 	status, err := kv.Status(ctx)
@@ -286,8 +286,8 @@ func TestPerSpaceBucketCache_BucketConfigured(t *testing.T) {
 		t.Fatalf("Failed to get bucket status: %v", err)
 	}
 
-	if status.Bucket() != "INSTANCE" {
-		t.Errorf("Expected bucket name 'INSTANCE', got '%s'", status.Bucket())
+	if status.Bucket() != "SERVER" {
+		t.Errorf("Expected bucket name 'SERVER', got '%s'", status.Bucket())
 	}
 
 	// Verify it's using file storage (not memory)

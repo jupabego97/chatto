@@ -432,7 +432,7 @@ type storage struct {
 	runtimeKV   jetstream.KeyValue    // RUNTIME — per-room read state, mention status (consolidated; broader RUNTIME merge pending)
 	attachments *lazycache.Cache[jetstream.ObjectStore] // SPACE_{id}_ASSETS — TODO: collapse into a single ATTACHMENTS store
 
-	presenceKV            jetstream.KeyValue     // USER_PRESENCE — presence (rename to PRESENCE pending)
+	presenceKV            jetstream.KeyValue     // PRESENCE — presence (Go field rename pending PR 9)
 	imageCacheStore       jetstream.ObjectStore  // Optional: cached resized images (nil if disabled)
 	notificationsKV       jetstream.KeyValue     // User notifications with TTL
 	callStateKV           jetstream.KeyValue     // Active voice call participants (ephemeral, memory-backed)
@@ -441,11 +441,12 @@ type storage struct {
 
 // newStorage initializes all JetStream KV buckets and streams.
 func newStorage(js jetstream.JetStream, ctx context.Context, cfg config.CoreConfig) (*storage, error) {
-	// Initialize INSTANCE KV bucket for all instance-level data
+	// Initialize SERVER KV bucket for all server-level data per ADR-029.
 	// Uses subject-based keys: user.{userId}, space.{spaceId}, space_membership.{spaceId}.{userId}, etc.
+	// The Go field name `instanceKV` is kept here until PR 9 (Instance → Server rename).
 	instanceKV, err := js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
-		Bucket:      "INSTANCE",
-		Description: "Instance-level data (users, spaces, memberships)",
+		Bucket:      "SERVER",
+		Description: "Server-level data (users, spaces, memberships)",
 		Storage:     jetstream.FileStorage,
 		Replicas:    cfg.Replicas,
 		// Enables per-key TTL via jetstream.KeyTTL(...) on Create. Used for short-lived
@@ -455,29 +456,32 @@ func newStorage(js jetstream.JetStream, ctx context.Context, cfg config.CoreConf
 		LimitMarkerTTL: 24 * time.Hour,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create INSTANCE KV bucket: %w", err)
+		return nil, fmt.Errorf("failed to create SERVER KV bucket: %w", err)
 	}
 
-	// Initialize instance object store
+	// Initialize ASSETS object store per ADR-029. Go field `instanceStore` is
+	// kept here until PR 9.
 	instanceStore, err := js.CreateOrUpdateObjectStore(ctx, jetstream.ObjectStoreConfig{
-		Bucket:      "INSTANCE_ASSETS",
-		Description: "Instance-level assets (user avatars, space icons, etc.)",
+		Bucket:      "ASSETS",
+		Description: "Server-level assets (user avatars, space icons, etc.)",
 		Storage:     jetstream.FileStorage,
 		Compression: true,
 		Replicas:    cfg.Replicas,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create INSTANCE object store: %w", err)
+		return nil, fmt.Errorf("failed to create ASSETS object store: %w", err)
 	}
 
-	// Initialize instance-level presence KV bucket (memory-based with TTL)
+	// Initialize PRESENCE KV bucket per ADR-029 (memory-based with TTL).
+	// MaxBytes caps memory growth at 64MiB even under unexpected load.
 	presenceKV, err := js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
-		Bucket:         "USER_PRESENCE",
-		Description:    "Instance-level user presence status",
+		Bucket:         "PRESENCE",
+		Description:    "User presence status (memory-backed, server-wide)",
 		Storage:        jetstream.MemoryStorage, // Memory-based for speed, no persistence needed
 		TTL:            PresenceTTL,             // Auto-expire entries that aren't refreshed
 		History:        1,                       // Only current value needed
 		LimitMarkerTTL: PresenceTTL,             // Emit delete markers on TTL expiry so watchers get notified
+		MaxBytes:       64 * 1024 * 1024,        // 64MiB cap
 		Replicas:       cfg.Replicas,
 	})
 	if err != nil {

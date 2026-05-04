@@ -1097,9 +1097,9 @@ func TestChattoCore_SetUserAvatar_DoesNotModifyUserRecord(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create JetStream context: %v", err)
 	}
-	kv, err := js.KeyValue(ctx, "INSTANCE")
+	kv, err := js.KeyValue(ctx, "SERVER")
 	if err != nil {
-		t.Fatalf("Failed to get INSTANCE KV bucket: %v", err)
+		t.Fatalf("Failed to get SERVER KV bucket: %v", err)
 	}
 
 	// Create a user

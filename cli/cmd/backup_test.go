@@ -22,7 +22,7 @@ func TestSkipReason(t *testing.T) {
 		wantReason string
 	}{
 		// Should be skipped
-		{"KV_USER_PRESENCE", true, "ephemeral (memory storage)"},
+		{"KV_PRESENCE", true, "ephemeral (memory storage)"},
 		{"KV_CALL_STATE", true, "ephemeral (memory storage)"},
 		{"KV_ENCRYPTION_KEYS", true, "security (keys excluded from backups)"},
 		{"KV_LINK_PREVIEW_CACHE", true, "cache (regeneratable)"},
@@ -261,7 +261,7 @@ func TestBackupRestoreRoundTrip(t *testing.T) {
 
 	// Create a memory-only stream (should be skipped)
 	_, err = srcJS.CreateKeyValue(ctx, jetstream.KeyValueConfig{
-		Bucket:  "USER_PRESENCE",
+		Bucket:  "PRESENCE",
 		Storage: jetstream.MemoryStorage,
 	})
 	if err != nil {
@@ -306,15 +306,15 @@ func TestBackupRestoreRoundTrip(t *testing.T) {
 	}
 	manifest.Stats.TotalStreams = len(streamNames) - manifest.Stats.Skipped - manifest.Stats.Failed
 
-	// Verify the backup skipped USER_PRESENCE
+	// Verify the backup skipped PRESENCE
 	var skippedPresence bool
 	for _, s := range manifest.Streams {
-		if s.Name == "KV_USER_PRESENCE" && s.Type == "skipped" {
+		if s.Name == "KV_PRESENCE" && s.Type == "skipped" {
 			skippedPresence = true
 		}
 	}
 	if !skippedPresence {
-		t.Error("Expected KV_USER_PRESENCE to be skipped in backup")
+		t.Error("Expected KV_PRESENCE to be skipped in backup")
 	}
 
 	// Write manifest
@@ -440,10 +440,10 @@ func TestBackupRestoreRoundTrip(t *testing.T) {
 		}
 	}
 
-	// Verify USER_PRESENCE was NOT restored (it was skipped)
-	_, err = dstJS.KeyValue(ctx, "USER_PRESENCE")
+	// Verify PRESENCE was NOT restored (it was skipped)
+	_, err = dstJS.KeyValue(ctx, "PRESENCE")
 	if err == nil {
-		t.Error("USER_PRESENCE should not have been restored (was skipped during backup)")
+		t.Error("PRESENCE should not have been restored (was skipped during backup)")
 	}
 }
 

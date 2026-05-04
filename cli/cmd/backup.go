@@ -329,7 +329,7 @@ func backupStream(ctx context.Context, mgr *jsm.Manager, streamName, streamsDir 
 // or an empty string if it should be backed up.
 func skipReason(name string) string {
 	switch name {
-	case "KV_USER_PRESENCE":
+	case "KV_PRESENCE":
 		return "ephemeral (memory storage)"
 	case "KV_CALL_STATE":
 		return "ephemeral (memory storage)"

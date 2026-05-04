@@ -62,7 +62,7 @@ func TestChattoCore_CreateSpace_EagerResourceCreation(t *testing.T) {
 	// buckets were collapsed into single global buckets created at server
 	// startup, so this now just confirms the server-wide ones exist after
 	// CreateSpace.
-	kvBuckets := []string{"INSTANCE", "BODIES", "REACTIONS", "THREADS", "RUNTIME"}
+	kvBuckets := []string{"SERVER", "BODIES", "REACTIONS", "THREADS", "RUNTIME"}
 	for _, bucketName := range kvBuckets {
 		_, err := js.KeyValue(ctx, bucketName)
 		if err != nil {
@@ -1010,9 +1010,9 @@ func TestSpaceMemberships_BucketIsCorrectlyConfigured(t *testing.T) {
 	}
 
 	// Get the bucket to inspect its configuration
-	kv, err := js.KeyValue(ctx, "INSTANCE")
+	kv, err := js.KeyValue(ctx, "SERVER")
 	if err != nil {
-		t.Fatalf("Failed to get INSTANCE bucket: %v", err)
+		t.Fatalf("Failed to get SERVER bucket: %v", err)
 	}
 
 	status, err := kv.Status(ctx)
@@ -1020,8 +1020,8 @@ func TestSpaceMemberships_BucketIsCorrectlyConfigured(t *testing.T) {
 		t.Fatalf("Failed to get bucket status: %v", err)
 	}
 
-	if status.Bucket() != "INSTANCE" {
-		t.Errorf("Expected bucket name 'INSTANCE', got '%s'", status.Bucket())
+	if status.Bucket() != "SERVER" {
+		t.Errorf("Expected bucket name 'SERVER', got '%s'", status.Bucket())
 	}
 
 	// Verify it's using file storage (not memory)
