@@ -34,32 +34,19 @@ const (
 type Permission string
 
 const (
-	// ===== Space Permissions =====
-	// These control access to spaces at the instance level.
+	// ===== Server Permissions =====
+	// These apply at the server scope (the deployment-wide membership boundary).
+	//
+	// Per ADR-021 / ADR-028, the post-merge permission model has only two scopes
+	// (`server`, `room`) and a single role namespace. The previous space.* and
+	// admin.view-spaces permissions are dropped entirely; space.leave and
+	// space.manage are renamed to server.leave / server.manage.
 
-	// PermSpaceList allows viewing the list of spaces.
-	// Scope: instance only (controls discovery)
-	PermSpaceList Permission = "space.list"
+	// PermServerLeave allows leaving the server.
+	PermServerLeave Permission = "server.leave"
 
-	// PermSpaceCreate allows creating new spaces.
-	// Scope: instance only
-	PermSpaceCreate Permission = "space.create"
-
-	// PermSpaceJoin allows joining a space.
-	// Scope: instance (default for all spaces), space (override for specific space)
-	PermSpaceJoin Permission = "space.join"
-
-	// PermSpaceLeave allows leaving a space.
-	// Scope: instance, space
-	PermSpaceLeave Permission = "space.leave"
-
-	// PermSpaceManage allows updating space settings (name, description, logo).
-	// Scope: space only
-	PermSpaceManage Permission = "space.manage"
-
-	// PermSpaceDelete allows deleting a space entirely.
-	// Scope: space only
-	PermSpaceDelete Permission = "space.delete"
+	// PermServerManage allows updating server settings (name, description, branding).
+	PermServerManage Permission = "server.manage"
 
 	// ===== Room Permissions =====
 
@@ -160,10 +147,6 @@ const (
 	// Scope: instance only
 	PermAdminUsersManage Permission = "admin.manage-users"
 
-	// PermAdminSpacesView allows viewing the spaces page in admin.
-	// Scope: instance only
-	PermAdminSpacesView Permission = "admin.view-spaces"
-
 	// PermAdminRolesView allows viewing the instance roles page in admin.
 	// Scope: instance only
 	PermAdminRolesView Permission = "admin.view-roles"
@@ -212,13 +195,11 @@ type PermissionMetadata struct {
 
 // allPermissions holds metadata for all permissions.
 var allPermissions = []PermissionMetadata{
-	// Space permissions
-	{PermSpaceList, "List Spaces", "View the list of spaces", CategorySpace, []PermissionScope{ScopeInstance, ScopeSpace}},
-	{PermSpaceCreate, "Create Spaces", "Create new spaces", CategorySpace, []PermissionScope{ScopeInstance}},
-	{PermSpaceJoin, "Join Spaces", "Join spaces", CategorySpace, []PermissionScope{ScopeInstance, ScopeSpace}},
-	{PermSpaceLeave, "Leave Spaces", "Leave spaces", CategorySpace, []PermissionScope{ScopeInstance, ScopeSpace}},
-	{PermSpaceManage, "Manage Space", "Update space settings (name, description, logo)", CategorySpace, []PermissionScope{ScopeSpace}},
-	{PermSpaceDelete, "Delete Space", "Delete the space and all its data", CategorySpace, []PermissionScope{ScopeSpace}},
+	// Server permissions
+	// Note: scopes still listed as ScopeInstance/ScopeSpace during the dual-RBAC
+	// transition; ADR-021 PR 4 collapses these into a single ScopeServer.
+	{PermServerLeave, "Leave Server", "Leave the server", CategorySpace, []PermissionScope{ScopeInstance, ScopeSpace}},
+	{PermServerManage, "Manage Server", "Update server settings (name, description, branding)", CategorySpace, []PermissionScope{ScopeSpace}},
 
 	// Room permissions
 	{PermRoomList, "List Rooms", "View the list of rooms", CategoryRoom, []PermissionScope{ScopeInstance, ScopeSpace}},
@@ -251,7 +232,6 @@ var allPermissions = []PermissionMetadata{
 	{PermAdminAccess, "Admin Access", "Access the admin panel", CategoryAdmin, []PermissionScope{ScopeInstance}},
 	{PermAdminUsersView, "View Users", "View the users page in admin", CategoryAdmin, []PermissionScope{ScopeInstance}},
 	{PermAdminUsersManage, "Manage Users", "Edit user role assignments", CategoryAdmin, []PermissionScope{ScopeInstance}},
-	{PermAdminSpacesView, "View Spaces", "View the spaces page in admin", CategoryAdmin, []PermissionScope{ScopeInstance}},
 	{PermAdminRolesView, "View Roles", "View the instance roles page in admin", CategoryAdmin, []PermissionScope{ScopeInstance}},
 	{PermAdminRolesManage, "Manage Instance Roles", "Full control over instance roles: create, edit, delete, reorder, and manage permissions", CategoryAdmin, []PermissionScope{ScopeInstance}},
 	{PermAdminSystemView, "View System", "View system and data pages in admin", CategoryAdmin, []PermissionScope{ScopeInstance}},
@@ -339,9 +319,6 @@ func PermissionsForCategory(category PermissionCategory) []PermissionMetadata {
 // DefaultInstanceEveryonePermissions returns permissions granted to all authenticated users.
 func DefaultInstanceEveryonePermissions() []Permission {
 	return []Permission{
-		PermSpaceList,      // Can browse spaces
-		PermSpaceJoin,      // Can join spaces
-		PermSpaceCreate,    // Can create spaces
 		PermUserDeleteSelf, // Can delete own account
 		PermDMView,         // Can view DMs
 		PermDMWrite,        // Can send DMs
@@ -353,31 +330,24 @@ func DefaultInstanceEveryonePermissions() []Permission {
 func DefaultInstanceModeratorPermissions() []Permission {
 	return []Permission{
 		// Same as verified
-		PermSpaceList,
-		PermSpaceJoin,
-		PermSpaceCreate,
 		PermDMView,
 		PermDMWrite,
 		// Plus admin view access (no management permissions)
 		PermAdminAccess,
 		PermAdminUsersView,
-		PermAdminSpacesView,
 		PermAdminRolesView,
 	}
 }
 
 // DefaultSpaceEveryonePermissions returns permissions granted to space members by default.
-// Controls space discoverability (space.list) and basic room/message permissions.
-// Note: room.create is NOT included - space admins must explicitly grant it.
-// Note: space.join is NOT included here - it's controlled at instance level (everyone role)
-// to prevent non-members from incorrectly getting join permission via the space "everyone" role.
+// Controls basic room/message permissions for the post-merge "everyone" role within
+// the (transitional) space scope.
 func DefaultSpaceEveryonePermissions() []Permission {
 	return []Permission{
-		PermSpaceList,
 		PermRoomList,
 		PermRoomJoin,
 		PermRoomLeave,
-		PermSpaceLeave,
+		PermServerLeave,
 		PermMessagePost,
 		PermMessagePostInThread,
 		PermMessageReply,
@@ -397,7 +367,7 @@ func DefaultSpaceModeratorPermissions() []Permission {
 		PermRoomCreate,
 		PermRoomJoin,
 		PermRoomLeave,
-		PermSpaceLeave,
+		PermServerLeave,
 		PermMessagePost,
 		PermMessagePostInThread,
 		PermMessageReply,
@@ -421,7 +391,7 @@ func DefaultSpaceAdminPermissions() []Permission {
 		PermRoomCreate,
 		PermRoomJoin,
 		PermRoomLeave,
-		PermSpaceLeave,
+		PermServerLeave,
 		PermMessagePost,
 		PermMessagePostInThread,
 		PermMessageReply,
@@ -434,7 +404,7 @@ func DefaultSpaceAdminPermissions() []Permission {
 		PermMemberRemove,
 		PermMessageDeleteAny,
 		// Plus admin powers
-		PermSpaceManage,
+		PermServerManage,
 		PermMemberInvite,
 		PermRoleManage,
 		PermRoleAssign,

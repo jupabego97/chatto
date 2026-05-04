@@ -837,7 +837,7 @@ func TestChattoCore_hasSpacePermission(t *testing.T) {
 	}
 
 	// User should NOT have a permission not granted
-	has, err = core.hasSpacePermission(ctx, space.Id, "user123", PermSpaceManage)
+	has, err = core.hasSpacePermission(ctx, space.Id, "user123", PermServerManage)
 	if err != nil {
 		t.Fatalf("Failed to check permission: %v", err)
 	}
@@ -859,7 +859,7 @@ func TestChattoCore_hasSpacePermission_MultipleRoles(t *testing.T) {
 	core.GrantSpacePermission(ctx, "test-user", space.Id, "testmod", PermRoleAssign)
 
 	core.CreateRole(ctx, "test-user", space.Id, "admin", "Admin", "Full access")
-	core.GrantSpacePermission(ctx, "test-user", space.Id, "admin", PermSpaceManage)
+	core.GrantSpacePermission(ctx, "test-user", space.Id, "admin", PermServerManage)
 
 	// Assign both roles to user
 	core.AssignRole(ctx, "test-user", space.Id, "user123", "testmod")
@@ -871,9 +871,9 @@ func TestChattoCore_hasSpacePermission_MultipleRoles(t *testing.T) {
 		t.Error("Expected user to have PermRoleAssign from testmod role")
 	}
 
-	has, _ = core.hasSpacePermission(ctx, space.Id, "user123", PermSpaceManage)
+	has, _ = core.hasSpacePermission(ctx, space.Id, "user123", PermServerManage)
 	if !has {
-		t.Error("Expected user to have PermSpaceManage from admin role")
+		t.Error("Expected user to have PermServerManage from admin role")
 	}
 }
 
@@ -910,7 +910,7 @@ func TestChattoCore_requireSpacePermission(t *testing.T) {
 	}
 
 	// Should fail for non-granted permission
-	err = core.requireSpacePermission(ctx, space.Id, "user123", PermSpaceManage)
+	err = core.requireSpacePermission(ctx, space.Id, "user123", PermServerManage)
 	if !errors.Is(err, ErrPermissionDenied) {
 		t.Errorf("Expected ErrPermissionDenied, got %v", err)
 	}
@@ -941,7 +941,8 @@ func TestChattoCore_CreateDefaultRoles(t *testing.T) {
 	// (who has the owner role) has all the expected permissions.
 
 	// Spot-check a few permissions to verify owner has them all
-	ownerPermsToCheck := []Permission{PermSpaceManage, PermSpaceDelete, PermRoleManage, PermRoleAssign}
+	// Per ADR-028 PermSpaceDelete is dropped (server lifecycle is operator-controlled).
+	ownerPermsToCheck := []Permission{PermServerManage, PermRoleManage, PermRoleAssign}
 	for _, perm := range ownerPermsToCheck {
 		has, err := core.hasSpacePermission(ctx, space.Id, "test-user", perm)
 		if err != nil {
@@ -1324,22 +1325,9 @@ func TestSpaceJoinPermission(t *testing.T) {
 		}
 	})
 
-	t.Run("denying space.join on everyone prevents joining", func(t *testing.T) {
-		// Deny space.join for everyone role at instance level
-		if err := core.DenyInstanceRolePermission(ctx, InstRoleEveryone, PermSpaceJoin); err != nil {
-			t.Fatalf("Failed to deny space.join: %v", err)
-		}
-
-		blocked, _ := core.CreateUser(ctx, "system", "blocked", "Blocked", "password")
-
-		canJoin, err := core.CanJoinSpace(ctx, blocked.Id, space.Id)
-		if err != nil {
-			t.Fatalf("Failed to check CanJoinSpace: %v", err)
-		}
-		if canJoin {
-			t.Error("Expected denied user to NOT be able to join space")
-		}
-	})
+	// Per ADR-028 the space.join permission is dropped — CanJoinSpace is a
+	// transitional shim that always returns true, so the "deny space.join
+	// blocks join" scenario no longer applies.
 }
 
 func TestSpaceLeavePermission(t *testing.T) {
@@ -1359,7 +1347,7 @@ func TestSpaceLeavePermission(t *testing.T) {
 		perms := DefaultSpaceEveryonePermissions()
 		hasSpaceLeave := false
 		for _, p := range perms {
-			if p == PermSpaceLeave {
+			if p == PermServerLeave {
 				hasSpaceLeave = true
 				break
 			}
@@ -1385,7 +1373,7 @@ func TestSpaceLeavePermission(t *testing.T) {
 
 	t.Run("revoking space.leave prevents leaving", func(t *testing.T) {
 		// Revoke space.leave from everyone role (use core function to also clear keys)
-		if err := core.RevokeSpacePermission(ctx, creator.Id, space.Id, SpaceRoleEveryone, PermSpaceLeave); err != nil {
+		if err := core.RevokeSpacePermission(ctx, creator.Id, space.Id, SpaceRoleEveryone, PermServerLeave); err != nil {
 			t.Fatalf("Failed to revoke space.leave: %v", err)
 		}
 
@@ -1492,7 +1480,7 @@ func TestChattoCore_GrantRoomRolePermission_InvalidScope(t *testing.T) {
 	room, _ := core.CreateRoom(ctx, "test-user", space.Id, "general", "General")
 
 	// space.manage is not room-scoped — should fail
-	err := core.GrantRoomRolePermission(ctx, "test-user", space.Id, room.Id, SpaceRoleEveryone, PermSpaceManage)
+	err := core.GrantRoomRolePermission(ctx, "test-user", space.Id, room.Id, SpaceRoleEveryone, PermServerManage)
 	if err == nil {
 		t.Error("Expected error for non-room-scoped permission, got nil")
 	}

@@ -42,7 +42,7 @@ func IsDMSpace(spaceID string) bool {
 //   - PermMessageReply: use reply attribution (inReplyTo) on messages
 //
 // Denied permissions (no one can do these in DMs):
-//   - PermSpaceManage, PermSpaceDelete: can't manage DM system space
+//   - PermServerManage: can't manage the DM system space
 //   - PermRoleManage, PermRoleAssign: no roles in DM space
 //   - PermRoomList: DM room listing uses separate API (ListDMConversations)
 //   - PermRoomCreate, PermRoomManage: DM rooms managed via FindOrCreateDM

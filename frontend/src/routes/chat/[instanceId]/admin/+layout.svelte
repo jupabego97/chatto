@@ -2,7 +2,6 @@
   import {
     PermAdminAccess,
     PermAdminUsersView,
-    PermAdminSpacesView,
     PermAdminRolesView,
     PermAdminRolesManage,
     PermAdminUsersManage,
@@ -12,10 +11,15 @@
 
   // Permission required for each admin sub-route (relative paths).
   // Used by getRoutePermission() to check against the current URL.
+  //
+  // Per ADR-028 the admin.view-spaces permission is dropped. While the
+  // spaces admin page itself still exists during the dual-RBAC transition
+  // (removed in PR 10 alongside the schema flip), it gates on plain
+  // PermAdminAccess instead of a spaces-specific permission.
   export const routePermissions: Record<string, Permission> = {
     '': PermAdminAccess,
     'users': PermAdminUsersView,
-    'spaces': PermAdminSpacesView,
+    'spaces': PermAdminAccess,
     'roles': PermAdminRolesView,
     'inspector': PermAdminRolesView,
     'system': PermAdminSystemView,
@@ -78,7 +82,7 @@
       href: resolve('/chat/[instanceId]/admin/spaces', { instanceId: instanceSegment }),
       label: 'Spaces',
       icon: 'iconify uil--comments',
-      perm: PermAdminSpacesView
+      perm: PermAdminAccess
     },
     {
       href: resolve('/chat/[instanceId]/admin/roles', { instanceId: instanceSegment }),

@@ -171,16 +171,11 @@ func (r *queryResolver) Spaces(ctx context.Context) ([]*corev1.Space, error) {
 		actorID = user.Id
 	}
 
-	// For authenticated users, check InstPermSpaceList
-	if actorID != "public" {
-		hasPerm, err := r.core.HasInstancePermission(ctx, actorID, core.PermSpaceList)
-		if err != nil {
-			return nil, err
-		}
-		if !hasPerm {
-			return nil, core.ErrPermissionDenied
-		}
-	}
+	// Per ADR-028 the space.list permission is dropped — server discovery is
+	// unrestricted post-consolidation. Anonymous and authenticated users see
+	// the same set of spaces. The Query.spaces field itself is removed in PR 10
+	// alongside the schema flip.
+	_ = actorID
 
 	allSpaces, err := r.core.ListSpaces(ctx)
 	if err != nil {

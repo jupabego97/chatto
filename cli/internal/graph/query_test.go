@@ -141,28 +141,11 @@ func TestQueryResolver_Spaces(t *testing.T) {
 		}
 	})
 
-	t.Run("user with denied spaces.browse permission cannot list spaces", func(t *testing.T) {
-		blockedUser, err := env.core.CreateUser(env.ctx, "system", "nobrowse", "NoBrowse", "password123")
-		if err != nil {
-			t.Fatalf("failed to create user: %v", err)
-		}
-
-		// Create a restriction role, deny spaces.browse on it, and assign to user
-		if _, err := env.core.CreateInstanceRole(env.ctx, "instance-browseblocked", "Browse Blocked", ""); err != nil {
-			t.Fatalf("failed to create role: %v", err)
-		}
-		if err := env.core.DenyInstancePermission(env.ctx, "instance-browseblocked", core.PermSpaceList); err != nil {
-			t.Fatalf("failed to deny permission: %v", err)
-		}
-		if err := env.core.AssignInstanceRole(env.ctx, core.SystemActorID, blockedUser.Id, "instance-browseblocked"); err != nil {
-			t.Fatalf("failed to assign role: %v", err)
-		}
-
-		_, err = env.resolver.Query().Spaces(env.authContextForUser(blockedUser))
-		if !errors.Is(err, core.ErrPermissionDenied) {
-			t.Errorf("expected ErrPermissionDenied, got %v", err)
-		}
-	})
+	// Per ADR-028 the space.list permission is dropped — server discovery is
+	// unrestricted post-consolidation, and the Query.spaces resolver no longer
+	// performs any per-user gating. The "deny spaces.browse blocks list"
+	// scenario therefore no longer applies; the test that previously asserted
+	// it has been removed.
 }
 
 func TestQueryResolver_Space(t *testing.T) {

@@ -596,28 +596,10 @@ func TestJoinSpace_Authorization(t *testing.T) {
 		}
 	})
 
-	t.Run("user with denied spaces.join permission cannot join", func(t *testing.T) {
-		blockedUser, err := env.core.CreateUser(env.ctx, "system", "blocked", "Blocked", "password123")
-		if err != nil {
-			t.Fatalf("failed to create user: %v", err)
-		}
-
-		// Create a restriction role, deny spaces.join on it, and assign to user
-		if _, err := env.core.CreateInstanceRole(env.ctx, "instance-joinblocked", "Join Blocked", ""); err != nil {
-			t.Fatalf("failed to create role: %v", err)
-		}
-		if err := env.core.DenyInstancePermission(env.ctx, "instance-joinblocked", core.PermSpaceJoin); err != nil {
-			t.Fatalf("failed to deny permission: %v", err)
-		}
-		if err := env.core.AssignInstanceRole(env.ctx, core.SystemActorID, blockedUser.Id, "instance-joinblocked"); err != nil {
-			t.Fatalf("failed to assign role: %v", err)
-		}
-
-		_, err = mutation.JoinSpace(env.authContextForUser(blockedUser), model.JoinSpaceInput{SpaceID: env.testSpace.Id})
-		if !errors.Is(err, core.ErrPermissionDenied) {
-			t.Errorf("expected ErrPermissionDenied, got %v", err)
-		}
-	})
+	// Per ADR-028 the space.join permission is dropped — joining the server is
+	// equivalent to registering, not a separately-gated action. The "denied
+	// space.join blocks join" scenario therefore no longer applies; the test
+	// that previously asserted it has been removed.
 }
 
 // ============================================================================

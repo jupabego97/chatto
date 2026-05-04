@@ -51,7 +51,9 @@ func (r *PermissionResolver) ExplainSpacePermission(ctx context.Context, userID,
 		return exp, nil
 	}
 
-	if PermissionAppliesAtScope(perm, ScopeSpace) && perm != PermSpaceJoin && perm != PermSpaceList {
+	// Discovery permissions (space.join / space.list) used to be exempted; they're
+	// dropped per ADR-028 so the precheck now applies to every space-scoped perm.
+	if PermissionAppliesAtScope(perm, ScopeSpace) {
 		isMember, err := r.core.SpaceMembershipExists(ctx, userID, spaceID)
 		if err != nil {
 			return exp, fmt.Errorf("failed to check space membership: %w", err)

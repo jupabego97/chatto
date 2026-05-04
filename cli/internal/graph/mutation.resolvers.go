@@ -422,8 +422,11 @@ func (r *mutationResolver) CreateSpace(ctx context.Context, input model.CreateSp
 		return nil, err
 	}
 
-	// Authorization: check InstPermSpaceCreate
-	hasPerm, err := r.core.HasInstancePermission(ctx, user.Id, core.PermSpaceCreate)
+	// Authorization: per ADR-028 the space.create permission is dropped — there
+	// are no nested servers post-consolidation. We delegate to CanSpaceCreate
+	// which is a transitional shim that always allows; the createSpace mutation
+	// itself is removed in PR 10 alongside the schema flip.
+	hasPerm, err := r.core.CanSpaceCreate(ctx, user.Id)
 	if err != nil {
 		return nil, err
 	}
@@ -606,16 +609,10 @@ func (r *mutationResolver) JoinSpace(ctx context.Context, input model.JoinSpaceI
 		return false, err
 	}
 
-	// Authorization: check InstPermSpaceJoin (instance-level permission)
-	hasPerm, err := r.core.HasInstancePermission(ctx, user.Id, core.PermSpaceJoin)
-	if err != nil {
-		return false, err
-	}
-	if !hasPerm {
-		return false, core.ErrPermissionDenied
-	}
-
-	// Authorization: check space.join (space-level permission)
+	// Authorization: per ADR-028 the instance-level space.join permission is
+	// dropped (joining the server is registering, not a separately-gated action).
+	// The remaining per-space CanJoinSpace check is also a transitional shim;
+	// removed in PR 10 alongside the schema flip.
 	canJoin, err := r.core.CanJoinSpace(ctx, user.Id, input.SpaceID)
 	if err != nil {
 		return false, err

@@ -52,35 +52,13 @@ export const CategoryUser: PermissionCategory = "user";
  */
 export type Permission = string;
 /**
- * PermSpaceList allows viewing the list of spaces.
- * Scope: instance only (controls discovery)
+ * PermServerLeave allows leaving the server.
  */
-export const PermSpaceList: Permission = "space.list";
+export const PermServerLeave: Permission = "server.leave";
 /**
- * PermSpaceCreate allows creating new spaces.
- * Scope: instance only
+ * PermServerManage allows updating server settings (name, description, branding).
  */
-export const PermSpaceCreate: Permission = "space.create";
-/**
- * PermSpaceJoin allows joining a space.
- * Scope: instance (default for all spaces), space (override for specific space)
- */
-export const PermSpaceJoin: Permission = "space.join";
-/**
- * PermSpaceLeave allows leaving a space.
- * Scope: instance, space
- */
-export const PermSpaceLeave: Permission = "space.leave";
-/**
- * PermSpaceManage allows updating space settings (name, description, logo).
- * Scope: space only
- */
-export const PermSpaceManage: Permission = "space.manage";
-/**
- * PermSpaceDelete allows deleting a space entirely.
- * Scope: space only
- */
-export const PermSpaceDelete: Permission = "space.delete";
+export const PermServerManage: Permission = "server.manage";
 /**
  * PermRoomList allows viewing the list of rooms in a space.
  * Scope: instance (default), space (override), room (override for specific room)
@@ -192,11 +170,6 @@ export const PermAdminUsersView: Permission = "admin.view-users";
  * Scope: instance only
  */
 export const PermAdminUsersManage: Permission = "admin.manage-users";
-/**
- * PermAdminSpacesView allows viewing the spaces page in admin.
- * Scope: instance only
- */
-export const PermAdminSpacesView: Permission = "admin.view-spaces";
 /**
  * PermAdminRolesView allows viewing the instance roles page in admin.
  * Scope: instance only

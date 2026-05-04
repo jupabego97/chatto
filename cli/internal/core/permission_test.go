@@ -11,18 +11,18 @@ import (
 
 func TestGetPermissionMetadata(t *testing.T) {
 	t.Run("returns correct metadata for known permission", func(t *testing.T) {
-		meta, ok := GetPermissionMetadata(PermSpaceCreate)
+		meta, ok := GetPermissionMetadata(PermDMView)
 		if !ok {
-			t.Fatal("Expected to find metadata for space.create")
+			t.Fatal("Expected to find metadata for dm.view")
 		}
-		if meta.Permission != PermSpaceCreate {
-			t.Errorf("Permission = %v, want %v", meta.Permission, PermSpaceCreate)
+		if meta.Permission != PermDMView {
+			t.Errorf("Permission = %v, want %v", meta.Permission, PermDMView)
 		}
-		if meta.DisplayName != "Create Spaces" {
-			t.Errorf("DisplayName = %v, want %v", meta.DisplayName, "Create Spaces")
+		if meta.DisplayName != "View DMs" {
+			t.Errorf("DisplayName = %v, want %v", meta.DisplayName, "View DMs")
 		}
-		if meta.Category != CategorySpace {
-			t.Errorf("Category = %v, want %v", meta.Category, CategorySpace)
+		if meta.Category != CategoryDM {
+			t.Errorf("Category = %v, want %v", meta.Category, CategoryDM)
 		}
 		if len(meta.Scopes) != 1 || meta.Scopes[0] != ScopeInstance {
 			t.Errorf("Scopes = %v, want [instance]", meta.Scopes)
@@ -77,11 +77,12 @@ func TestGetPermissionMetadata(t *testing.T) {
 func TestValidatePermission(t *testing.T) {
 	t.Run("accepts valid permissions", func(t *testing.T) {
 		validPerms := []Permission{
-			PermSpaceList,
-			PermSpaceCreate,
+			PermDMView,
+			PermDMWrite,
 			PermMessagePost,
 			PermAdminAccess,
-			PermDMView,
+			PermServerManage,
+			PermServerLeave,
 		}
 
 		for _, perm := range validPerms {
@@ -98,6 +99,12 @@ func TestValidatePermission(t *testing.T) {
 			"space",
 			"",
 			"space.nonexistent",
+			// Per ADR-028 these are dropped and must no longer validate.
+			"space.list",
+			"space.create",
+			"space.join",
+			"space.delete",
+			"admin.view-spaces",
 		}
 
 		for _, perm := range invalidPerms {
@@ -111,7 +118,7 @@ func TestValidatePermission(t *testing.T) {
 
 func TestValidatePermissionString(t *testing.T) {
 	t.Run("accepts valid permission string", func(t *testing.T) {
-		err := ValidatePermissionString("space.list")
+		err := ValidatePermissionString("server.leave")
 		if err != nil {
 			t.Errorf("ValidatePermissionString returned error: %v", err)
 		}
@@ -136,19 +143,19 @@ func TestPermissionAppliesAtScope(t *testing.T) {
 		scope      PermissionScope
 		expected   bool
 	}{
-		// Instance + space permissions
-		{"space.list at instance", PermSpaceList, ScopeInstance, true},
-		{"space.list at space", PermSpaceList, ScopeSpace, true},
-		{"space.list at room", PermSpaceList, ScopeRoom, false},
-		{"space.create at instance", PermSpaceCreate, ScopeInstance, true},
-		{"space.create at space", PermSpaceCreate, ScopeSpace, false},
+		// Server permissions (renamed from space.*)
+		{"server.leave at instance", PermServerLeave, ScopeInstance, true},
+		{"server.leave at space", PermServerLeave, ScopeSpace, true},
+		{"server.leave at room", PermServerLeave, ScopeRoom, false},
+		{"server.manage at instance", PermServerManage, ScopeInstance, false},
+		{"server.manage at space", PermServerManage, ScopeSpace, true},
+		{"server.manage at room", PermServerManage, ScopeRoom, false},
+
+		// Admin permissions
 		{"admin.access at instance", PermAdminAccess, ScopeInstance, true},
 		{"admin.access at space", PermAdminAccess, ScopeSpace, false},
 
-		// Space-only permissions
-		{"space.manage at instance", PermSpaceManage, ScopeInstance, false},
-		{"space.manage at space", PermSpaceManage, ScopeSpace, true},
-		{"space.manage at room", PermSpaceManage, ScopeRoom, false},
+		// Role-management permissions
 		{"role.manage at space", PermRoleManage, ScopeSpace, true},
 		{"role.manage at instance", PermRoleManage, ScopeInstance, false},
 
@@ -193,26 +200,19 @@ func TestPermissionsForScope(t *testing.T) {
 	t.Run("returns instance-applicable permissions", func(t *testing.T) {
 		perms := PermissionsForScope(ScopeInstance)
 
-		// Should include space.list and space.create
-		foundSpaceList := false
-		foundSpaceCreate := false
+		// Should include admin.access and server.leave (at instance scope)
+		foundServerLeave := false
 		foundAdminAccess := false
 		for _, p := range perms {
-			if p.Permission == PermSpaceList {
-				foundSpaceList = true
-			}
-			if p.Permission == PermSpaceCreate {
-				foundSpaceCreate = true
+			if p.Permission == PermServerLeave {
+				foundServerLeave = true
 			}
 			if p.Permission == PermAdminAccess {
 				foundAdminAccess = true
 			}
 		}
-		if !foundSpaceList {
-			t.Error("Expected space.list in instance permissions")
-		}
-		if !foundSpaceCreate {
-			t.Error("Expected space.create in instance permissions")
+		if !foundServerLeave {
+			t.Error("Expected server.leave in instance permissions")
 		}
 		if !foundAdminAccess {
 			t.Error("Expected admin.access in instance permissions")
@@ -220,8 +220,8 @@ func TestPermissionsForScope(t *testing.T) {
 
 		// Should NOT include space-only permissions
 		for _, p := range perms {
-			if p.Permission == PermSpaceManage {
-				t.Error("space.manage should NOT be in instance permissions")
+			if p.Permission == PermServerManage {
+				t.Error("server.manage should NOT be in instance permissions")
 			}
 			if p.Permission == PermRoleManage {
 				t.Error("role.manage should NOT be in instance permissions")
@@ -232,13 +232,13 @@ func TestPermissionsForScope(t *testing.T) {
 	t.Run("returns space-applicable permissions", func(t *testing.T) {
 		perms := PermissionsForScope(ScopeSpace)
 
-		// Should include space-only permissions
-		foundSpaceManage := false
+		// Should include space-scoped permissions
+		foundServerManage := false
 		foundRoleManage := false
 		foundMessagePost := false
 		for _, p := range perms {
-			if p.Permission == PermSpaceManage {
-				foundSpaceManage = true
+			if p.Permission == PermServerManage {
+				foundServerManage = true
 			}
 			if p.Permission == PermRoleManage {
 				foundRoleManage = true
@@ -247,8 +247,8 @@ func TestPermissionsForScope(t *testing.T) {
 				foundMessagePost = true
 			}
 		}
-		if !foundSpaceManage {
-			t.Error("Expected space.manage in space permissions")
+		if !foundServerManage {
+			t.Error("Expected server.manage in space permissions")
 		}
 		if !foundRoleManage {
 			t.Error("Expected role.manage in space permissions")
@@ -257,19 +257,11 @@ func TestPermissionsForScope(t *testing.T) {
 			t.Error("Expected message.post in space permissions (multi-scope)")
 		}
 
-		// Should include space.list (now instance + space scope)
-		foundSpaceList := false
+		// Should NOT include instance-only permissions
 		for _, p := range perms {
-			if p.Permission == PermSpaceList {
-				foundSpaceList = true
-			}
-			// Should NOT include instance-only permissions
 			if p.Permission == PermAdminAccess {
 				t.Error("admin.access should NOT be in space permissions")
 			}
-		}
-		if !foundSpaceList {
-			t.Error("Expected space.list in space permissions")
 		}
 	})
 
@@ -303,8 +295,8 @@ func TestPermissionsForScope(t *testing.T) {
 
 		// Should NOT include space-only or instance-only permissions
 		for _, p := range perms {
-			if p.Permission == PermSpaceManage {
-				t.Error("space.manage should NOT be in room permissions")
+			if p.Permission == PermServerManage {
+				t.Error("server.manage should NOT be in room permissions")
 			}
 			if p.Permission == PermAdminAccess {
 				t.Error("admin.access should NOT be in room permissions")
@@ -321,10 +313,9 @@ func TestPermissionsForCategory(t *testing.T) {
 	t.Run("returns space category permissions", func(t *testing.T) {
 		perms := PermissionsForCategory(CategorySpace)
 
-		// Should include all space permissions
+		// Should include the surviving server permissions per ADR-028.
 		expectedPerms := []Permission{
-			PermSpaceList, PermSpaceCreate, PermSpaceJoin,
-			PermSpaceLeave, PermSpaceManage, PermSpaceDelete,
+			PermServerLeave, PermServerManage,
 		}
 		for _, expected := range expectedPerms {
 			found := false
@@ -397,11 +388,10 @@ func TestPermissionsForCategory(t *testing.T) {
 func TestDefaultInstanceEveryonePermissions_DetailedChecks(t *testing.T) {
 	perms := DefaultInstanceEveryonePermissions()
 
-	// Should include all base permissions (previously split between everyone and verified)
+	// Per ADR-028 the post-merge instance-everyone defaults are limited to
+	// PermUserDeleteSelf, PermDMView, PermDMWrite — space.* discovery permissions
+	// are dropped.
 	expectedPerms := []Permission{
-		PermSpaceList,
-		PermSpaceJoin,
-		PermSpaceCreate,
 		PermUserDeleteSelf,
 		PermDMView,
 		PermDMWrite,
@@ -424,15 +414,12 @@ func TestDefaultInstanceEveryonePermissions_DetailedChecks(t *testing.T) {
 func TestDefaultSpaceEveryonePermissions(t *testing.T) {
 	perms := DefaultSpaceEveryonePermissions()
 
-	// Should include basic member permissions
-	// Note: space.join is NOT included here - it's controlled at instance level
-	// to prevent non-members from incorrectly getting join permission.
+	// Should include basic member permissions per ADR-028 post-merge defaults.
 	expectedPerms := []Permission{
-		PermSpaceList, // space discoverability
 		PermRoomList,
 		PermRoomJoin,
 		PermRoomLeave,
-		PermSpaceLeave,
+		PermServerLeave,
 		PermMessagePost,
 		PermMessagePostInThread,
 		PermMessageReply,
@@ -445,21 +432,14 @@ func TestDefaultSpaceEveryonePermissions(t *testing.T) {
 	}
 
 	// Should NOT include admin-level or opt-in permissions
-	if slices.Contains(perms, PermSpaceManage) {
-		t.Error("space-everyone should not have space.manage")
+	if slices.Contains(perms, PermServerManage) {
+		t.Error("space-everyone should not have server.manage")
 	}
 	if slices.Contains(perms, PermRoleManage) {
 		t.Error("space-everyone should not have role.manage")
 	}
 	if slices.Contains(perms, PermRoomCreate) {
 		t.Error("space-everyone should not have room.create (opt-in only)")
-	}
-
-	// space.join should NOT be in space-everyone defaults because it causes
-	// non-members to incorrectly get join permission via the instance "everyone" role
-	// sharing the same name. space.join is controlled at instance level (everyone role).
-	if slices.Contains(perms, PermSpaceJoin) {
-		t.Error("space-everyone should not have space.join (controlled at instance level)")
 	}
 }
 
@@ -511,7 +491,7 @@ func TestScopedRoleName(t *testing.T) {
 
 func TestParseScopedRoleName(t *testing.T) {
 	testCases := []struct {
-		input        string
+		input         string
 		expectedScope PermissionScope
 		expectedRole  string
 	}{
@@ -523,10 +503,10 @@ func TestParseScopedRoleName(t *testing.T) {
 		{"space.moderator", ScopeSpace, "moderator"},
 		{"room.custom-role", ScopeRoom, "custom-role"},
 		// Edge cases
-		{"invalid", "", ""},                // No separator
-		{"", "", ""},                       // Empty string
-		{".admin", "", "admin"},            // Empty scope
-		{"instance.", ScopeInstance, ""},   // Empty role name
+		{"invalid", "", ""},              // No separator
+		{"", "", ""},                     // Empty string
+		{".admin", "", "admin"},          // Empty scope
+		{"instance.", ScopeInstance, ""}, // Empty role name
 	}
 
 	for _, tc := range testCases {
@@ -574,9 +554,9 @@ func TestAllPermissions(t *testing.T) {
 		}
 	}
 
-	// Check for expected count (should be around 32 permissions)
-	if len(perms) < 25 {
-		t.Errorf("Expected at least 25 permissions, got %d", len(perms))
+	// Sanity check on count: post-merge we expect ~25 permissions.
+	if len(perms) < 20 {
+		t.Errorf("Expected at least 20 permissions, got %d", len(perms))
 	}
 }
 

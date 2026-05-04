@@ -17,7 +17,7 @@ func TestPermissionResolver_HasInstancePermission(t *testing.T) {
 
 	t.Run("returns true when user has permission via instance-everyone role", func(t *testing.T) {
 		// instance-everyone gets space.list by default
-		has, err := core.permissionResolver.HasInstancePermission(ctx, user.Id, PermSpaceList)
+		has, err := core.permissionResolver.HasInstancePermission(ctx, user.Id, PermDMWrite)
 		if err != nil {
 			t.Fatalf("HasInstancePermission() error = %v", err)
 		}
@@ -28,7 +28,7 @@ func TestPermissionResolver_HasInstancePermission(t *testing.T) {
 
 	t.Run("returns true when user has space.create via instance-everyone role", func(t *testing.T) {
 		// instance-everyone gets space.create by default
-		has, err := core.permissionResolver.HasInstancePermission(ctx, user.Id, PermSpaceCreate)
+		has, err := core.permissionResolver.HasInstancePermission(ctx, user.Id, PermDMView)
 		if err != nil {
 			t.Fatalf("HasInstancePermission() error = %v", err)
 		}
@@ -50,7 +50,7 @@ func TestPermissionResolver_HasInstancePermission(t *testing.T) {
 
 	t.Run("returns error for permission that does not apply at instance scope", func(t *testing.T) {
 		// space.manage only applies at space scope
-		_, err := core.permissionResolver.HasInstancePermission(ctx, user.Id, PermSpaceManage)
+		_, err := core.permissionResolver.HasInstancePermission(ctx, user.Id, PermServerManage)
 		if err == nil {
 			t.Error("Expected error for permission that doesn't apply at instance scope")
 		}
@@ -65,19 +65,19 @@ func TestPermissionResolver_HasInstancePermission_DenyWins(t *testing.T) {
 
 	t.Run("same-role denial replaces grant", func(t *testing.T) {
 		// Grant permission via instance-everyone role
-		err := core.GrantInstanceRolePermission(ctx, InstRoleEveryone, PermSpaceList)
+		err := core.GrantInstanceRolePermission(ctx, InstRoleEveryone, PermDMWrite)
 		if err != nil {
 			t.Fatalf("Failed to grant permission: %v", err)
 		}
 
 		// Deny same permission for the same role (replaces the grant)
-		err = core.DenyInstanceRolePermission(ctx, InstRoleEveryone, PermSpaceList)
+		err = core.DenyInstanceRolePermission(ctx, InstRoleEveryone, PermDMWrite)
 		if err != nil {
 			t.Fatalf("Failed to deny permission: %v", err)
 		}
 
 		// User should NOT have the permission (denial replaced grant)
-		has, err := core.permissionResolver.HasInstancePermission(ctx, user.Id, PermSpaceList)
+		has, err := core.permissionResolver.HasInstancePermission(ctx, user.Id, PermDMWrite)
 		if err != nil {
 			t.Fatalf("HasInstancePermission() error = %v", err)
 		}
@@ -86,7 +86,7 @@ func TestPermissionResolver_HasInstancePermission_DenyWins(t *testing.T) {
 		}
 
 		// Restore for other tests
-		core.GrantInstanceRolePermission(ctx, InstRoleEveryone, PermSpaceList)
+		core.GrantInstanceRolePermission(ctx, InstRoleEveryone, PermDMWrite)
 	})
 }
 
@@ -98,7 +98,7 @@ func TestPermissionResolver_HasInstancePermission_CustomDenyRole(t *testing.T) {
 	user, _ := core.CreateUser(ctx, "system", "testuser-denyrole", "Test User", "password123")
 
 	// Verify user initially has space.list (via everyone role default)
-	has, err := core.permissionResolver.HasInstancePermission(ctx, user.Id, PermSpaceList)
+	has, err := core.permissionResolver.HasInstancePermission(ctx, user.Id, PermDMWrite)
 	if err != nil {
 		t.Fatalf("HasInstancePermission() error = %v", err)
 	}
@@ -114,7 +114,7 @@ func TestPermissionResolver_HasInstancePermission_CustomDenyRole(t *testing.T) {
 	t.Logf("Created deny role with position: %d", denyRole.Position)
 
 	// Deny space.list on the deny role
-	err = core.DenyInstancePermission(ctx, "instance-denytest", PermSpaceList)
+	err = core.DenyInstancePermission(ctx, "instance-denytest", PermDMWrite)
 	if err != nil {
 		t.Fatalf("Failed to deny permission: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestPermissionResolver_HasInstancePermission_CustomDenyRole(t *testing.T) {
 
 	// User now has: instance-denytest (deny space.list), everyone (grant space.list)
 	// The deny role has the highest rank (lowest position), so its deny should win.
-	has, err = core.permissionResolver.HasInstancePermission(ctx, user.Id, PermSpaceList)
+	has, err = core.permissionResolver.HasInstancePermission(ctx, user.Id, PermDMWrite)
 	if err != nil {
 		t.Fatalf("HasInstancePermission() error = %v", err)
 	}
@@ -141,7 +141,7 @@ func TestPermissionResolver_HasInstancePermission_CustomDenyRole(t *testing.T) {
 		t.Fatalf("GetUserInstancePermissions() error = %v", err)
 	}
 	for _, p := range perms {
-		if p == PermSpaceList {
+		if p == PermDMWrite {
 			t.Error("Expected space.list to NOT be in GetUserInstancePermissions result")
 			break
 		}
@@ -158,20 +158,20 @@ func TestPermissionResolver_HasInstancePermission_Hierarchy(t *testing.T) {
 
 	t.Run("higher-ranked role grant beats lower-ranked role denial", func(t *testing.T) {
 		// Deny space.create for everyone (low rank, position MaxInt32)
-		err := core.DenyInstanceRolePermission(ctx, InstRoleEveryone, PermSpaceCreate)
+		err := core.DenyInstanceRolePermission(ctx, InstRoleEveryone, PermDMView)
 		if err != nil {
 			t.Fatalf("Failed to deny permission: %v", err)
 		}
 
 		// Grant space.create for admin (high rank, position 1)
-		err = core.GrantInstanceRolePermission(ctx, InstRoleAdmin, PermSpaceCreate)
+		err = core.GrantInstanceRolePermission(ctx, InstRoleAdmin, PermDMView)
 		if err != nil {
 			t.Fatalf("Failed to grant permission: %v", err)
 		}
 
 		// User has both admin (grant) and everyone (deny) roles.
 		// Admin is higher rank (position 1 < MaxInt32), so admin's grant should win.
-		has, err := core.permissionResolver.HasInstancePermission(ctx, user.Id, PermSpaceCreate)
+		has, err := core.permissionResolver.HasInstancePermission(ctx, user.Id, PermDMView)
 		if err != nil {
 			t.Fatalf("HasInstancePermission() error = %v", err)
 		}
@@ -180,25 +180,25 @@ func TestPermissionResolver_HasInstancePermission_Hierarchy(t *testing.T) {
 		}
 
 		// Cleanup
-		core.ClearInstanceRolePermission(ctx, InstRoleEveryone, PermSpaceCreate)
-		core.ClearInstanceRolePermission(ctx, InstRoleAdmin, PermSpaceCreate)
+		core.ClearInstanceRolePermission(ctx, InstRoleEveryone, PermDMView)
+		core.ClearInstanceRolePermission(ctx, InstRoleAdmin, PermDMView)
 	})
 
 	t.Run("higher-ranked role denial beats lower-ranked role grant", func(t *testing.T) {
 		// Grant space.create for everyone (low rank)
-		err := core.GrantInstanceRolePermission(ctx, InstRoleEveryone, PermSpaceCreate)
+		err := core.GrantInstanceRolePermission(ctx, InstRoleEveryone, PermDMView)
 		if err != nil {
 			t.Fatalf("Failed to grant permission: %v", err)
 		}
 
 		// Deny space.create for admin (high rank)
-		err = core.DenyInstanceRolePermission(ctx, InstRoleAdmin, PermSpaceCreate)
+		err = core.DenyInstanceRolePermission(ctx, InstRoleAdmin, PermDMView)
 		if err != nil {
 			t.Fatalf("Failed to deny permission: %v", err)
 		}
 
 		// Admin denial (position 1) should be checked before everyone grant (position MaxInt32)
-		has, err := core.permissionResolver.HasInstancePermission(ctx, user.Id, PermSpaceCreate)
+		has, err := core.permissionResolver.HasInstancePermission(ctx, user.Id, PermDMView)
 		if err != nil {
 			t.Fatalf("HasInstancePermission() error = %v", err)
 		}
@@ -207,8 +207,8 @@ func TestPermissionResolver_HasInstancePermission_Hierarchy(t *testing.T) {
 		}
 
 		// Cleanup
-		core.ClearInstanceRolePermission(ctx, InstRoleEveryone, PermSpaceCreate)
-		core.ClearInstanceRolePermission(ctx, InstRoleAdmin, PermSpaceCreate)
+		core.ClearInstanceRolePermission(ctx, InstRoleEveryone, PermDMView)
+		core.ClearInstanceRolePermission(ctx, InstRoleAdmin, PermDMView)
 	})
 
 }
@@ -230,7 +230,7 @@ func TestPermissionResolver_HasSpacePermission(t *testing.T) {
 
 	t.Run("returns true when user has permission via space role", func(t *testing.T) {
 		// Space admin gets space.manage
-		has, err := core.permissionResolver.HasSpacePermission(ctx, user.Id, space.Id, PermSpaceManage)
+		has, err := core.permissionResolver.HasSpacePermission(ctx, user.Id, space.Id, PermServerManage)
 		if err != nil {
 			t.Fatalf("HasSpacePermission() error = %v", err)
 		}
@@ -244,7 +244,7 @@ func TestPermissionResolver_HasSpacePermission(t *testing.T) {
 		otherUser, _ := core.CreateUser(ctx, "system", "otheruser", "Other User", "password123")
 
 		// Non-member should not have space.manage
-		has, err := core.permissionResolver.HasSpacePermission(ctx, otherUser.Id, space.Id, PermSpaceManage)
+		has, err := core.permissionResolver.HasSpacePermission(ctx, otherUser.Id, space.Id, PermServerManage)
 		if err != nil {
 			t.Fatalf("HasSpacePermission() error = %v", err)
 		}
@@ -300,19 +300,10 @@ func TestPermissionResolver_HasSpacePermission_InstanceFallback(t *testing.T) {
 		}
 	})
 
-	t.Run("non-member CAN get space.join (special exception)", func(t *testing.T) {
-		// Create user who is NOT a space member
-		nonMember, _ := core.CreateUser(ctx, "system", "nonmember2", "Non Member 2", "password123")
-
-		// space.join is special - non-members need this to join
-		has, err := core.permissionResolver.HasSpacePermission(ctx, nonMember.Id, space.Id, PermSpaceJoin)
-		if err != nil {
-			t.Fatalf("HasSpacePermission() error = %v", err)
-		}
-		if !has {
-			t.Error("Expected non-member to have space.join (special exception)")
-		}
-	})
+	// Per ADR-028 the special-case exception that let non-members evaluate
+	// space.join / space.list at space scope is removed alongside the dropped
+	// permissions themselves; non-members now uniformly get false for any
+	// space-scoped permission via HasSpacePermission.
 }
 
 func TestPermissionResolver_HasSpacePermission_DenyWins(t *testing.T) {
@@ -394,7 +385,7 @@ func TestPermissionResolver_HasSpacePermission_DMSpace(t *testing.T) {
 	})
 
 	t.Run("DM space denies space.manage", func(t *testing.T) {
-		has, err := core.permissionResolver.HasSpacePermission(ctx, user.Id, DMSpaceID, PermSpaceManage)
+		has, err := core.permissionResolver.HasSpacePermission(ctx, user.Id, DMSpaceID, PermServerManage)
 		if err != nil {
 			t.Fatalf("HasSpacePermission() error = %v", err)
 		}
@@ -908,13 +899,13 @@ func TestPermissionResolver_DenyAlwaysWins(t *testing.T) {
 
 	t.Run("space deny blocks instance grant", func(t *testing.T) {
 		// Grant at instance level for instance-everyone
-		err := core.GrantInstanceRolePermission(ctx, InstRoleEveryone, PermSpaceJoin)
+		err := core.GrantInstanceRolePermission(ctx, InstRoleEveryone, PermRoomCreate)
 		if err != nil {
 			t.Fatalf("Failed to grant instance permission: %v", err)
 		}
 
 		// Deny at space level via space config for instance-everyone
-		err = core.DenySpaceRolePermission(ctx, space.Id, InstRoleEveryone, PermSpaceJoin)
+		err = core.DenySpaceRolePermission(ctx, space.Id, InstRoleEveryone, PermRoomCreate)
 		if err != nil {
 			t.Fatalf("Failed to deny space permission: %v", err)
 		}
@@ -923,7 +914,7 @@ func TestPermissionResolver_DenyAlwaysWins(t *testing.T) {
 		newUser, _ := core.CreateUser(ctx, "system", "newuser", "New User", "password123")
 
 		// Deny always wins: space deny blocks instance grant
-		has, err := core.permissionResolver.HasSpacePermission(ctx, newUser.Id, space.Id, PermSpaceJoin)
+		has, err := core.permissionResolver.HasSpacePermission(ctx, newUser.Id, space.Id, PermRoomCreate)
 		if err != nil {
 			t.Fatalf("HasSpacePermission() error = %v", err)
 		}
@@ -949,13 +940,13 @@ func TestPermissionResolver_InstanceAuthority(t *testing.T) {
 
 	t.Run("instance grant applies for space member", func(t *testing.T) {
 		// Grant at instance level for instance-everyone
-		err := core.GrantInstanceRolePermission(ctx, InstRoleEveryone, PermSpaceJoin)
+		err := core.GrantInstanceRolePermission(ctx, InstRoleEveryone, PermRoomCreate)
 		if err != nil {
 			t.Fatalf("Failed to grant instance permission: %v", err)
 		}
 
 		// Instance grant should apply (no space-level decision)
-		has, err := core.permissionResolver.HasSpacePermission(ctx, member.Id, space.Id, PermSpaceJoin)
+		has, err := core.permissionResolver.HasSpacePermission(ctx, member.Id, space.Id, PermRoomCreate)
 		if err != nil {
 			t.Fatalf("HasSpacePermission() error = %v", err)
 		}

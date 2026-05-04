@@ -14,21 +14,32 @@ import "context"
 // (owners.emails) should be done separately by the caller.
 
 // CanSpaceList checks if a user can view the list of spaces.
-// All authenticated users have this permission by default (everyone role).
+//
+// Transitional shim: the underlying space.list permission is dropped per ADR-028.
+// During the dual-RBAC transition (PR 1–9) this helper stays for resolver
+// compatibility and always returns true — every user can see the (single)
+// server. The helper itself is removed in PR 3.
 func (c *ChattoCore) CanSpaceList(ctx context.Context, userID string) (bool, error) {
-	return c.HasInstancePermission(ctx, userID, PermSpaceList)
+	return true, nil
 }
 
 // CanSpaceJoin checks if a user can join spaces.
-// All authenticated users have this permission by default (everyone role).
+//
+// Transitional shim: the underlying space.join permission is dropped per ADR-028.
+// Joining the server is registering an account; not gated separately.
+// The helper itself is removed in PR 3.
 func (c *ChattoCore) CanSpaceJoin(ctx context.Context, userID string) (bool, error) {
-	return c.HasInstancePermission(ctx, userID, PermSpaceJoin)
+	return true, nil
 }
 
 // CanSpaceCreate checks if a user can create new spaces.
-// All authenticated users have this permission by default (everyone role).
+//
+// Transitional shim: the underlying space.create permission is dropped per ADR-028
+// (no nested servers). Returning true preserves the existing dev workflow during
+// PRs 1–9 while spaces still exist as a transitional concept; the helper and its
+// callers go away in PR 10.
 func (c *ChattoCore) CanSpaceCreate(ctx context.Context, userID string) (bool, error) {
-	return c.HasInstancePermission(ctx, userID, PermSpaceCreate)
+	return true, nil
 }
 
 // CanAdminAccess checks if a user can access the admin panel.
@@ -48,8 +59,13 @@ func (c *ChattoCore) CanAdminUsersManage(ctx context.Context, userID string) (bo
 }
 
 // CanAdminSpacesView checks if a user can view the spaces page in admin.
+//
+// Transitional shim: the underlying admin.view-spaces permission is dropped
+// per ADR-028 (no spaces admin page post-consolidation). For now we delegate to
+// CanAdminAccess to keep the existing admin nav working while spaces still
+// exist; the helper goes away in PR 10 along with the spaces admin page.
 func (c *ChattoCore) CanAdminSpacesView(ctx context.Context, userID string) (bool, error) {
-	return c.HasInstancePermission(ctx, userID, PermAdminSpacesView)
+	return c.CanAdminAccess(ctx, userID)
 }
 
 // CanAdminRolesView checks if a user can view the roles page in admin.

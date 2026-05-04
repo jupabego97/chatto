@@ -24,9 +24,11 @@ import "context"
 
 // spaceAdminPermissions is the set of admin-level space permissions.
 // Used by HasAnyAdminPermission to check for space admin access.
+//
+// Per ADR-028, space.delete is dropped (server lifecycle is operator-controlled,
+// not an in-app permission) and space.manage is renamed to server.manage.
 var spaceAdminPermissions = []Permission{
-	PermSpaceManage,
-	PermSpaceDelete,
+	PermServerManage,
 	PermRoleManage,
 	PermRoleAssign,
 	PermMemberInvite,
@@ -50,13 +52,19 @@ func (c *ChattoCore) HasAnyAdminPermission(ctx context.Context, userID, spaceID 
 }
 
 // CanAdminSpaceManage checks if a user can update space settings (name, description, logo).
+// Backed by the renamed PermServerManage permission per ADR-028.
 func (c *ChattoCore) CanAdminSpaceManage(ctx context.Context, userID, spaceID string) (bool, error) {
-	return c.hasSpacePermission(ctx, spaceID, userID, PermSpaceManage)
+	return c.hasSpacePermission(ctx, spaceID, userID, PermServerManage)
 }
 
 // CanAdminSpaceDelete checks if a user can delete a space entirely.
+//
+// Transitional shim: the underlying space.delete permission is dropped per ADR-028
+// (server lifecycle is operator-controlled). We delegate to CanAdminSpaceManage so
+// space-admins can still delete during the transition; the helper goes away in PR 10
+// along with the deleteSpace mutation.
 func (c *ChattoCore) CanAdminSpaceDelete(ctx context.Context, userID, spaceID string) (bool, error) {
-	return c.hasSpacePermission(ctx, spaceID, userID, PermSpaceDelete)
+	return c.CanAdminSpaceManage(ctx, userID, spaceID)
 }
 
 // CanSpaceRolesManage checks if a user can create, update, delete roles and grant/revoke permissions in a space.
@@ -166,19 +174,25 @@ func (c *ChattoCore) CanDeleteAnyMessage(ctx context.Context, userID, spaceID, r
 // ============================================================================
 
 // CanListSpace checks if a user can see a specific space in the browse/discovery list.
-// Non-members need this permission to see the space; members always see their own spaces.
+//
+// Transitional shim: the underlying space.list permission is dropped per ADR-028.
+// Discovery is unrestricted post-consolidation; this helper returns true so the
+// existing browse UI keeps working. Removed in PR 10 along with the spaces query.
 func (c *ChattoCore) CanListSpace(ctx context.Context, userID, spaceID string) (bool, error) {
-	return c.hasSpacePermission(ctx, spaceID, userID, PermSpaceList)
+	return true, nil
 }
 
 // CanJoinSpace checks if a user can join a specific space.
-// This is determined by the space.join permission configured in the space's RBAC.
+//
+// Transitional shim: the underlying space.join permission is dropped per ADR-028.
+// Returning true preserves the existing dev workflow during PRs 1–9 while spaces
+// still exist as a transitional concept; removed in PR 10.
 func (c *ChattoCore) CanJoinSpace(ctx context.Context, userID, spaceID string) (bool, error) {
-	return c.hasSpacePermission(ctx, spaceID, userID, PermSpaceJoin)
+	return true, nil
 }
 
 // CanLeaveSpace checks if a user can leave a specific space.
-// This is determined by the space.leave permission configured in the space's RBAC.
+// Backed by the renamed PermServerLeave permission per ADR-028.
 func (c *ChattoCore) CanLeaveSpace(ctx context.Context, userID, spaceID string) (bool, error) {
-	return c.hasSpacePermission(ctx, spaceID, userID, PermSpaceLeave)
+	return c.hasSpacePermission(ctx, spaceID, userID, PermServerLeave)
 }

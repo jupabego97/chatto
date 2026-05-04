@@ -117,7 +117,12 @@ func (r *PermissionResolver) HasSpacePermission(ctx context.Context, userID, spa
 		return r.resolveDMPermission(perm), nil
 	}
 
-	if PermissionAppliesAtScope(perm, ScopeSpace) && perm != PermSpaceJoin && perm != PermSpaceList {
+	// Discovery permissions (space.join / space.list) used to be exempted from the
+	// membership precheck because non-members legitimately need them to see and
+	// join. Those permissions are dropped per ADR-028 — discovery is now
+	// unrestricted at the helper layer. The precheck below applies to every
+	// remaining space-scoped permission.
+	if PermissionAppliesAtScope(perm, ScopeSpace) {
 		isMember, err := r.core.SpaceMembershipExists(ctx, userID, spaceID)
 		if err != nil {
 			return false, fmt.Errorf("failed to check space membership: %w", err)

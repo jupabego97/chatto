@@ -872,10 +872,13 @@ func (c *ChattoCore) CreateDefaultRoles(ctx context.Context, spaceID string) err
 // DefaultInstanceEveryoneSpacePermissions returns the space permissions granted to
 // the instance:everyone role by default when a new space is created.
 // These permissions are for users who are NOT yet members of the space.
+//
+// Per ADR-028 the space.join permission is dropped — joining the server is
+// equivalent to registering, not a role-gated action. The list is therefore
+// empty during the dual-RBAC transition and the function will be removed in
+// PR 4 along with the rest of the dual RBAC.
 func DefaultInstanceEveryoneSpacePermissions() []Permission {
-	return []Permission{
-		PermSpaceJoin, // Allows authenticated users to join the space
-	}
+	return []Permission{}
 }
 
 // HasSpaceUserPermissionViaRoles checks if a user would have a permission through roles only

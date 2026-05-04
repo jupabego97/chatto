@@ -30,7 +30,7 @@ func TestPermissionExplainer_AgreesWithHas(t *testing.T) {
 	if _, err := core.CreateInstanceRole(ctx, "instance-denytest", "Deny space.list", "Test deny role"); err != nil {
 		t.Fatalf("create deny role: %v", err)
 	}
-	if err := core.DenyInstancePermission(ctx, "instance-denytest", PermSpaceList); err != nil {
+	if err := core.DenyInstancePermission(ctx, "instance-denytest", PermDMWrite); err != nil {
 		t.Fatalf("deny perm: %v", err)
 	}
 	if err := core.AssignInstanceRole(ctx, SystemActorID, denyUser.Id, "instance-denytest"); err != nil {
