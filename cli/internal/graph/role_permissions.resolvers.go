@@ -7,9 +7,10 @@ package graph
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
-	"hmans.de/chatto/internal/core/rbac"
+	"hmans.de/chatto/internal/core"
 	"hmans.de/chatto/internal/graph/model"
 )
 
@@ -37,7 +38,29 @@ func (r *queryResolver) RolePermissions(ctx context.Context, roleName string, sp
 		return nil, err
 	}
 
-	isInstanceRole := rbac.IsInstanceRoleSubject(roleName)
+	// Per ADR-028 the role namespace is unified — role names like "admin" no
+	// longer carry an "instance-" prefix and exist in both engines. While the
+	// dual-engine architecture is alive (through PR 4) we disambiguate the
+	// query like this: if the caller provided a spaceID and the role exists
+	// in that space's RBAC engine, treat it as a space role; otherwise look
+	// it up in the instance engine. The runtime probe goes away in PR 4 along
+	// with the dual engines.
+	isInstanceRole := true
+	if scopedSpaceID != "" {
+		if _, spaceErr := r.core.GetRole(ctx, scopedSpaceID, roleName); spaceErr == nil {
+			isInstanceRole = false
+		} else if !errors.Is(spaceErr, core.ErrRoleNotFound) {
+			return nil, spaceErr
+		}
+	}
+	if isInstanceRole {
+		if _, instErr := r.core.GetInstanceRole(ctx, roleName); instErr != nil {
+			if errors.Is(instErr, core.ErrRoleNotFound) {
+				return nil, fmt.Errorf("failed to load instance role: %w", instErr)
+			}
+			return nil, instErr
+		}
+	}
 	out, err := r.buildRoleAcrossTiers(ctx, roleName, isInstanceRole, scopedSpaceID, scopedRoomID)
 	if err != nil {
 		return nil, err

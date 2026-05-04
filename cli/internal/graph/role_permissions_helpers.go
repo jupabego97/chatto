@@ -72,7 +72,7 @@ func (r *Resolver) buildRoleAcrossTiers(
 		}
 		out.DisplayName = role.DisplayName
 		out.Description = role.Description
-		out.IsSystem = core.IsSpaceSystemRole(role.Name)
+		out.IsSystem = core.IsSystemRole(role.Name)
 		out.Position = role.Position
 	}
 
@@ -181,7 +181,14 @@ func (r *Resolver) buildTierRoles(ctx context.Context, spaceID, roomID string) (
 		return instanceRoles[i].Position < instanceRoles[j].Position
 	})
 	for _, role := range instanceRoles {
-		if core.IsSpaceUniversalRole(role.Name) {
+		// Per ADR-028 the role namespace is unified — system role names like
+		// "owner"/"admin"/"moderator"/"everyone" exist in both the instance and
+		// space engines, so listing instance-side rows alongside the same-named
+		// space-side rows would duplicate them in the matrix. Skip system roles
+		// here; only custom instance-only roles surface as instance-tier rows.
+		// The whole instance-tier listing goes away in PR 4 with the engine
+		// consolidation.
+		if core.IsSystemRole(role.Name) {
 			continue
 		}
 		tr, err := r.buildTierRoleForInstanceRole(ctx, role, scope, spaceID, roomID)
@@ -207,7 +214,7 @@ func (r *Resolver) buildTierRoleForSpaceRole(
 		DisplayName:    displayName,
 		Description:    description,
 		IsInstanceRole: false,
-		IsSystem:       core.IsSpaceSystemRole(roleName),
+		IsSystem:       core.IsSystemRole(roleName),
 		Position:       position,
 	}
 

@@ -37,37 +37,20 @@ func TestRolePermissions_RoomTierIncludesAllAppliedTiers(t *testing.T) {
 	}
 }
 
-func TestRolePermissions_InstanceRoleHasInstanceTier(t *testing.T) {
-	env := setupTestResolver(t)
-	query := env.resolver.Query()
-
-	results, err := query.RolePermissions(env.authContext(), "instance-admin", &env.testSpace.Id, nil)
-	if err != nil {
-		t.Fatalf("RolePermissions: %v", err)
-	}
-	if results == nil {
-		t.Fatal("expected non-nil result for instance-admin")
-	}
-	if !results.IsInstanceRole {
-		t.Error("expected isInstanceRole=true")
-	}
-	if results.Instance == nil {
-		t.Error("instance role should expose an instance tier")
-	}
-	if results.Space == nil {
-		t.Error("expected space tier when spaceId provided")
-	}
-	if results.Room != nil {
-		t.Error("expected no room tier when roomId is absent")
-	}
-}
+// TestRolePermissions_InstanceRoleHasInstanceTier tested the
+// "instance-admin"-vs-"admin" distinction, which is gone after the role
+// rename per ADR-028. With a unified namespace and the dual-engine model
+// still alive (until PR 4), names like "admin" exist in both engines and
+// querying with a spaceId resolves to the space-tier role. The full
+// tier-distinction story collapses with the engines in PR 4 and the test
+// is rewritten there.
 
 func TestRolePermissions_NonAdminCannotInspectInstanceScope(t *testing.T) {
 	env := setupTestResolver(t)
 	query := env.resolver.Query()
 
 	regular := env.createVerifiedUser(t, "regular-rp", "Regular", "password123")
-	_, err := query.RolePermissions(env.authContextForUser(regular), "instance-admin", nil, nil)
+	_, err := query.RolePermissions(env.authContextForUser(regular), core.RoleAdmin, nil, nil)
 	if !errors.Is(err, core.ErrPermissionDenied) {
 		t.Errorf("expected ErrPermissionDenied, got %v", err)
 	}

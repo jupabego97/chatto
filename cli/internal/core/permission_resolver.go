@@ -274,8 +274,13 @@ func (r *PermissionResolver) walkSpacePermission(
 			}
 		}
 	}
+	// Instance-role overrides at space scope use the "instance-" prefixed
+	// subject in the space bucket (per ADR-028 the role names collapsed but
+	// the dual-tier mechanism is alive through PR 4); look them up under the
+	// prefixed key.
 	for _, role := range instanceOnlyRoles {
-		denied, err := r.keyExists(ctx, spaceKV, rbac.DenyKey(role, parts.Verb, parts.ObjectType, rbac.ObjectIdAny))
+		subject := instanceRoleSubjectKey(role)
+		denied, err := r.keyExists(ctx, spaceKV, rbac.DenyKey(subject, parts.Verb, parts.ObjectType, rbac.ObjectIdAny))
 		if err != nil {
 			return err
 		}
@@ -313,7 +318,8 @@ func (r *PermissionResolver) walkSpacePermission(
 		}
 	}
 	for _, role := range instanceOnlyRoles {
-		granted, err := r.keyExists(ctx, spaceKV, rbac.AllowKey(role, parts.Verb, parts.ObjectType, rbac.ObjectIdAny))
+		subject := instanceRoleSubjectKey(role)
+		granted, err := r.keyExists(ctx, spaceKV, rbac.AllowKey(subject, parts.Verb, parts.ObjectType, rbac.ObjectIdAny))
 		if err != nil {
 			return err
 		}
@@ -380,8 +386,10 @@ func (r *PermissionResolver) walkRoomPermission(
 			}
 		}
 	}
+	// Instance-role overrides at space scope live under "instance-{role}" subjects.
 	for _, role := range instanceOnlyRoles {
-		denied, err := r.keyExists(ctx, spaceKV, rbac.DenyKey(role, parts.Verb, parts.ObjectType, rbac.ObjectIdAny))
+		subject := instanceRoleSubjectKey(role)
+		denied, err := r.keyExists(ctx, spaceKV, rbac.DenyKey(subject, parts.Verb, parts.ObjectType, rbac.ObjectIdAny))
 		if err != nil {
 			return err
 		}
@@ -426,7 +434,8 @@ func (r *PermissionResolver) walkRoomPermission(
 		}
 
 		for _, role := range instanceOnlyRoles {
-			granted, err := r.keyExists(ctx, spaceKV, rbac.AllowKey(role, parts.Verb, parts.ObjectType, roomID))
+			subject := instanceRoleSubjectKey(role)
+			granted, err := r.keyExists(ctx, spaceKV, rbac.AllowKey(subject, parts.Verb, parts.ObjectType, roomID))
 			if err != nil {
 				return err
 			}
@@ -438,7 +447,7 @@ func (r *PermissionResolver) walkRoomPermission(
 				continue
 			}
 
-			denied, err := r.keyExists(ctx, spaceKV, rbac.DenyKey(role, parts.Verb, parts.ObjectType, roomID))
+			denied, err := r.keyExists(ctx, spaceKV, rbac.DenyKey(subject, parts.Verb, parts.ObjectType, roomID))
 			if err != nil {
 				return err
 			}
@@ -478,7 +487,8 @@ func (r *PermissionResolver) walkRoomPermission(
 			}
 		}
 		for _, role := range instanceOnlyRoles {
-			granted, err := r.keyExists(ctx, spaceKV, rbac.AllowKey(role, parts.Verb, parts.ObjectType, rbac.ObjectIdAny))
+			subject := instanceRoleSubjectKey(role)
+			granted, err := r.keyExists(ctx, spaceKV, rbac.AllowKey(subject, parts.Verb, parts.ObjectType, rbac.ObjectIdAny))
 			if err != nil {
 				return err
 			}
@@ -529,8 +539,8 @@ func (r *PermissionResolver) getUserInstanceRoles(ctx context.Context, userID st
 	}
 
 	// Always include "everyone" for authenticated users
-	if !slices.Contains(roles, InstRoleEveryone) {
-		roles = append(roles, InstRoleEveryone)
+	if !slices.Contains(roles, RoleEveryone) {
+		roles = append(roles, RoleEveryone)
 	}
 
 	return roles, nil

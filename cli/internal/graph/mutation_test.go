@@ -93,7 +93,7 @@ func TestCreateRoom_Authorization(t *testing.T) {
 		}
 
 		// Grant room.create to the everyone role
-		err = env.core.GrantSpaceRolePermission(env.ctx, env.testSpace.Id, core.SpaceRoleEveryone, core.PermRoomCreate)
+		err = env.core.GrantSpaceRolePermission(env.ctx, env.testSpace.Id, core.RoleEveryone, core.PermRoomCreate)
 		if err != nil {
 			t.Fatalf("failed to grant permission: %v", err)
 		}
@@ -216,10 +216,10 @@ func TestPostMessage_ThreadPermissions(t *testing.T) {
 	})
 
 	t.Run("member with post-in-thread denied cannot post any thread reply", func(t *testing.T) {
-		if err := env.core.DenySpaceRolePermission(env.ctx, env.testSpace.Id, core.SpaceRoleEveryone, core.PermMessagePostInThread); err != nil {
+		if err := env.core.DenySpaceRolePermission(env.ctx, env.testSpace.Id, core.RoleEveryone, core.PermMessagePostInThread); err != nil {
 			t.Fatalf("failed to deny permission: %v", err)
 		}
-		defer env.core.GrantSpaceRolePermission(env.ctx, env.testSpace.Id, core.SpaceRoleEveryone, core.PermMessagePostInThread)
+		defer env.core.GrantSpaceRolePermission(env.ctx, env.testSpace.Id, core.RoleEveryone, core.PermMessagePostInThread)
 
 		root, err := env.core.PostMessage(env.ctx, env.testSpace.Id, env.testRoom.Id, env.testUser.Id, "Root for deny test", nil, "", "", nil, false)
 		if err != nil {
@@ -255,10 +255,10 @@ func TestPostMessage_ThreadPermissions(t *testing.T) {
 	})
 
 	t.Run("denying message.post does not affect thread replies", func(t *testing.T) {
-		if err := env.core.DenySpaceRolePermission(env.ctx, env.testSpace.Id, core.SpaceRoleEveryone, core.PermMessagePost); err != nil {
+		if err := env.core.DenySpaceRolePermission(env.ctx, env.testSpace.Id, core.RoleEveryone, core.PermMessagePost); err != nil {
 			t.Fatalf("failed to deny permission: %v", err)
 		}
-		defer env.core.GrantSpaceRolePermission(env.ctx, env.testSpace.Id, core.SpaceRoleEveryone, core.PermMessagePost)
+		defer env.core.GrantSpaceRolePermission(env.ctx, env.testSpace.Id, core.RoleEveryone, core.PermMessagePost)
 
 		root, err := env.core.PostMessage(env.ctx, env.testSpace.Id, env.testRoom.Id, env.testUser.Id, "Root for independence test", nil, "", "", nil, false)
 		if err != nil {
@@ -319,10 +319,10 @@ func TestPostMessage_ReplyPermissions(t *testing.T) {
 	})
 
 	t.Run("member without message.reply denied cannot use inReplyTo in room", func(t *testing.T) {
-		if err := env.core.DenySpaceRolePermission(env.ctx, env.testSpace.Id, core.SpaceRoleEveryone, core.PermMessageReply); err != nil {
+		if err := env.core.DenySpaceRolePermission(env.ctx, env.testSpace.Id, core.RoleEveryone, core.PermMessageReply); err != nil {
 			t.Fatalf("failed to deny permission: %v", err)
 		}
-		defer env.core.GrantSpaceRolePermission(env.ctx, env.testSpace.Id, core.SpaceRoleEveryone, core.PermMessageReply)
+		defer env.core.GrantSpaceRolePermission(env.ctx, env.testSpace.Id, core.RoleEveryone, core.PermMessageReply)
 
 		root, err := env.core.PostMessage(env.ctx, env.testSpace.Id, env.testRoom.Id, env.testUser.Id, "Root for reply deny test", nil, "", "", nil, false)
 		if err != nil {
@@ -341,10 +341,10 @@ func TestPostMessage_ReplyPermissions(t *testing.T) {
 	})
 
 	t.Run("member without message.reply can still post without inReplyTo", func(t *testing.T) {
-		if err := env.core.DenySpaceRolePermission(env.ctx, env.testSpace.Id, core.SpaceRoleEveryone, core.PermMessageReply); err != nil {
+		if err := env.core.DenySpaceRolePermission(env.ctx, env.testSpace.Id, core.RoleEveryone, core.PermMessageReply); err != nil {
 			t.Fatalf("failed to deny permission: %v", err)
 		}
-		defer env.core.GrantSpaceRolePermission(env.ctx, env.testSpace.Id, core.SpaceRoleEveryone, core.PermMessageReply)
+		defer env.core.GrantSpaceRolePermission(env.ctx, env.testSpace.Id, core.RoleEveryone, core.PermMessageReply)
 
 		event, err := mutation.PostMessage(env.authContextForUser(member), model.PostMessageInput{
 			SpaceID: env.testSpace.Id,
@@ -385,10 +385,10 @@ func TestPostMessage_ReplyPermissions(t *testing.T) {
 	})
 
 	t.Run("member without message.reply-in-thread denied cannot use inReplyTo in thread", func(t *testing.T) {
-		if err := env.core.DenySpaceRolePermission(env.ctx, env.testSpace.Id, core.SpaceRoleEveryone, core.PermMessageReplyInThread); err != nil {
+		if err := env.core.DenySpaceRolePermission(env.ctx, env.testSpace.Id, core.RoleEveryone, core.PermMessageReplyInThread); err != nil {
 			t.Fatalf("failed to deny permission: %v", err)
 		}
-		defer env.core.GrantSpaceRolePermission(env.ctx, env.testSpace.Id, core.SpaceRoleEveryone, core.PermMessageReplyInThread)
+		defer env.core.GrantSpaceRolePermission(env.ctx, env.testSpace.Id, core.RoleEveryone, core.PermMessageReplyInThread)
 
 		root, err := env.core.PostMessage(env.ctx, env.testSpace.Id, env.testRoom.Id, env.testUser.Id, "Root for thread reply deny test", nil, "", "", nil, false)
 		if err != nil {
@@ -412,10 +412,10 @@ func TestPostMessage_ReplyPermissions(t *testing.T) {
 	})
 
 	t.Run("member without message.reply-in-thread can still post in thread without inReplyTo", func(t *testing.T) {
-		if err := env.core.DenySpaceRolePermission(env.ctx, env.testSpace.Id, core.SpaceRoleEveryone, core.PermMessageReplyInThread); err != nil {
+		if err := env.core.DenySpaceRolePermission(env.ctx, env.testSpace.Id, core.RoleEveryone, core.PermMessageReplyInThread); err != nil {
 			t.Fatalf("failed to deny permission: %v", err)
 		}
-		defer env.core.GrantSpaceRolePermission(env.ctx, env.testSpace.Id, core.SpaceRoleEveryone, core.PermMessageReplyInThread)
+		defer env.core.GrantSpaceRolePermission(env.ctx, env.testSpace.Id, core.RoleEveryone, core.PermMessageReplyInThread)
 
 		root, err := env.core.PostMessage(env.ctx, env.testSpace.Id, env.testRoom.Id, env.testUser.Id, "Root for thread no-reply test", nil, "", "", nil, false)
 		if err != nil {
@@ -1272,7 +1272,7 @@ func TestPostMessage_EchoPermission(t *testing.T) {
 		}
 
 		// Deny echo at room level for everyone role (testUser is space owner, has roles.manage)
-		err = env.core.DenyRoomRolePermission(env.ctx, env.testUser.Id, env.testSpace.Id, env.testRoom.Id, core.SpaceRoleEveryone, core.PermMessageEcho)
+		err = env.core.DenyRoomRolePermission(env.ctx, env.testUser.Id, env.testSpace.Id, env.testRoom.Id, core.RoleEveryone, core.PermMessageEcho)
 		if err != nil {
 			t.Fatalf("failed to deny permission: %v", err)
 		}
@@ -1308,7 +1308,7 @@ func TestPostMessage_EchoPermission(t *testing.T) {
 		}
 
 		// Deny message.post at room level for everyone role
-		err = env.core.DenyRoomRolePermission(env.ctx, env.testUser.Id, env.testSpace.Id, env.testRoom.Id, core.SpaceRoleEveryone, core.PermMessagePost)
+		err = env.core.DenyRoomRolePermission(env.ctx, env.testUser.Id, env.testSpace.Id, env.testRoom.Id, core.RoleEveryone, core.PermMessagePost)
 		if err != nil {
 			t.Fatalf("failed to deny permission: %v", err)
 		}

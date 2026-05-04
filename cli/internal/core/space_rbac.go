@@ -187,7 +187,7 @@ func (c *ChattoCore) DeleteRole(ctx context.Context, actorID, spaceID, name stri
 	}
 
 	// Check if it's a system role (before calling engine, to keep same behavior)
-	if IsSpaceSystemRole(name) {
+	if IsSystemRole(name) {
 		return ErrCannotDeleteSystemRole
 	}
 
@@ -485,7 +485,7 @@ var ErrCannotAssignHigherRole = errors.New("cannot assign role equal to or highe
 // Hierarchy check: actor must outrank the role being assigned (actor's position < role's position).
 func (c *ChattoCore) AssignRole(ctx context.Context, actorID, spaceID, userID, roleName string) error {
 	// Member role is implicit for all space members - no need to store in KV
-	if roleName == SpaceRoleEveryone {
+	if roleName == RoleEveryone {
 		return nil // No-op, they already have it via space membership
 	}
 
@@ -545,7 +545,7 @@ var ErrCannotManageHigherUser = errors.New("cannot modify roles for a user with 
 //   - Actor must outrank the target user (actor's position < target's position)
 func (c *ChattoCore) RevokeRole(ctx context.Context, actorID, spaceID, userID, roleName string) error {
 	// Member role is implicit and cannot be revoked (leave space instead)
-	if roleName == SpaceRoleEveryone {
+	if roleName == RoleEveryone {
 		return nil // No-op for idempotency
 	}
 
@@ -555,7 +555,7 @@ func (c *ChattoCore) RevokeRole(ctx context.Context, actorID, spaceID, userID, r
 	}
 
 	// Prevent owners from removing their own owner role
-	if roleName == SpaceRoleOwner && actorID == userID {
+	if roleName == RoleOwner && actorID == userID {
 		return ErrCannotRevokeSelfAdmin
 	}
 
@@ -687,7 +687,7 @@ func (c *ChattoCore) GetUserRoles(ctx context.Context, spaceID, userID string) (
 		return nil, err
 	}
 	if isMember {
-		roles = append([]string{SpaceRoleEveryone}, roles...)
+		roles = append([]string{RoleEveryone}, roles...)
 	}
 
 	return roles, nil
@@ -728,7 +728,7 @@ func (c *ChattoCore) GetUserEffectiveSpacePermissions(ctx context.Context, space
 // For the "member" role, this returns all space members (since it's implicit).
 func (c *ChattoCore) GetRoleUsers(ctx context.Context, spaceID, roleName string) ([]string, error) {
 	// Member role is implicit - return all space members
-	if roleName == SpaceRoleEveryone {
+	if roleName == RoleEveryone {
 		return c.GetSpaceMemberIDs(ctx, spaceID)
 	}
 
@@ -837,7 +837,7 @@ func (c *ChattoCore) CreateDefaultRoles(ctx context.Context, spaceID string) err
 	}
 
 	// Create owner role (position 0) - explicitly stored in KV
-	if _, err := engine.CreateRoleWithPosition(ctx, SpaceRoleOwner, "Owner", "Full space control", rbac.PositionOwner); err != nil {
+	if _, err := engine.CreateRoleWithPosition(ctx, RoleOwner, "Owner", "Full space control", rbac.PositionOwner); err != nil {
 		// Ignore if already exists (idempotent)
 		if !errors.Is(err, rbac.ErrRoleAlreadyExists) {
 			return fmt.Errorf("failed to create owner role: %w", err)
@@ -845,14 +845,14 @@ func (c *ChattoCore) CreateDefaultRoles(ctx context.Context, spaceID string) err
 	}
 
 	// Create admin role (position 1) - explicitly stored in KV
-	if _, err := engine.CreateRoleWithPosition(ctx, SpaceRoleAdmin, "Admin", "Can manage space settings, roles, and members", rbac.PositionAdmin); err != nil {
+	if _, err := engine.CreateRoleWithPosition(ctx, RoleAdmin, "Admin", "Can manage space settings, roles, and members", rbac.PositionAdmin); err != nil {
 		if !errors.Is(err, rbac.ErrRoleAlreadyExists) {
 			return fmt.Errorf("failed to create admin role: %w", err)
 		}
 	}
 
 	// Create moderator role (position 2) - explicitly stored in KV
-	if _, err := engine.CreateRoleWithPosition(ctx, SpaceRoleModerator, "Moderator", "Can manage rooms and remove members", rbac.PositionModerator); err != nil {
+	if _, err := engine.CreateRoleWithPosition(ctx, RoleModerator, "Moderator", "Can manage rooms and remove members", rbac.PositionModerator); err != nil {
 		if !errors.Is(err, rbac.ErrRoleAlreadyExists) {
 			return fmt.Errorf("failed to create moderator role: %w", err)
 		}
@@ -919,7 +919,7 @@ func (c *ChattoCore) HasSpaceUserPermissionViaRoles(ctx context.Context, spaceID
 	// Check role denials first (deny-override pattern)
 	// Check member role denials (if user is a member)
 	if isMember {
-		memberDenies, err := engine.RoleHasPermissionDenial(ctx, SpaceRoleEveryone, parts.Verb, parts.ObjectType, rbac.ObjectIdAny)
+		memberDenies, err := engine.RoleHasPermissionDenial(ctx, RoleEveryone, parts.Verb, parts.ObjectType, rbac.ObjectIdAny)
 		if err != nil {
 			return false, err
 		}
@@ -930,7 +930,7 @@ func (c *ChattoCore) HasSpaceUserPermissionViaRoles(ctx context.Context, spaceID
 
 	// Check explicit role denials (including admin - admin is no longer immune)
 	for _, roleName := range roles {
-		if roleName == SpaceRoleEveryone {
+		if roleName == RoleEveryone {
 			continue // Already checked above
 		}
 		denies, err := engine.RoleHasPermissionDenial(ctx, roleName, parts.Verb, parts.ObjectType, rbac.ObjectIdAny)
@@ -945,7 +945,7 @@ func (c *ChattoCore) HasSpaceUserPermissionViaRoles(ctx context.Context, spaceID
 	// Check role grants
 	// Check member role grants (if user is a member)
 	if isMember {
-		memberHasPerm, err := engine.RoleHasPermission(ctx, SpaceRoleEveryone, parts.Verb, parts.ObjectType, rbac.ObjectIdAny)
+		memberHasPerm, err := engine.RoleHasPermission(ctx, RoleEveryone, parts.Verb, parts.ObjectType, rbac.ObjectIdAny)
 		if err != nil {
 			return false, err
 		}
@@ -956,7 +956,7 @@ func (c *ChattoCore) HasSpaceUserPermissionViaRoles(ctx context.Context, spaceID
 
 	// Check explicit role grants (including admin - admin must have permissions explicitly granted)
 	for _, roleName := range roles {
-		if roleName == SpaceRoleEveryone {
+		if roleName == RoleEveryone {
 			continue // Already checked above
 		}
 		has, err := engine.RoleHasPermission(ctx, roleName, parts.Verb, parts.ObjectType, rbac.ObjectIdAny)
@@ -1004,7 +1004,7 @@ func (c *ChattoCore) HasSpaceUserPermissionDeniedViaRoles(ctx context.Context, s
 
 	// Check member role denials (if user is a member)
 	if isMember {
-		memberDenies, err := engine.RoleHasPermissionDenial(ctx, SpaceRoleEveryone, parts.Verb, parts.ObjectType, rbac.ObjectIdAny)
+		memberDenies, err := engine.RoleHasPermissionDenial(ctx, RoleEveryone, parts.Verb, parts.ObjectType, rbac.ObjectIdAny)
 		if err != nil {
 			return false, err
 		}
@@ -1015,7 +1015,7 @@ func (c *ChattoCore) HasSpaceUserPermissionDeniedViaRoles(ctx context.Context, s
 
 	// Check explicit role denials
 	for _, roleName := range roles {
-		if roleName == SpaceRoleEveryone {
+		if roleName == RoleEveryone {
 			continue
 		}
 		denies, err := engine.RoleHasPermissionDenial(ctx, roleName, parts.Verb, parts.ObjectType, rbac.ObjectIdAny)
@@ -1037,10 +1037,22 @@ func (c *ChattoCore) HasSpaceUserPermissionDeniedViaRoles(ctx context.Context, s
 // for users based on their instance roles. Instance roles appear in the
 // space admin UI with an "instance:" prefix.
 
+// instanceRoleSubjectKey is the KV-side subject used for instance-role
+// overrides stored in a space's RBAC bucket. Per ADR-028 the instance/space
+// role namespaces collapse to a single set of names ("owner", "admin", ...)
+// — but the dual-tier mechanism is alive through PR 4 of the Phase 2 refactor,
+// so we still need to disambiguate "this entry is an override for the
+// instance-side admin at this space" from "this entry is the space-side admin
+// role's normal config." The "instance-" prefix lives only in the KV key,
+// not in the Go-level role-name parameter. Goes away with the dual tier in PR 4.
+func instanceRoleSubjectKey(role string) string {
+	return rbac.InstanceRolePrefix + role
+}
+
 // grantInstanceRoleSpacePermissionInternal grants a space permission to an instance role.
 // Internal use only (no authorization check) - for use during space creation.
 func (c *ChattoCore) grantInstanceRoleSpacePermissionInternal(ctx context.Context, spaceID, instanceRole string, perm Permission) error {
-	if err := c.GrantSpaceRolePermission(ctx, spaceID, instanceRole, perm); err != nil {
+	if err := c.GrantSpaceRolePermission(ctx, spaceID, instanceRoleSubjectKey(instanceRole), perm); err != nil {
 		return fmt.Errorf("failed to grant instance role permission: %w", err)
 	}
 
@@ -1092,7 +1104,7 @@ func (c *ChattoCore) DenyInstanceRoleSpacePermission(ctx context.Context, actorI
 		return err
 	}
 
-	if err := c.DenySpaceRolePermission(ctx, spaceID, instanceRole, perm); err != nil {
+	if err := c.DenySpaceRolePermission(ctx, spaceID, instanceRoleSubjectKey(instanceRole), perm); err != nil {
 		return fmt.Errorf("failed to deny instance role permission: %w", err)
 	}
 
@@ -1120,7 +1132,7 @@ func (c *ChattoCore) ClearInstanceRoleSpacePermission(ctx context.Context, actor
 		return err
 	}
 
-	if err := c.ClearSpaceRolePermission(ctx, spaceID, instanceRole, perm); err != nil {
+	if err := c.ClearSpaceRolePermission(ctx, spaceID, instanceRoleSubjectKey(instanceRole), perm); err != nil {
 		return fmt.Errorf("failed to clear instance role permission: %w", err)
 	}
 
@@ -1137,9 +1149,13 @@ func (c *ChattoCore) GetInstanceRoleSpacePermissions(ctx context.Context, spaceI
 		return nil, nil, fmt.Errorf("failed to get space RBAC KV: %w", err)
 	}
 
-	// Instance role name is used as-is in the KV key (e.g., "instance-admin", "instance-moderator")
-	// Key format: allow.{instanceRole}.{verb}.{objectType}.{objectId}
-	grantPattern := rbac.AllowPatternForSubject(instanceRole)
+	// Instance-role overrides at space scope are stored under the
+	// "instance-{role}" prefix to disambiguate from the same-named space role
+	// (per ADR-028 the role namespaces collapsed but the dual-tier mechanism
+	// is still alive through PR 4).
+	subject := instanceRoleSubjectKey(instanceRole)
+	// Key format: allow.{subject}.{verb}.{objectType}.{objectId}
+	grantPattern := rbac.AllowPatternForSubject(subject)
 	grantLister, err := kv.ListKeysFiltered(ctx, grantPattern)
 	if err == nil {
 		for key := range grantLister.Keys() {
@@ -1153,8 +1169,8 @@ func (c *ChattoCore) GetInstanceRoleSpacePermissions(ctx context.Context, spaceI
 		}
 	}
 
-	// Key format: deny.{instanceRole}.{verb}.{objectType}.{objectId}
-	denyPattern := rbac.DenyPatternForSubject(instanceRole)
+	// Key format: deny.{subject}.{verb}.{objectType}.{objectId}
+	denyPattern := rbac.DenyPatternForSubject(subject)
 	denyLister, err := kv.ListKeysFiltered(ctx, denyPattern)
 	if err == nil {
 		for key := range denyLister.Keys() {

@@ -309,9 +309,9 @@ func NewChattoCore(ctx context.Context, nc *nats.Conn, cfg config.CoreConfig) (*
 	// Initialize instance RBAC engine with virtual roles
 	// Owner, admin, and moderator are explicitly created in KV; everyone is virtual
 	instanceRBACEngine := rbac.NewEngine(storage.instanceRBACKV, rbac.Config{
-		SystemRoles:  []string{InstRoleOwner, InstRoleAdmin, InstRoleModerator, InstRoleEveryone},
-		AdminRole:    InstRoleOwner, // Owner is the top admin role for instance
-		VirtualRoles: InstanceVirtualRoles(),
+		SystemRoles:  []string{RoleOwner, RoleAdmin, RoleModerator, RoleEveryone},
+		AdminRole:    RoleOwner, // Owner is the top admin role for instance
+		VirtualRoles: VirtualRoles(),
 		ValidateVerbObjectType: func(verb, objectType string) error {
 			perm := ReconstructPermission(verb, objectType)
 			if perm == "" {
@@ -710,9 +710,9 @@ func (c *ChattoCore) getSpaceRBACEngine(ctx context.Context, spaceID string) (*r
 			return nil, fmt.Errorf("failed to get space RBAC bucket: %w", err)
 		}
 		engine := rbac.NewEngine(kv, rbac.Config{
-			SystemRoles:  []string{SpaceRoleOwner, SpaceRoleModerator, SpaceRoleEveryone},
-			AdminRole:    SpaceRoleOwner,
-			VirtualRoles: SpaceVirtualRoles(),
+			SystemRoles:  []string{RoleOwner, RoleModerator, RoleEveryone},
+			AdminRole:    RoleOwner,
+			VirtualRoles: VirtualRoles(),
 			ValidateVerbObjectType: func(verb, objectType string) error {
 				perm := ReconstructPermission(verb, objectType)
 				if perm == "" {

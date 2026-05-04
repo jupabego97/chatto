@@ -120,11 +120,11 @@ func assignBootstrapRole(ctx context.Context, logger *log.Logger, c *core.Chatto
 	var roleName string
 	switch role {
 	case "owner":
-		roleName = core.InstRoleOwner
+		roleName = core.RoleOwner
 	case "admin":
-		roleName = core.InstRoleAdmin
+		roleName = core.RoleAdmin
 	case "moderator":
-		roleName = core.InstRoleModerator
+		roleName = core.RoleModerator
 	default:
 		logger.Warn("Unknown instance_role in [bootstrap]; ignoring", "login", login, "role", role)
 		return

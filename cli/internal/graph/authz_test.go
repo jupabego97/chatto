@@ -253,7 +253,7 @@ func TestRequireInstancePermission(t *testing.T) {
 		}
 
 		// Deny spaces.create for everyone role
-		if err := env.core.DenyInstanceRolePermission(env.ctx, core.InstRoleEveryone, core.PermUserDeleteSelf); err != nil {
+		if err := env.core.DenyInstanceRolePermission(env.ctx, core.RoleEveryone, core.PermUserDeleteSelf); err != nil {
 			t.Fatalf("Failed to deny permission: %v", err)
 		}
 
@@ -277,7 +277,7 @@ func TestRequireInstancePermission(t *testing.T) {
 		}
 
 		// Assign admin role
-		if err := env.core.AssignInstanceRole(env.ctx, core.SystemActorID, user.Id, core.InstRoleAdmin); err != nil {
+		if err := env.core.AssignInstanceRole(env.ctx, core.SystemActorID, user.Id, core.RoleAdmin); err != nil {
 			t.Fatalf("Failed to assign admin role: %v", err)
 		}
 

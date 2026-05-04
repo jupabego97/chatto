@@ -285,7 +285,7 @@ func (r *roomResolver) RoomPermissionOverrides(ctx context.Context, obj *corev1.
 			RoleName:          role.Name,
 			DisplayName:       role.DisplayName,
 			IsInstanceRole:    false,
-			IsSystem:          core.IsSpaceSystemRole(role.Name),
+			IsSystem:          core.IsSystemRole(role.Name),
 			Position:          role.Position,
 			Permissions:       grantStrs,
 			PermissionDenials: denialStrs,
