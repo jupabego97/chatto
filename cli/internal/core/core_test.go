@@ -260,46 +260,10 @@ func TestPerSpaceBucketCache_CachingWorks(t *testing.T) {
 	}
 }
 
-// TestPerSpaceBucketCache_DeleteAndRecreate verifies that cache deletion works
-// and that a new bucket is created after deletion.
-func TestPerSpaceBucketCache_DeleteAndRecreate(t *testing.T) {
-	core, _ := setupTestCore(t)
-	ctx := testContext(t)
-
-	// Create a test space
-	space, _ := core.CreateSpace(ctx, "test-user", "Test Space", "A test space")
-
-	// Create and cache the bucket
-	originalBucket, err := core.getSpaceConfigBucket(ctx, space.Id)
-	if err != nil {
-		t.Fatalf("Failed to create bucket: %v", err)
-	}
-
-	// Delete from cache (simulating space deletion cleanup)
-	core.storage.spaceConfigKV.Delete(space.Id)
-
-	// Get bucket again - should create a new one since cache was cleared
-	newBucket, err := core.getSpaceConfigBucket(ctx, space.Id)
-	if err != nil {
-		t.Fatalf("Failed to recreate bucket: %v", err)
-	}
-
-	// Verify it's a different instance (cache was cleared and recreated)
-	// Note: In production, the underlying NATS bucket might be the same,
-	// but the Go interface instance should be different
-	if newBucket == originalBucket {
-		t.Error("Expected new bucket instance after cache deletion, got same instance")
-	}
-
-	// Verify the new bucket is now cached
-	cachedBucket, err := core.getSpaceConfigBucket(ctx, space.Id)
-	if err != nil {
-		t.Fatalf("Failed to get cached bucket: %v", err)
-	}
-	if cachedBucket != newBucket {
-		t.Error("New bucket should be cached")
-	}
-}
+// TestPerSpaceBucketCache_DeleteAndRecreate was removed in PR 7 of the
+// Phase 2 refactor. The per-space bucket lazycache is gone (per ADR-029
+// every "space" resolves against the same server-wide bucket), so
+// "delete from cache and recreate" no longer applies.
 
 // TestPerSpaceBucketCache_BucketConfigured verifies that storage buckets are correctly configured.
 func TestPerSpaceBucketCache_BucketConfigured(t *testing.T) {

@@ -109,30 +109,12 @@ func TestPermissionExplanation_RoomIDWithoutSpaceIDFails(t *testing.T) {
 	}
 }
 
-// TestPermissionExplanation_RoomMustBelongToSpace verifies that passing a
-// roomID that does not exist in the requested space is rejected. Without
-// this check, an admin could query (spaceA, roomFromSpaceB) and get a
-// successful empty trace — the KV scoping prevents real data exposure but
-// the API contract should reject the nonsensical pair.
+// TestPermissionExplanation_RoomMustBelongToSpace was a dual-tier
+// safeguard. Per ADR-021 / ADR-029 (PR 7) rooms are server-wide; the
+// "(spaceA, roomFromSpaceB)" pair is no longer nonsensical because there
+// is one server. Skipped.
 func TestPermissionExplanation_RoomMustBelongToSpace(t *testing.T) {
-	env := setupTestResolver(t)
-	query := env.resolver.Query()
-
-	otherSpace, err := env.core.CreateSpace(env.ctx, env.testUser.Id, "Other", "")
-	if err != nil {
-		t.Fatalf("create other space: %v", err)
-	}
-	otherRoom, err := env.core.CreateRoom(env.ctx, env.testUser.Id, otherSpace.Id, "general", "")
-	if err != nil {
-		t.Fatalf("create other room: %v", err)
-	}
-
-	_, err = query.PermissionExplanation(
-		env.authContext(), env.testUser.Id, &env.testSpace.Id, &otherRoom.Id,
-	)
-	if !errors.Is(err, core.ErrPermissionDenied) {
-		t.Errorf("expected ErrPermissionDenied for cross-space roomId, got %v", err)
-	}
+	t.Skip("Per ADR-021 / ADR-029 (PR 7) rooms are server-wide; cross-space roomId rejection no longer applies.")
 }
 
 // TestPermissionExplanation_TargetMustBeSpaceMember verifies that the

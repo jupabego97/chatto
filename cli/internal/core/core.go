@@ -409,20 +409,30 @@ func (c *ChattoCore) Subscribe(ctx context.Context, subject string, handler nats
 // ============================================================================
 
 // storage encapsulates all JetStream KV buckets and streams used by Chatto Core.
+//
+// Per ADR-029 (PR 7 of the Phase 2 refactor) the per-space KV buckets
+// (`SPACE_{id}_BODIES` / `_REACTIONS` / `_THREADS` / `_RUNTIME` / `_CONFIG`)
+// were consolidated into single server-wide buckets. The lazycache layer
+// went away with them — every read hits the same KV bucket regardless of
+// `spaceID`. Bucket renames (INSTANCE → SERVER, USER_PRESENCE → PRESENCE,
+// etc.) and the further bucket merges (INSTANCE_RBAC / INSTANCE_CONFIG /
+// NOTIFICATIONS / AUTH_TOKENS / CALL_STATE → SERVER + RUNTIME) happen in
+// follow-up commits / PRs.
 type storage struct {
-	instanceKV       jetstream.KeyValue
+	instanceKV       jetstream.KeyValue // Structural state: users, spaces, rooms, room memberships, server config (label rename to SERVER pending)
 	instanceStore    jetstream.ObjectStore
 	encryptionKV     jetstream.KeyValue // Encryption keys (excluded from backups)
-	instanceRBACKV   jetstream.KeyValue // Instance-level roles and permissions
-	instanceConfigKV jetstream.KeyValue // Runtime configuration overrides
+	instanceRBACKV   jetstream.KeyValue // Server-wide RBAC (renamed/merged later)
+	instanceConfigKV jetstream.KeyValue // Runtime configuration overrides (merged into SERVER later)
 
-	spaceConfigKV    *lazycache.Cache[jetstream.KeyValue]      // SPACE_{id}_CONFIG - rooms, memberships
-	spaceRuntimeKV   *lazycache.Cache[jetstream.KeyValue]      // SPACE_{id}_RUNTIME - sequences, timestamps, read status
-	bodiesKV         *lazycache.Cache[jetstream.KeyValue]      // SPACE_{id}_BODIES - message bodies
-	attachments      *lazycache.Cache[jetstream.ObjectStore]   // SPACE_{id}_ASSETS - message attachments
-	reactionsKV      *lazycache.Cache[jetstream.KeyValue]      // SPACE_{id}_REACTIONS - emoji reactions
-	threadsKV        *lazycache.Cache[jetstream.KeyValue]      // SPACE_{id}_THREADS - thread metadata
-	presenceKV            jetstream.KeyValue     // Instance-level presence bucket
+	// Server-wide data buckets (per ADR-029 destination shape):
+	bodiesKV    jetstream.KeyValue    // BODIES — message bodies, key {userId}.{eventId}
+	reactionsKV jetstream.KeyValue    // REACTIONS — emoji reactions, key {eventId}.{emoji}.{userId}
+	threadsKV   jetstream.KeyValue    // THREADS — thread metadata, key {roomId}.{rootEventId}
+	runtimeKV   jetstream.KeyValue    // RUNTIME — per-room read state, mention status (consolidated; broader RUNTIME merge pending)
+	attachments *lazycache.Cache[jetstream.ObjectStore] // SPACE_{id}_ASSETS — TODO: collapse into a single ATTACHMENTS store
+
+	presenceKV            jetstream.KeyValue     // USER_PRESENCE — presence (rename to PRESENCE pending)
 	imageCacheStore       jetstream.ObjectStore  // Optional: cached resized images (nil if disabled)
 	notificationsKV       jetstream.KeyValue     // User notifications with TTL
 	callStateKV           jetstream.KeyValue     // Active voice call participants (ephemeral, memory-backed)
@@ -570,19 +580,56 @@ func newStorage(js jetstream.JetStream, ctx context.Context, cfg config.CoreConf
 		return nil, fmt.Errorf("failed to create AUTH_TOKENS KV bucket: %w", err)
 	}
 
-	// Return initialized storage and whether RBAC bucket was newly created
+	// Server-wide data buckets per ADR-029 (PR 7). Replace per-space
+	// SPACE_{id}_BODIES / _REACTIONS / _THREADS / _RUNTIME.
+	bodiesKV, err := js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      "BODIES",
+		Description: "Message bodies (server-wide)",
+		Storage:     jetstream.FileStorage,
+		Replicas:    cfg.Replicas,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create BODIES KV bucket: %w", err)
+	}
+	reactionsKV, err := js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      "REACTIONS",
+		Description: "Emoji reactions (server-wide)",
+		Storage:     jetstream.FileStorage,
+		Replicas:    cfg.Replicas,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create REACTIONS KV bucket: %w", err)
+	}
+	threadsKV, err := js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      "THREADS",
+		Description: "Thread metadata (server-wide)",
+		Storage:     jetstream.FileStorage,
+		Replicas:    cfg.Replicas,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create THREADS KV bucket: %w", err)
+	}
+	runtimeKV, err := js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      "RUNTIME",
+		Description: "Per-room read state, mention status, etc. (server-wide; wipeable)",
+		Storage:     jetstream.FileStorage,
+		Replicas:    cfg.Replicas,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create RUNTIME KV bucket: %w", err)
+	}
+
 	return &storage{
 		instanceKV:       instanceKV,
 		instanceStore:    instanceStore,
 		encryptionKV:     encryptionKV,
 		instanceRBACKV:   instanceRBACKV,
 		instanceConfigKV: instanceConfigKV,
-		spaceConfigKV:    lazycache.New[jetstream.KeyValue](),
-		spaceRuntimeKV:   lazycache.New[jetstream.KeyValue](),
-		bodiesKV:         lazycache.New[jetstream.KeyValue](),
+		bodiesKV:         bodiesKV,
+		reactionsKV:      reactionsKV,
+		threadsKV:        threadsKV,
+		runtimeKV:        runtimeKV,
 		attachments:      lazycache.New[jetstream.ObjectStore](),
-		reactionsKV:      lazycache.New[jetstream.KeyValue](),
-		threadsKV:        lazycache.New[jetstream.KeyValue](),
 		presenceKV:            presenceKV,
 		imageCacheStore:       imageCacheStore,
 		notificationsKV:       notificationsKV,
@@ -664,94 +711,55 @@ func eventIDFromBodyKey(bodyKey string) string {
 }
 
 // ============================================================================
-// Per-Space Bucket Accessors
+// Server-Wide Bucket Accessors
 // ============================================================================
+//
+// Per ADR-021 / ADR-028 / ADR-029 (PRs 4 + 7 of Phase 2) RBAC and the
+// per-space data buckets were consolidated into single server-wide buckets.
+// All accessors below retain a `spaceID` parameter for call-site
+// compatibility through PR 9 (the Instance → Server rename) but ignore it.
 
-// getSpaceConfigKV retrieves or creates the CONFIG bucket for a space.
-// The bucket contains structural data (rooms, memberships).
+// getSpaceConfigKV returns the unified KV bucket for structural data
+// (rooms, room memberships, and other per-room/per-space records that used
+// to live in `SPACE_{id}_CONFIG`). Today this is the same `INSTANCE` bucket
+// that already holds users, spaces and space memberships; the per-space
+// CONFIG bucket is gone.
 func (c *ChattoCore) getSpaceConfigKV(ctx context.Context, spaceID string) (jetstream.KeyValue, error) {
-	return c.storage.spaceConfigKV.GetOrCreate(spaceID, func() (jetstream.KeyValue, error) {
-		if _, err := c.GetSpace(ctx, spaceID); err != nil {
-			return nil, fmt.Errorf("space %s does not exist: %w", spaceID, err)
-		}
-		bucket, err := c.js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
-			Bucket:      fmt.Sprintf("SPACE_%s_CONFIG", spaceID),
-			Description: fmt.Sprintf("Configuration (rooms, memberships) for space %s", spaceID),
-			Storage:     jetstream.FileStorage,
-			Replicas:    c.config.Replicas,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create config bucket for space %s: %w", spaceID, err)
-		}
-		c.logger.Debug("Created/updated space config bucket", "bucket", fmt.Sprintf("SPACE_%s_CONFIG", spaceID), "space_id", spaceID)
-		return bucket, nil
-	})
+	_ = ctx
+	_ = spaceID
+	return c.storage.instanceKV, nil
 }
 
 // getSpaceRBACKV returns the unified RBAC KV bucket.
-//
-// Per ADR-021 / ADR-028 (PR 4 of Phase 2), RBAC state is stored in a single
-// server-wide bucket. The spaceID parameter is retained for call-site
-// compatibility through PR 9 but is ignored.
 func (c *ChattoCore) getSpaceRBACKV(ctx context.Context, spaceID string) (jetstream.KeyValue, error) {
 	return c.storage.instanceRBACKV, nil
 }
 
 // getSpaceRBACEngine returns the unified rbac.Engine.
-//
-// Per ADR-021 / ADR-028 (PR 4 of Phase 2) the per-space engine cache was
-// dropped; every "space" resolves against the same engine over the same
-// bucket. The spaceID parameter is retained for call-site compatibility
-// through PR 9 but is ignored.
 func (c *ChattoCore) getSpaceRBACEngine(ctx context.Context, spaceID string) (*rbac.Engine, error) {
 	return c.instanceRBACEngine, nil
 }
 
-// getSpaceRuntimeKV retrieves or creates the RUNTIME bucket for a space.
-// The bucket contains transient state (sequences, timestamps, read status).
+// getSpaceRuntimeKV returns the unified RUNTIME bucket (per-room read
+// state, mention status, etc.). Per-space `SPACE_{id}_RUNTIME` is gone.
 func (c *ChattoCore) getSpaceRuntimeKV(ctx context.Context, spaceID string) (jetstream.KeyValue, error) {
-	return c.storage.spaceRuntimeKV.GetOrCreate(spaceID, func() (jetstream.KeyValue, error) {
-		if _, err := c.GetSpace(ctx, spaceID); err != nil {
-			return nil, fmt.Errorf("space %s does not exist: %w", spaceID, err)
-		}
-		bucket, err := c.js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
-			Bucket:      fmt.Sprintf("SPACE_%s_RUNTIME", spaceID),
-			Description: fmt.Sprintf("Runtime state (sequences, read status) for space %s", spaceID),
-			Storage:     jetstream.FileStorage,
-			Replicas:    c.config.Replicas,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create runtime bucket for space %s: %w", spaceID, err)
-		}
-		c.logger.Debug("Created/updated space runtime bucket", "bucket", fmt.Sprintf("SPACE_%s_RUNTIME", spaceID), "space_id", spaceID)
-		return bucket, nil
-	})
+	_ = ctx
+	_ = spaceID
+	return c.storage.runtimeKV, nil
 }
 
-// getSpaceBodiesKV retrieves or creates the BODIES bucket for a space.
-// The bucket stores message bodies, separated from the main space bucket for
-// performance, scaling, and operational flexibility.
+// getSpaceBodiesKV returns the unified BODIES bucket. Key shape
+// `{userId}.{eventId}` is already globally unique so no further keying
+// changes are needed.
 func (c *ChattoCore) getSpaceBodiesKV(ctx context.Context, spaceID string) (jetstream.KeyValue, error) {
-	return c.storage.bodiesKV.GetOrCreate(spaceID, func() (jetstream.KeyValue, error) {
-		if _, err := c.GetSpace(ctx, spaceID); err != nil {
-			return nil, fmt.Errorf("space %s does not exist: %w", spaceID, err)
-		}
-		bucket, err := c.js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
-			Bucket:      fmt.Sprintf("SPACE_%s_BODIES", spaceID),
-			Description: fmt.Sprintf("Message bodies for space %s", spaceID),
-			Storage:     jetstream.FileStorage,
-			Replicas:    c.config.Replicas,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create bodies bucket for space %s: %w", spaceID, err)
-		}
-		c.logger.Debug("Created/updated bodies bucket", "bucket", fmt.Sprintf("SPACE_%s_BODIES", spaceID), "space_id", spaceID)
-		return bucket, nil
-	})
+	_ = ctx
+	_ = spaceID
+	return c.storage.bodiesKV, nil
 }
 
-// getSpaceAttachments retrieves or creates the ASSETS ObjectStore for a space.
-// The bucket stores message attachment binaries with S2 compression.
+// getSpaceAttachments retrieves or creates the per-space ASSETS object
+// store. Object-store consolidation into a single ATTACHMENTS / ASSETS
+// store is deferred to a follow-up commit; per-space stores still exist.
 func (c *ChattoCore) getSpaceAttachments(ctx context.Context, spaceID string) (jetstream.ObjectStore, error) {
 	return c.storage.attachments.GetOrCreate(spaceID, func() (jetstream.ObjectStore, error) {
 		if _, err := c.GetSpace(ctx, spaceID); err != nil {
@@ -772,46 +780,22 @@ func (c *ChattoCore) getSpaceAttachments(ctx context.Context, spaceID string) (j
 	})
 }
 
-// getSpaceReactionsKV retrieves or creates the REACTIONS bucket for a space.
-// The bucket stores emoji reactions to messages.
+// getSpaceReactionsKV returns the unified REACTIONS bucket. Key shape
+// `{messageEventId}.{emojiName}.{userId}` is globally unique because
+// event IDs are global.
 func (c *ChattoCore) getSpaceReactionsKV(ctx context.Context, spaceID string) (jetstream.KeyValue, error) {
-	return c.storage.reactionsKV.GetOrCreate(spaceID, func() (jetstream.KeyValue, error) {
-		if _, err := c.GetSpace(ctx, spaceID); err != nil {
-			return nil, fmt.Errorf("space %s does not exist: %w", spaceID, err)
-		}
-		bucket, err := c.js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
-			Bucket:      fmt.Sprintf("SPACE_%s_REACTIONS", spaceID),
-			Description: fmt.Sprintf("Emoji reactions for space %s", spaceID),
-			Storage:     jetstream.FileStorage,
-			Replicas:    c.config.Replicas,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create reactions bucket for space %s: %w", spaceID, err)
-		}
-		c.logger.Debug("Created/updated reactions bucket", "bucket", fmt.Sprintf("SPACE_%s_REACTIONS", spaceID), "space_id", spaceID)
-		return bucket, nil
-	})
+	_ = ctx
+	_ = spaceID
+	return c.storage.reactionsKV, nil
 }
 
-// getSpaceThreadsKV retrieves or creates the THREADS bucket for a space.
-// The bucket contains thread metadata (reply count, last reply time, participants).
+// getSpaceThreadsKV returns the unified THREADS bucket. Key shape
+// `{roomId}.{rootEventId}` is globally unique because room IDs are
+// globally unique.
 func (c *ChattoCore) getSpaceThreadsKV(ctx context.Context, spaceID string) (jetstream.KeyValue, error) {
-	return c.storage.threadsKV.GetOrCreate(spaceID, func() (jetstream.KeyValue, error) {
-		if _, err := c.GetSpace(ctx, spaceID); err != nil {
-			return nil, fmt.Errorf("space %s does not exist: %w", spaceID, err)
-		}
-		bucket, err := c.js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
-			Bucket:      fmt.Sprintf("SPACE_%s_THREADS", spaceID),
-			Description: fmt.Sprintf("Thread metadata for space %s", spaceID),
-			Storage:     jetstream.FileStorage,
-			Replicas:    c.config.Replicas,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create threads bucket for space %s: %w", spaceID, err)
-		}
-		c.logger.Debug("Created/updated threads bucket", "bucket", fmt.Sprintf("SPACE_%s_THREADS", spaceID), "space_id", spaceID)
-		return bucket, nil
-	})
+	_ = ctx
+	_ = spaceID
+	return c.storage.threadsKV, nil
 }
 
 // ============================================================================
@@ -1091,117 +1075,16 @@ func (c *ChattoCore) deleteSpaceStream(ctx context.Context, spaceID string) erro
 	return nil
 }
 
-// createSpaceResources creates all NATS KV buckets and object stores for a space.
-// Called during space creation to eagerly initialize all resources.
-// If creation fails partway, cleans up any successfully created resources.
+// createSpaceResources creates per-space resources that aren't yet
+// consolidated. Per ADR-021 / ADR-028 / ADR-029 (PRs 4 + 6 + 7) the
+// CONFIG / RBAC / BODIES / REACTIONS / THREADS / RUNTIME buckets and the
+// per-space stream are server-wide now; only the per-space ATTACHMENTS
+// object store still exists, and that's lazily created on first access
+// via getSpaceAttachments. So this is now a no-op kept for the symmetric
+// CreateSpace / DeleteSpace plumbing through PR 9.
 func (c *ChattoCore) createSpaceResources(ctx context.Context, spaceID string) error {
-	// Track created resources for cleanup on failure
-	var createdBuckets []string
-
-	cleanup := func() {
-		for _, bucketName := range createdBuckets {
-			if err := c.js.DeleteKeyValue(ctx, bucketName); err != nil {
-				c.logger.Warn("Failed to cleanup bucket during rollback", "bucket", bucketName, "error", err)
-			}
-		}
-	}
-
-	// Create CONFIG bucket
-	configBucketName := fmt.Sprintf("SPACE_%s_CONFIG", spaceID)
-	configBucket, err := c.js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
-		Bucket:      configBucketName,
-		Description: fmt.Sprintf("Configuration (rooms, memberships) for space %s", spaceID),
-		Storage:     jetstream.FileStorage,
-		Replicas:    c.config.Replicas,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create CONFIG bucket: %w", err)
-	}
-	createdBuckets = append(createdBuckets, configBucketName)
-
-	// Per ADR-021 / ADR-028 (PR 4) RBAC is now server-wide; no per-space
-	// RBAC bucket is created. The unified bucket is created at server
-	// startup in newStorage.
-
-	// Create RUNTIME bucket
-	runtimeBucketName := fmt.Sprintf("SPACE_%s_RUNTIME", spaceID)
-	runtimeBucket, err := c.js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
-		Bucket:      runtimeBucketName,
-		Description: fmt.Sprintf("Runtime state (sequences, read status) for space %s", spaceID),
-		Storage:     jetstream.FileStorage,
-		Replicas:    c.config.Replicas,
-	})
-	if err != nil {
-		cleanup()
-		return fmt.Errorf("failed to create RUNTIME bucket: %w", err)
-	}
-	createdBuckets = append(createdBuckets, runtimeBucketName)
-
-	// Create BODIES bucket
-	bodiesBucketName := fmt.Sprintf("SPACE_%s_BODIES", spaceID)
-	bodiesBucket, err := c.js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
-		Bucket:      bodiesBucketName,
-		Description: fmt.Sprintf("Message bodies for space %s", spaceID),
-		Storage:     jetstream.FileStorage,
-		Replicas:    c.config.Replicas,
-	})
-	if err != nil {
-		cleanup()
-		return fmt.Errorf("failed to create BODIES bucket: %w", err)
-	}
-	createdBuckets = append(createdBuckets, bodiesBucketName)
-
-	// Create REACTIONS bucket
-	reactionsBucketName := fmt.Sprintf("SPACE_%s_REACTIONS", spaceID)
-	reactionsBucket, err := c.js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
-		Bucket:      reactionsBucketName,
-		Description: fmt.Sprintf("Emoji reactions for space %s", spaceID),
-		Storage:     jetstream.FileStorage,
-		Replicas:    c.config.Replicas,
-	})
-	if err != nil {
-		cleanup()
-		return fmt.Errorf("failed to create REACTIONS bucket: %w", err)
-	}
-	createdBuckets = append(createdBuckets, reactionsBucketName)
-
-	// Create THREADS bucket
-	threadsBucketName := fmt.Sprintf("SPACE_%s_THREADS", spaceID)
-	threadsBucket, err := c.js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
-		Bucket:      threadsBucketName,
-		Description: fmt.Sprintf("Thread metadata for space %s", spaceID),
-		Storage:     jetstream.FileStorage,
-		Replicas:    c.config.Replicas,
-	})
-	if err != nil {
-		cleanup()
-		return fmt.Errorf("failed to create THREADS bucket: %w", err)
-	}
-	createdBuckets = append(createdBuckets, threadsBucketName)
-
-	// Create ASSETS object store
-	assetsBucketName := fmt.Sprintf("SPACE_%s_ASSETS", spaceID)
-	assetsStore, err := c.js.CreateOrUpdateObjectStore(ctx, jetstream.ObjectStoreConfig{
-		Bucket:      assetsBucketName,
-		Description: fmt.Sprintf("Message attachments for space %s", spaceID),
-		Storage:     jetstream.FileStorage,
-		Compression: true,
-		Replicas:    c.config.Replicas,
-	})
-	if err != nil {
-		cleanup()
-		return fmt.Errorf("failed to create ASSETS store: %w", err)
-	}
-
-	// Populate caches with the newly created resources
-	c.storage.spaceConfigKV.Set(spaceID, configBucket)
-	c.storage.spaceRuntimeKV.Set(spaceID, runtimeBucket)
-	c.storage.bodiesKV.Set(spaceID, bodiesBucket)
-	c.storage.reactionsKV.Set(spaceID, reactionsBucket)
-	c.storage.threadsKV.Set(spaceID, threadsBucket)
-	c.storage.attachments.Set(spaceID, assetsStore)
-
-	c.logger.Debug("Created all space resources", "space_id", spaceID)
+	_ = ctx
+	_ = spaceID
 	return nil
 }
 

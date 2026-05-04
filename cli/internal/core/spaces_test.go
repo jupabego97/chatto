@@ -57,31 +57,23 @@ func TestChattoCore_CreateSpace_EagerResourceCreation(t *testing.T) {
 		t.Fatalf("Failed to create JetStream context: %v", err)
 	}
 
-	// Verify all KV buckets exist immediately after space creation. Per
-	// ADR-021 / ADR-028 (PR 4) RBAC is server-wide, so SPACE_*_RBAC is
-	// no longer created on space creation — the unified bucket lives in
-	// INSTANCE_RBAC.
-	kvBuckets := []string{
-		"SPACE_" + space.Id + "_CONFIG",
-		"SPACE_" + space.Id + "_RUNTIME",
-		"SPACE_" + space.Id + "_BODIES",
-		"SPACE_" + space.Id + "_REACTIONS",
-		"SPACE_" + space.Id + "_THREADS",
-	}
-
+	// Verify the server-wide KV buckets exist. Per ADR-029 (PRs 4 + 7)
+	// the SPACE_*_CONFIG / RBAC / BODIES / REACTIONS / THREADS / RUNTIME
+	// buckets were collapsed into single global buckets created at server
+	// startup, so this now just confirms the server-wide ones exist after
+	// CreateSpace.
+	kvBuckets := []string{"INSTANCE", "BODIES", "REACTIONS", "THREADS", "RUNTIME"}
 	for _, bucketName := range kvBuckets {
 		_, err := js.KeyValue(ctx, bucketName)
 		if err != nil {
-			t.Errorf("Expected KV bucket %s to exist after space creation, got error: %v", bucketName, err)
+			t.Errorf("Expected KV bucket %s to exist, got error: %v", bucketName, err)
 		}
 	}
 
-	// Verify object store exists
-	assetsBucketName := "SPACE_" + space.Id + "_ASSETS"
-	_, err = js.ObjectStore(ctx, assetsBucketName)
-	if err != nil {
-		t.Errorf("Expected object store %s to exist after space creation, got error: %v", assetsBucketName, err)
-	}
+	// The per-space ATTACHMENTS object store is now lazily created on
+	// first use (no longer eagerly created by CreateSpace). Object-store
+	// consolidation into a single ASSETS store is a follow-up commit.
+	_ = space
 
 	// Verify the unified CHAT_EVENTS stream exists. Per ADR-029 (PR 6) per-
 	// space streams are gone; the single CHAT_EVENTS stream is created at

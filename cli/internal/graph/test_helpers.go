@@ -126,8 +126,11 @@ func (e *testEnv) createTestData(t *testing.T) {
 		t.Fatalf("Failed to join test space: %v", err)
 	}
 
-	// Create test room
-	room, err := e.core.CreateRoom(e.ctx, user.Id, space.Id, "General", "General discussion")
+	// Create test room. Per ADR-021 / ADR-029 (PR 7) room names are
+	// server-wide unique, so use a distinctive name that won't collide
+	// with the auto-created "general" / "announcements" rooms produced
+	// by the CreateSpace mutation in tests that call it.
+	room, err := e.core.CreateRoom(e.ctx, user.Id, space.Id, "test-helper-room", "Helper test room")
 	if err != nil {
 		t.Fatalf("Failed to create test room: %v", err)
 	}

@@ -63,35 +63,11 @@ func TestChattoCore_GetAccountInfo(t *testing.T) {
 	})
 
 	t.Run("reflects usage after creating resources", func(t *testing.T) {
-		// Get initial count
-		initialInfo, err := core.GetAccountInfo(ctx)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		initialStreams := initialInfo.StreamsUsed
-
-		// Create a space (which creates a stream)
-		user, err := core.CreateUser(ctx, SystemActorID, "acctinfo-user", "Account Info User", "password123")
-		if err != nil {
-			t.Fatalf("failed to create user: %v", err)
-		}
-
-		_, err = core.CreateSpace(ctx, user.Id, "acctinfo-space", "Account Info Space")
-		if err != nil {
-			t.Fatalf("failed to create space: %v", err)
-		}
-
-		// Get updated count
-		updatedInfo, err := core.GetAccountInfo(ctx)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		// Should have more streams now (at least the space event stream)
-		if updatedInfo.StreamsUsed <= initialStreams {
-			t.Errorf("expected StreamsUsed to increase after creating space, was %d now %d",
-				initialStreams, updatedInfo.StreamsUsed)
-		}
+		// Per ADR-029 (PRs 6 + 7) the per-space stream + per-space data
+		// buckets are gone — CreateSpace no longer adds streams or KV
+		// buckets to the account. The unified resources are created once
+		// at server startup.
+		t.Skip("CreateSpace no longer creates new streams/buckets post-PR-7")
 	})
 }
 
