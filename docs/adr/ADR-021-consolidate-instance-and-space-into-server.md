@@ -69,6 +69,6 @@ A `type` field on rooms distinguishes `channel` (named, browseable in the room l
 
 - Epic [#284](https://github.com/chattocorp/chatto/issues/284) — Consolidate Instance + Space → Server.
 - Phase 1 epic [#285](https://github.com/chattocorp/chatto/issues/285) — Design & ADRs.
-- Follow-up detail ADRs: [#290](https://github.com/chattocorp/chatto/issues/290) (identity & OIDC binding), [#291](https://github.com/chattocorp/chatto/issues/291) (destination schema), [#292](https://github.com/chattocorp/chatto/issues/292) (permission model details), [#293](https://github.com/chattocorp/chatto/issues/293) (DM-as-room mechanics).
+- Follow-up detail ADRs: [ADR-027](ADR-027-user-identity-and-oidc-binding.md) (identity & OIDC binding, [#290](https://github.com/chattocorp/chatto/issues/290)), [ADR-028](ADR-028-permission-model-post-merge.md) (permission model details, [#292](https://github.com/chattocorp/chatto/issues/292)), [ADR-029](ADR-029-server-destination-schema.md) (destination schema, [#291](https://github.com/chattocorp/chatto/issues/291)), [ADR-030](ADR-030-dm-as-room.md) (DM-as-room mechanics, [#293](https://github.com/chattocorp/chatto/issues/293)).
 - Supersedes [ADR-015](ADR-015-dms-as-hidden-space.md) (DMs as a hidden space).
 - Builds on [ADR-005](ADR-005-hierarchy-wins-rbac.md) (Hierarchy-wins RBAC), whose resolution model carries over unchanged.

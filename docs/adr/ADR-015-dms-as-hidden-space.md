@@ -1,7 +1,7 @@
 # ADR-015: Direct Messages as a Hidden Space
 
 **Date:** 2026-03-01
-**Status:** Superseded by [ADR-021](ADR-021-consolidate-instance-and-space-into-server.md). DMs become regular rooms with `type: dm` once the Instance + Space layers are collapsed into a single Server; the synthetic DM space described below stops existing.
+**Status:** Superseded by [ADR-021](ADR-021-consolidate-instance-and-space-into-server.md) and detailed in [ADR-030](ADR-030-dm-as-room.md). DMs become regular rooms with `type: dm` once the Instance + Space layers are collapsed into a single Server; the synthetic DM space described below stops existing.
 
 ## Context
 

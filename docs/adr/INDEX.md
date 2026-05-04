@@ -28,9 +28,14 @@ For more about ADRs, see [Michael Nygard's article](https://cognitect.com/blog/2
 | [ADR-018](ADR-018-sveltekit-spa-embedded-in-go.md) | SvelteKit SPA Embedded in Go Binary | 2026-03-01 |
 | [ADR-019](ADR-019-dataloaders-http-only.md) | Dataloaders Scoped to HTTP Requests Only | 2026-03-01 |
 | [ADR-020](ADR-020-build-tag-test-endpoints.md) | Build-Tag Gated Test Endpoints | 2026-03-01 |
-| [ADR-021](ADR-021-dual-asset-storage.md) | Dual Asset Storage — NATS ObjectStore Default, S3 Optional | 2026-03-01 |
+| [ADR-021](ADR-021-consolidate-instance-and-space-into-server.md) | Consolidate Instance and Space into a Single Server Concept | 2026-05-04 |
 | [ADR-022](ADR-022-nanoid-with-entity-prefixes.md) | NanoID with Entity-Type Prefixes | 2026-03-01 |
 | [ADR-023](ADR-023-hmac-signed-image-transform-urls.md) | HMAC-Signed Image Transform URLs | 2026-03-01 |
 | [ADR-024](ADR-024-opaque-bearer-tokens-for-cross-origin-auth.md) | Opaque Bearer Tokens for Cross-Origin Authentication | 2026-03-03 |
 | [ADR-025](ADR-025-multi-instance-client-architecture.md) | Multi-Instance Client Architecture | 2026-03-20 |
 | [ADR-026](ADR-026-event-identity-via-nanoid.md) | Event Identity via NanoID, Not JetStream Sequence Numbers | 2026-03-26 |
+| [ADR-027](ADR-027-user-identity-and-oidc-binding.md) | User Identity and OIDC Binding for the Server Model | 2026-05-04 |
+| [ADR-028](ADR-028-permission-model-post-merge.md) | Permission Model After the Server Consolidation | 2026-05-04 |
+| [ADR-029](ADR-029-server-destination-schema.md) | Destination Schema for the Server Model — Buckets, Streams, Subjects | 2026-05-04 |
+| [ADR-030](ADR-030-dm-as-room.md) | Direct Messages as Regular Rooms | 2026-05-04 |
+| [ADR-031](ADR-031-dual-asset-storage.md) | Dual Asset Storage — NATS ObjectStore Default, S3 Optional | 2026-03-01 |

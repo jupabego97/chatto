@@ -1,6 +1,8 @@
-# ADR-021: Dual Asset Storage — NATS ObjectStore Default, S3 Optional
+# ADR-031: Dual Asset Storage — NATS ObjectStore Default, S3 Optional
 
 **Date:** 2026-03-01
+
+> **Note:** Originally landed as ADR-021. Renumbered to ADR-031 on 2026-05-04 to resolve a numbering collision with [ADR-021 — Consolidate Instance and Space into a Single Server Concept](ADR-021-consolidate-instance-and-space-into-server.md). The decision content is unchanged.
 
 ## Context
 
