@@ -183,6 +183,7 @@ func (c *ChattoCore) createDMRoom(ctx context.Context, roomID string, participan
 		Id:      roomID,
 		SpaceId: DMSpaceID,
 		Name:    "", // DMs don't have names - derived from participants in UI
+		Type:    corev1.Room_ROOM_TYPE_DM,
 	}
 
 	// Get config bucket for room storage

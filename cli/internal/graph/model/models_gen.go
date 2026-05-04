@@ -1334,6 +1334,66 @@ func (e PresenceStatus) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// RoomType distinguishes regular channels from direct-message rooms.
+// Per ADR-021 / ADR-030 DMs are regular rooms with type = DM; the synthetic
+// DM space goes away in PR 8 of the Phase 2 refactor.
+type RoomType string
+
+const (
+	// Named channel, listed in the room directory.
+	RoomTypeChannel RoomType = "CHANNEL"
+	// Direct-message room, hidden from browse, listed via dedicated DM query.
+	RoomTypeDm RoomType = "DM"
+)
+
+var AllRoomType = []RoomType{
+	RoomTypeChannel,
+	RoomTypeDm,
+}
+
+func (e RoomType) IsValid() bool {
+	switch e {
+	case RoomTypeChannel, RoomTypeDm:
+		return true
+	}
+	return false
+}
+
+func (e RoomType) String() string {
+	return string(e)
+}
+
+func (e *RoomType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RoomType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RoomType", str)
+	}
+	return nil
+}
+
+func (e RoomType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RoomType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RoomType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 // Status of video processing.
 type VideoProcessingStatus string
 

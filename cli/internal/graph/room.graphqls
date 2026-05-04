@@ -1,4 +1,16 @@
 """
+RoomType distinguishes regular channels from direct-message rooms.
+Per ADR-021 / ADR-030 DMs are regular rooms with type = DM; the synthetic
+DM space goes away in PR 8 of the Phase 2 refactor.
+"""
+enum RoomType {
+  "Named channel, listed in the room directory."
+  CHANNEL
+  "Direct-message room, hidden from browse, listed via dedicated DM query."
+  DM
+}
+
+"""
 A Room is a chat channel within a Space where users can exchange messages.
 """
 type Room {
@@ -6,6 +18,8 @@ type Room {
   id: ID!
   "The ID of the space this room belongs to."
   spaceId: ID!
+  "The room's type — channel or DM."
+  type: RoomType!
   "The room's name."
   name: String!
   "Optional description of the room's purpose."

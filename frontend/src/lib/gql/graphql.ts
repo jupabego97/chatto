@@ -2407,6 +2407,8 @@ export type Room = {
   roomPermissionOverrides: Array<RoleRoomPermissions>;
   /** The ID of the space this room belongs to. */
   spaceId: Scalars['ID']['output'];
+  /** The room's type — channel or DM. */
+  type: RoomType;
   /** Whether the current user can delete any user's messages in this room. */
   viewerCanDeleteAnyMessage: Scalars['Boolean']['output'];
   /** Whether the current user can delete their own messages in this room. */
@@ -2584,6 +2586,18 @@ export type RoomNotificationPreferenceItem = {
   /** The space containing the room. */
   spaceId: Scalars['ID']['output'];
 };
+
+/**
+ * RoomType distinguishes regular channels from direct-message rooms.
+ * Per ADR-021 / ADR-030 DMs are regular rooms with type = DM; the synthetic
+ * DM space goes away in PR 8 of the Phase 2 refactor.
+ */
+export enum RoomType {
+  /** Named channel, listed in the room directory. */
+  Channel = 'CHANNEL',
+  /** Direct-message room, hidden from browse, listed via dedicated DM query. */
+  Dm = 'DM'
+}
 
 /**
  * Event: A room was unarchived.

@@ -7,11 +7,28 @@ package graph
 
 import (
 	"context"
+	"fmt"
 
 	"hmans.de/chatto/internal/core"
 	"hmans.de/chatto/internal/graph/auth"
+	"hmans.de/chatto/internal/graph/model"
 	corev1 "hmans.de/chatto/internal/pb/chatto/core/v1"
 )
+
+// Type is the resolver for the type field. Maps the protobuf Room.RoomType
+// onto the GraphQL enum. Per ADR-021 / ADR-030, ROOM_TYPE_UNSPECIFIED is
+// treated as CHANNEL for backward compatibility (records that pre-date the
+// type field).
+func (r *roomResolver) Type(ctx context.Context, obj *corev1.Room) (model.RoomType, error) {
+	switch obj.Type {
+	case corev1.Room_ROOM_TYPE_DM:
+		return model.RoomTypeDm, nil
+	case corev1.Room_ROOM_TYPE_CHANNEL, corev1.Room_ROOM_TYPE_UNSPECIFIED:
+		return model.RoomTypeChannel, nil
+	default:
+		return "", fmt.Errorf("unknown room type %v", obj.Type)
+	}
+}
 
 // Members is the resolver for the members field.
 func (r *roomResolver) Members(ctx context.Context, obj *corev1.Room) ([]*corev1.User, error) {
