@@ -361,7 +361,6 @@ type ComplexityRoot struct {
 		RolePermissions          func(childComplexity int, roleName string, roomID *string) int
 		Room                     func(childComplexity int, roomID string) int
 		Server                   func(childComplexity int) int
-		ThreadEvents             func(childComplexity int, roomID string, threadRootEventID string) int
 		TierRoles                func(childComplexity int, roomID *string) int
 		User                     func(childComplexity int, id string) int
 		UserByLogin              func(childComplexity int, login string) int
@@ -475,11 +474,12 @@ type ComplexityRoot struct {
 	}
 
 	RoomEvent struct {
-		Actor     func(childComplexity int) int
-		ActorId   func(childComplexity int) int
-		CreatedAt func(childComplexity int) int
-		Event     func(childComplexity int) int
-		Id        func(childComplexity int) int
+		Actor         func(childComplexity int) int
+		ActorId       func(childComplexity int) int
+		CreatedAt     func(childComplexity int) int
+		Event         func(childComplexity int) int
+		Id            func(childComplexity int) int
+		ThreadReplies func(childComplexity int) int
 	}
 
 	RoomEventsAroundResult struct {
@@ -907,7 +907,6 @@ type PresenceChangedEventResolver interface {
 }
 type QueryResolver interface {
 	Room(ctx context.Context, roomID string) (*corev1.Room, error)
-	ThreadEvents(ctx context.Context, roomID string, threadRootEventID string) ([]*corev1.Event, error)
 	Me(ctx context.Context) (*corev1.User, error)
 	User(ctx context.Context, id string) (*corev1.User, error)
 	UserByLogin(ctx context.Context, login string) (*corev1.User, error)
@@ -964,6 +963,7 @@ type RoomResolver interface {
 type RoomEventResolver interface {
 	Actor(ctx context.Context, obj *corev1.Event) (*corev1.User, error)
 	Event(ctx context.Context, obj *corev1.Event) (model.RoomEventType, error)
+	ThreadReplies(ctx context.Context, obj *corev1.Event) ([]*corev1.Event, error)
 }
 type RoomLayoutResolver interface {
 	Unsectioned(ctx context.Context, obj *model.RoomLayoutModel) ([]*corev1.Room, error)
@@ -2574,17 +2574,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.Server(childComplexity), true
-	case "Query.threadEvents":
-		if e.complexity.Query.ThreadEvents == nil {
-			break
-		}
-
-		args, err := ec.field_Query_threadEvents_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Query.ThreadEvents(childComplexity, args["roomId"].(string), args["threadRootEventId"].(string)), true
 	case "Query.tierRoles":
 		if e.complexity.Query.TierRoles == nil {
 			break
@@ -3119,6 +3108,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.RoomEvent.Id(childComplexity), true
+	case "RoomEvent.threadReplies":
+		if e.complexity.RoomEvent.ThreadReplies == nil {
+			break
+		}
+
+		return e.complexity.RoomEvent.ThreadReplies(childComplexity), true
 
 	case "RoomEventsAroundResult.endCursor":
 		if e.complexity.RoomEventsAroundResult.EndCursor == nil {
@@ -5188,22 +5183,6 @@ func (ec *executionContext) field_Query_room_args(ctx context.Context, rawArgs m
 		return nil, err
 	}
 	args["roomId"] = arg0
-	return args, nil
-}
-
-func (ec *executionContext) field_Query_threadEvents_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "roomId", ec.unmarshalNID2string)
-	if err != nil {
-		return nil, err
-	}
-	args["roomId"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "threadRootEventId", ec.unmarshalNID2string)
-	if err != nil {
-		return nil, err
-	}
-	args["threadRootEventId"] = arg1
 	return args, nil
 }
 
@@ -7621,6 +7600,8 @@ func (ec *executionContext) fieldContext_FollowedThread_rootMessage(_ context.Co
 				return ec.fieldContext_RoomEvent_actor(ctx, field)
 			case "event":
 				return ec.fieldContext_RoomEvent_event(ctx, field)
+			case "threadReplies":
+				return ec.fieldContext_RoomEvent_threadReplies(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type RoomEvent", field.Name)
 		},
@@ -9805,6 +9786,8 @@ func (ec *executionContext) fieldContext_Mutation_postMessage(ctx context.Contex
 				return ec.fieldContext_RoomEvent_actor(ctx, field)
 			case "event":
 				return ec.fieldContext_RoomEvent_event(ctx, field)
+			case "threadReplies":
+				return ec.fieldContext_RoomEvent_threadReplies(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type RoomEvent", field.Name)
 		},
@@ -13018,59 +13001,6 @@ func (ec *executionContext) fieldContext_Query_room(ctx context.Context, field g
 	return fc, nil
 }
 
-func (ec *executionContext) _Query_threadEvents(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Query_threadEvents,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Query().ThreadEvents(ctx, fc.Args["roomId"].(string), fc.Args["threadRootEventId"].(string))
-		},
-		nil,
-		ec.marshalNRoomEvent2ᚕᚖhmansᚗdeᚋchattoᚋinternalᚋpbᚋchattoᚋcoreᚋv1ᚐEventᚄ,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Query_threadEvents(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Query",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "id":
-				return ec.fieldContext_RoomEvent_id(ctx, field)
-			case "createdAt":
-				return ec.fieldContext_RoomEvent_createdAt(ctx, field)
-			case "actorId":
-				return ec.fieldContext_RoomEvent_actorId(ctx, field)
-			case "actor":
-				return ec.fieldContext_RoomEvent_actor(ctx, field)
-			case "event":
-				return ec.fieldContext_RoomEvent_event(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type RoomEvent", field.Name)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Query_threadEvents_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Query_me(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -15980,6 +15910,8 @@ func (ec *executionContext) fieldContext_Room_event(ctx context.Context, field g
 				return ec.fieldContext_RoomEvent_actor(ctx, field)
 			case "event":
 				return ec.fieldContext_RoomEvent_event(ctx, field)
+			case "threadReplies":
+				return ec.fieldContext_RoomEvent_threadReplies(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type RoomEvent", field.Name)
 		},
@@ -16554,6 +16486,49 @@ func (ec *executionContext) fieldContext_RoomEvent_event(_ context.Context, fiel
 	return fc, nil
 }
 
+func (ec *executionContext) _RoomEvent_threadReplies(ctx context.Context, field graphql.CollectedField, obj *corev1.Event) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RoomEvent_threadReplies,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.RoomEvent().ThreadReplies(ctx, obj)
+		},
+		nil,
+		ec.marshalNRoomEvent2ᚕᚖhmansᚗdeᚋchattoᚋinternalᚋpbᚋchattoᚋcoreᚋv1ᚐEventᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RoomEvent_threadReplies(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RoomEvent",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_RoomEvent_id(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_RoomEvent_createdAt(ctx, field)
+			case "actorId":
+				return ec.fieldContext_RoomEvent_actorId(ctx, field)
+			case "actor":
+				return ec.fieldContext_RoomEvent_actor(ctx, field)
+			case "event":
+				return ec.fieldContext_RoomEvent_event(ctx, field)
+			case "threadReplies":
+				return ec.fieldContext_RoomEvent_threadReplies(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type RoomEvent", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _RoomEventsAroundResult_events(ctx context.Context, field graphql.CollectedField, obj *model.RoomEventsAroundResult) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -16588,6 +16563,8 @@ func (ec *executionContext) fieldContext_RoomEventsAroundResult_events(_ context
 				return ec.fieldContext_RoomEvent_actor(ctx, field)
 			case "event":
 				return ec.fieldContext_RoomEvent_event(ctx, field)
+			case "threadReplies":
+				return ec.fieldContext_RoomEvent_threadReplies(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type RoomEvent", field.Name)
 		},
@@ -16774,6 +16751,8 @@ func (ec *executionContext) fieldContext_RoomEventsConnection_events(_ context.C
 				return ec.fieldContext_RoomEvent_actor(ctx, field)
 			case "event":
 				return ec.fieldContext_RoomEvent_event(ctx, field)
+			case "threadReplies":
+				return ec.fieldContext_RoomEvent_threadReplies(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type RoomEvent", field.Name)
 		},
@@ -29201,28 +29180,6 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
-		case "threadEvents":
-			field := field
-
-			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Query_threadEvents(ctx, field)
-				if res == graphql.Null {
-					atomic.AddUint32(&fs.Invalids, 1)
-				}
-				return res
-			}
-
-			rrm := func(ctx context.Context) graphql.Marshaler {
-				return ec.OperationContext.RootResolverMiddleware(ctx,
-					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "me":
 			field := field
 
@@ -31235,6 +31192,42 @@ func (ec *executionContext) _RoomEvent(ctx context.Context, sel ast.SelectionSet
 					}
 				}()
 				res = ec._RoomEvent_event(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "threadReplies":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._RoomEvent_threadReplies(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}

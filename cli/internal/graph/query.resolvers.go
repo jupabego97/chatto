@@ -36,30 +36,6 @@ func (r *queryResolver) Room(ctx context.Context, roomID string) (*corev1.Room, 
 	return r.core.GetRoom(ctx, spaceID, roomID)
 }
 
-// ThreadEvents is the resolver for the threadEvents field.
-// Fetches the root message and all replies for a specific thread.
-func (r *queryResolver) ThreadEvents(ctx context.Context, roomID string, threadRootEventID string) ([]*corev1.Event, error) {
-	user, err := requireAuth(ctx)
-	if err != nil {
-		return nil, err
-	}
-	spaceID, err := r.resolveRoomSpaceID(ctx, roomID)
-	if err != nil {
-		return nil, err
-	}
-
-	// Authorization: require room membership
-	isMember, err := r.core.RoomMembershipExists(ctx, spaceID, user.Id, roomID)
-	if err != nil {
-		return nil, err
-	}
-	if !isMember {
-		return nil, core.ErrNotRoomMember
-	}
-
-	return r.core.GetThreadEvents(ctx, spaceID, roomID, threadRootEventID)
-}
-
 // Me is the resolver for the me field.
 func (r *queryResolver) Me(ctx context.Context) (*corev1.User, error) {
 	// Extract authenticated user from context

@@ -5,12 +5,6 @@ type Query {
   "Get a specific room by ID."
   room(roomId: ID!): Room
 
-  """
-  Fetch thread messages for a specific thread.
-  Returns the root message plus all replies in chronological order.
-  """
-  threadEvents(roomId: ID!, threadRootEventId: ID!): [RoomEvent!]!
-
   "Get the currently authenticated user."
   me: User
 

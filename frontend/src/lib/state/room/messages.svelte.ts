@@ -83,8 +83,13 @@ const RefetchOneQuery = graphql(`
 
 const ThreadEventsQuery = graphql(`
   query ThreadMessagesAll($roomId: ID!, $threadRootEventId: ID!) {
-    threadEvents(roomId: $roomId, threadRootEventId: $threadRootEventId) {
-      ...RoomEventView
+    room(roomId: $roomId) {
+      event(eventId: $threadRootEventId) {
+        ...RoomEventView
+        threadReplies {
+          ...RoomEventView
+        }
+      }
     }
   }
 `);
@@ -787,11 +792,12 @@ export class ThreadMessagesStore extends MessageListStore {
       .then((result) => {
         if (this.loadId !== thisLoad) return;
         if (result.error) console.error('ThreadMessagesStore: fetch error:', result.error);
-        if (result.data?.threadEvents) {
+        const root = result.data?.room?.event;
+        if (root) {
           // Merge with any subscription events that arrived during the
           // in-flight query (e.g. the user's own reply or a fast cross-user
           // reply). Overwriting would drop them.
-          this.replaceMergingExisting(result.data.threadEvents);
+          this.replaceMergingExisting([root, ...root.threadReplies]);
         }
         this.isInitialLoading = false;
       })
