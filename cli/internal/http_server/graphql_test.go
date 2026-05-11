@@ -658,11 +658,13 @@ func TestGraphQL_CryptoShredding_MessageBodyBecomesNull(t *testing.T) {
 	// Query the message again via GraphQL
 	queryResp := env.doGraphQL(t, `
 		query GetMessage($roomId: ID!, $eventId: ID!) {
-			roomEventByEventId(roomId: $roomId, eventId: $eventId) {
-				id
-				event {
-					... on MessagePostedEvent {
-						body
+			room(roomId: $roomId) {
+				event(eventId: $eventId) {
+					id
+					event {
+						... on MessagePostedEvent {
+							body
+						}
 					}
 				}
 			}
@@ -677,20 +679,22 @@ func TestGraphQL_CryptoShredding_MessageBodyBecomesNull(t *testing.T) {
 	}
 
 	var queryData struct {
-		RoomEventByEventId struct {
-			ID    string `json:"id"`
+		Room struct {
 			Event struct {
-				Body *string `json:"body"`
+				ID    string `json:"id"`
+				Event struct {
+					Body *string `json:"body"`
+				} `json:"event"`
 			} `json:"event"`
-		} `json:"roomEventByEventId"`
+		} `json:"room"`
 	}
 	if err := json.Unmarshal(queryResp.Data, &queryData); err != nil {
 		t.Fatalf("Failed to unmarshal query response: %v", err)
 	}
 
 	// Verify body is now null (crypto-shredded)
-	if queryData.RoomEventByEventId.Event.Body != nil {
-		t.Errorf("Expected body to be null after crypto-shredding, got %q", *queryData.RoomEventByEventId.Event.Body)
+	if queryData.Room.Event.Event.Body != nil {
+		t.Errorf("Expected body to be null after crypto-shredding, got %q", *queryData.Room.Event.Event.Body)
 	}
 }
 

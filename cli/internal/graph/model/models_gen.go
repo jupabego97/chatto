@@ -519,7 +519,7 @@ type RoleRoomPermissions struct {
 }
 
 // Result of fetching events around a specific target event. `startCursor`
-// and `endCursor` are opaque pagination cursors usable on `roomEvents`.
+// and `endCursor` are opaque pagination cursors usable on `Room.events`.
 type RoomEventsAroundResult struct {
 	// The events in the window, in chronological order.
 	Events []*corev1.Event `json:"events"`
@@ -537,7 +537,7 @@ type RoomEventsAroundResult struct {
 
 // Paginated room events with metadata indicating whether more events exist
 // in either direction. `startCursor` and `endCursor` are opaque pagination
-// cursors — pass them as `before` / `after` on a subsequent `roomEvents`
+// cursors — pass them as `before` / `after` on a subsequent `Room.events`
 // call. Both are null when `events` is empty.
 type RoomEventsConnection struct {
 	// The events in chronological order.

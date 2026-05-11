@@ -190,7 +190,7 @@ func (r *messagePostedEventResolver) InThread(ctx context.Context, obj *corev1.M
 }
 
 // Reactions is the resolver for the reactions field.
-// Authorization: parent query (roomEvents/roomEvent) already verified room membership.
+// Authorization: parent query (Room.events / Room.event) already verified room membership.
 // For echo messages, reactions are resolved using the original message's event ID
 // so that echoes and their originals share the same reactions.
 func (r *messagePostedEventResolver) Reactions(ctx context.Context, obj *corev1.MessagePostedEvent) ([]*model.Reaction, error) {

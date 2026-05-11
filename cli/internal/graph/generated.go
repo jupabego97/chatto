@@ -351,7 +351,6 @@ type ComplexityRoot struct {
 	Query struct {
 		ActiveCallRoomIds        func(childComplexity int) int
 		Admin                    func(childComplexity int) int
-		CallParticipants         func(childComplexity int, roomID string) int
 		HasNotifications         func(childComplexity int) int
 		HasUnreadFollowedThreads func(childComplexity int) int
 		LinkPreview              func(childComplexity int, url string) int
@@ -361,9 +360,6 @@ type ComplexityRoot struct {
 		PermissionExplanation    func(childComplexity int, userID string, roomID *string) int
 		RolePermissions          func(childComplexity int, roleName string, roomID *string) int
 		Room                     func(childComplexity int, roomID string) int
-		RoomEventByEventID       func(childComplexity int, roomID string, eventID string) int
-		RoomEvents               func(childComplexity int, roomID string, limit *int32, before *string, after *string) int
-		RoomEventsAround         func(childComplexity int, roomID string, eventID string, limit *int32) int
 		Server                   func(childComplexity int) int
 		ThreadEvents             func(childComplexity int, roomID string, threadRootEventID string) int
 		TierRoles                func(childComplexity int, roomID *string) int
@@ -371,7 +367,6 @@ type ComplexityRoot struct {
 		UserByLogin              func(childComplexity int, login string) int
 		Users                    func(childComplexity int) int
 		Viewer                   func(childComplexity int) int
-		VoiceCallToken           func(childComplexity int, roomID string) int
 	}
 
 	Reaction struct {
@@ -438,7 +433,11 @@ type ComplexityRoot struct {
 		Archived                     func(childComplexity int) int
 		AutoJoin                     func(childComplexity int) int
 		AvailableRoomPermissions     func(childComplexity int) int
+		CallParticipants             func(childComplexity int) int
 		Description                  func(childComplexity int) int
+		Event                        func(childComplexity int, eventID string) int
+		Events                       func(childComplexity int, limit *int32, before *string, after *string) int
+		EventsAround                 func(childComplexity int, eventID string, limit *int32) int
 		HasMention                   func(childComplexity int) int
 		HasUnread                    func(childComplexity int) int
 		Id                           func(childComplexity int) int
@@ -458,6 +457,7 @@ type ComplexityRoot struct {
 		ViewerCanReply               func(childComplexity int) int
 		ViewerCanReplyInThread       func(childComplexity int) int
 		ViewerNotificationPreference func(childComplexity int) int
+		VoiceCallToken               func(childComplexity int) int
 	}
 
 	RoomArchivedEvent struct {
@@ -907,10 +907,7 @@ type PresenceChangedEventResolver interface {
 }
 type QueryResolver interface {
 	Room(ctx context.Context, roomID string) (*corev1.Room, error)
-	RoomEvents(ctx context.Context, roomID string, limit *int32, before *string, after *string) (*model.RoomEventsConnection, error)
-	RoomEventByEventID(ctx context.Context, roomID string, eventID string) (*corev1.Event, error)
 	ThreadEvents(ctx context.Context, roomID string, threadRootEventID string) ([]*corev1.Event, error)
-	RoomEventsAround(ctx context.Context, roomID string, eventID string, limit *int32) (*model.RoomEventsAroundResult, error)
 	Me(ctx context.Context) (*corev1.User, error)
 	User(ctx context.Context, id string) (*corev1.User, error)
 	UserByLogin(ctx context.Context, login string) (*corev1.User, error)
@@ -926,9 +923,7 @@ type QueryResolver interface {
 	Viewer(ctx context.Context) (*model.Viewer, error)
 	MyFollowedThreads(ctx context.Context) ([]*model.FollowedThread, error)
 	HasUnreadFollowedThreads(ctx context.Context) (bool, error)
-	VoiceCallToken(ctx context.Context, roomID string) (*core.VoiceCallToken, error)
 	ActiveCallRoomIds(ctx context.Context) ([]string, error)
-	CallParticipants(ctx context.Context, roomID string) ([]*model.CallParticipant, error)
 }
 type ReplyNotificationItemResolver interface {
 	Actor(ctx context.Context, obj *model.ReplyNotificationItem) (*corev1.User, error)
@@ -957,6 +952,11 @@ type RoomResolver interface {
 	ViewerCanJoinRoom(ctx context.Context, obj *corev1.Room) (bool, error)
 	ViewerCanEchoMessage(ctx context.Context, obj *corev1.Room) (bool, error)
 
+	Events(ctx context.Context, obj *corev1.Room, limit *int32, before *string, after *string) (*model.RoomEventsConnection, error)
+	Event(ctx context.Context, obj *corev1.Room, eventID string) (*corev1.Event, error)
+	EventsAround(ctx context.Context, obj *corev1.Room, eventID string, limit *int32) (*model.RoomEventsAroundResult, error)
+	VoiceCallToken(ctx context.Context, obj *corev1.Room) (*core.VoiceCallToken, error)
+	CallParticipants(ctx context.Context, obj *corev1.Room) ([]*model.CallParticipant, error)
 	ViewerNotificationPreference(ctx context.Context, obj *corev1.Room) (*model.ViewerNotificationPreference, error)
 	RoomPermissionOverrides(ctx context.Context, obj *corev1.Room) ([]*model.RoleRoomPermissions, error)
 	AvailableRoomPermissions(ctx context.Context, obj *corev1.Room) ([]string, error)
@@ -2494,17 +2494,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.Admin(childComplexity), true
-	case "Query.callParticipants":
-		if e.complexity.Query.CallParticipants == nil {
-			break
-		}
-
-		args, err := ec.field_Query_callParticipants_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Query.CallParticipants(childComplexity, args["roomId"].(string)), true
 	case "Query.hasNotifications":
 		if e.complexity.Query.HasNotifications == nil {
 			break
@@ -2579,39 +2568,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.Room(childComplexity, args["roomId"].(string)), true
-	case "Query.roomEventByEventId":
-		if e.complexity.Query.RoomEventByEventID == nil {
-			break
-		}
-
-		args, err := ec.field_Query_roomEventByEventId_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Query.RoomEventByEventID(childComplexity, args["roomId"].(string), args["eventId"].(string)), true
-	case "Query.roomEvents":
-		if e.complexity.Query.RoomEvents == nil {
-			break
-		}
-
-		args, err := ec.field_Query_roomEvents_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Query.RoomEvents(childComplexity, args["roomId"].(string), args["limit"].(*int32), args["before"].(*string), args["after"].(*string)), true
-	case "Query.roomEventsAround":
-		if e.complexity.Query.RoomEventsAround == nil {
-			break
-		}
-
-		args, err := ec.field_Query_roomEventsAround_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Query.RoomEventsAround(childComplexity, args["roomId"].(string), args["eventId"].(string), args["limit"].(*int32)), true
 	case "Query.server":
 		if e.complexity.Query.Server == nil {
 			break
@@ -2674,17 +2630,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.Viewer(childComplexity), true
-	case "Query.voiceCallToken":
-		if e.complexity.Query.VoiceCallToken == nil {
-			break
-		}
-
-		args, err := ec.field_Query_voiceCallToken_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Query.VoiceCallToken(childComplexity, args["roomId"].(string)), true
 
 	case "Reaction.count":
 		if e.complexity.Reaction.Count == nil {
@@ -2945,12 +2890,51 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Room.AvailableRoomPermissions(childComplexity), true
+	case "Room.callParticipants":
+		if e.complexity.Room.CallParticipants == nil {
+			break
+		}
+
+		return e.complexity.Room.CallParticipants(childComplexity), true
 	case "Room.description":
 		if e.complexity.Room.Description == nil {
 			break
 		}
 
 		return e.complexity.Room.Description(childComplexity), true
+	case "Room.event":
+		if e.complexity.Room.Event == nil {
+			break
+		}
+
+		args, err := ec.field_Room_event_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Room.Event(childComplexity, args["eventId"].(string)), true
+	case "Room.events":
+		if e.complexity.Room.Events == nil {
+			break
+		}
+
+		args, err := ec.field_Room_events_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Room.Events(childComplexity, args["limit"].(*int32), args["before"].(*string), args["after"].(*string)), true
+	case "Room.eventsAround":
+		if e.complexity.Room.EventsAround == nil {
+			break
+		}
+
+		args, err := ec.field_Room_eventsAround_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Room.EventsAround(childComplexity, args["eventId"].(string), args["limit"].(*int32)), true
 	case "Room.hasMention":
 		if e.complexity.Room.HasMention == nil {
 			break
@@ -3065,6 +3049,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Room.ViewerNotificationPreference(childComplexity), true
+	case "Room.voiceCallToken":
+		if e.complexity.Room.VoiceCallToken == nil {
+			break
+		}
+
+		return e.complexity.Room.VoiceCallToken(childComplexity), true
 
 	case "RoomArchivedEvent.roomId":
 		if e.complexity.RoomArchivedEvent.RoomId == nil {
@@ -5147,17 +5137,6 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 	return args, nil
 }
 
-func (ec *executionContext) field_Query_callParticipants_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "roomId", ec.unmarshalNID2string)
-	if err != nil {
-		return nil, err
-	}
-	args["roomId"] = arg0
-	return args, nil
-}
-
 func (ec *executionContext) field_Query_linkPreview_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -5198,69 +5177,6 @@ func (ec *executionContext) field_Query_rolePermissions_args(ctx context.Context
 		return nil, err
 	}
 	args["roomId"] = arg1
-	return args, nil
-}
-
-func (ec *executionContext) field_Query_roomEventByEventId_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "roomId", ec.unmarshalNID2string)
-	if err != nil {
-		return nil, err
-	}
-	args["roomId"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "eventId", ec.unmarshalNID2string)
-	if err != nil {
-		return nil, err
-	}
-	args["eventId"] = arg1
-	return args, nil
-}
-
-func (ec *executionContext) field_Query_roomEventsAround_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "roomId", ec.unmarshalNID2string)
-	if err != nil {
-		return nil, err
-	}
-	args["roomId"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "eventId", ec.unmarshalNID2string)
-	if err != nil {
-		return nil, err
-	}
-	args["eventId"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "limit", ec.unmarshalOInt2ᚖint32)
-	if err != nil {
-		return nil, err
-	}
-	args["limit"] = arg2
-	return args, nil
-}
-
-func (ec *executionContext) field_Query_roomEvents_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "roomId", ec.unmarshalNID2string)
-	if err != nil {
-		return nil, err
-	}
-	args["roomId"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "limit", ec.unmarshalOInt2ᚖint32)
-	if err != nil {
-		return nil, err
-	}
-	args["limit"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
-	if err != nil {
-		return nil, err
-	}
-	args["before"] = arg2
-	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
-	if err != nil {
-		return nil, err
-	}
-	args["after"] = arg3
 	return args, nil
 }
 
@@ -5324,14 +5240,51 @@ func (ec *executionContext) field_Query_user_args(ctx context.Context, rawArgs m
 	return args, nil
 }
 
-func (ec *executionContext) field_Query_voiceCallToken_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+func (ec *executionContext) field_Room_event_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "roomId", ec.unmarshalNID2string)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "eventId", ec.unmarshalNID2string)
 	if err != nil {
 		return nil, err
 	}
-	args["roomId"] = arg0
+	args["eventId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Room_eventsAround_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "eventId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["eventId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "limit", ec.unmarshalOInt2ᚖint32)
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Room_events_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "limit", ec.unmarshalOInt2ᚖint32)
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["after"] = arg2
 	return args, nil
 }
 
@@ -7466,6 +7419,16 @@ func (ec *executionContext) fieldContext_DMMessageNotificationItem_room(_ contex
 				return ec.fieldContext_Room_archived(ctx, field)
 			case "autoJoin":
 				return ec.fieldContext_Room_autoJoin(ctx, field)
+			case "events":
+				return ec.fieldContext_Room_events(ctx, field)
+			case "event":
+				return ec.fieldContext_Room_event(ctx, field)
+			case "eventsAround":
+				return ec.fieldContext_Room_eventsAround(ctx, field)
+			case "voiceCallToken":
+				return ec.fieldContext_Room_voiceCallToken(ctx, field)
+			case "callParticipants":
+				return ec.fieldContext_Room_callParticipants(ctx, field)
 			case "viewerNotificationPreference":
 				return ec.fieldContext_Room_viewerNotificationPreference(ctx, field)
 			case "roomPermissionOverrides":
@@ -7572,6 +7535,16 @@ func (ec *executionContext) fieldContext_FollowedThread_room(_ context.Context, 
 				return ec.fieldContext_Room_archived(ctx, field)
 			case "autoJoin":
 				return ec.fieldContext_Room_autoJoin(ctx, field)
+			case "events":
+				return ec.fieldContext_Room_events(ctx, field)
+			case "event":
+				return ec.fieldContext_Room_event(ctx, field)
+			case "eventsAround":
+				return ec.fieldContext_Room_eventsAround(ctx, field)
+			case "voiceCallToken":
+				return ec.fieldContext_Room_voiceCallToken(ctx, field)
+			case "callParticipants":
+				return ec.fieldContext_Room_callParticipants(ctx, field)
 			case "viewerNotificationPreference":
 				return ec.fieldContext_Room_viewerNotificationPreference(ctx, field)
 			case "roomPermissionOverrides":
@@ -8266,6 +8239,16 @@ func (ec *executionContext) fieldContext_MentionNotificationEvent_room(_ context
 				return ec.fieldContext_Room_archived(ctx, field)
 			case "autoJoin":
 				return ec.fieldContext_Room_autoJoin(ctx, field)
+			case "events":
+				return ec.fieldContext_Room_events(ctx, field)
+			case "event":
+				return ec.fieldContext_Room_event(ctx, field)
+			case "eventsAround":
+				return ec.fieldContext_Room_eventsAround(ctx, field)
+			case "voiceCallToken":
+				return ec.fieldContext_Room_voiceCallToken(ctx, field)
+			case "callParticipants":
+				return ec.fieldContext_Room_callParticipants(ctx, field)
 			case "viewerNotificationPreference":
 				return ec.fieldContext_Room_viewerNotificationPreference(ctx, field)
 			case "roomPermissionOverrides":
@@ -8548,6 +8531,16 @@ func (ec *executionContext) fieldContext_MentionNotificationItem_room(_ context.
 				return ec.fieldContext_Room_archived(ctx, field)
 			case "autoJoin":
 				return ec.fieldContext_Room_autoJoin(ctx, field)
+			case "events":
+				return ec.fieldContext_Room_events(ctx, field)
+			case "event":
+				return ec.fieldContext_Room_event(ctx, field)
+			case "eventsAround":
+				return ec.fieldContext_Room_eventsAround(ctx, field)
+			case "voiceCallToken":
+				return ec.fieldContext_Room_voiceCallToken(ctx, field)
+			case "callParticipants":
+				return ec.fieldContext_Room_callParticipants(ctx, field)
 			case "viewerNotificationPreference":
 				return ec.fieldContext_Room_viewerNotificationPreference(ctx, field)
 			case "roomPermissionOverrides":
@@ -9298,6 +9291,16 @@ func (ec *executionContext) fieldContext_Mutation_createRoom(ctx context.Context
 				return ec.fieldContext_Room_archived(ctx, field)
 			case "autoJoin":
 				return ec.fieldContext_Room_autoJoin(ctx, field)
+			case "events":
+				return ec.fieldContext_Room_events(ctx, field)
+			case "event":
+				return ec.fieldContext_Room_event(ctx, field)
+			case "eventsAround":
+				return ec.fieldContext_Room_eventsAround(ctx, field)
+			case "voiceCallToken":
+				return ec.fieldContext_Room_voiceCallToken(ctx, field)
+			case "callParticipants":
+				return ec.fieldContext_Room_callParticipants(ctx, field)
 			case "viewerNotificationPreference":
 				return ec.fieldContext_Room_viewerNotificationPreference(ctx, field)
 			case "roomPermissionOverrides":
@@ -9387,6 +9390,16 @@ func (ec *executionContext) fieldContext_Mutation_updateRoom(ctx context.Context
 				return ec.fieldContext_Room_archived(ctx, field)
 			case "autoJoin":
 				return ec.fieldContext_Room_autoJoin(ctx, field)
+			case "events":
+				return ec.fieldContext_Room_events(ctx, field)
+			case "event":
+				return ec.fieldContext_Room_event(ctx, field)
+			case "eventsAround":
+				return ec.fieldContext_Room_eventsAround(ctx, field)
+			case "voiceCallToken":
+				return ec.fieldContext_Room_voiceCallToken(ctx, field)
+			case "callParticipants":
+				return ec.fieldContext_Room_callParticipants(ctx, field)
 			case "viewerNotificationPreference":
 				return ec.fieldContext_Room_viewerNotificationPreference(ctx, field)
 			case "roomPermissionOverrides":
@@ -9476,6 +9489,16 @@ func (ec *executionContext) fieldContext_Mutation_archiveRoom(ctx context.Contex
 				return ec.fieldContext_Room_archived(ctx, field)
 			case "autoJoin":
 				return ec.fieldContext_Room_autoJoin(ctx, field)
+			case "events":
+				return ec.fieldContext_Room_events(ctx, field)
+			case "event":
+				return ec.fieldContext_Room_event(ctx, field)
+			case "eventsAround":
+				return ec.fieldContext_Room_eventsAround(ctx, field)
+			case "voiceCallToken":
+				return ec.fieldContext_Room_voiceCallToken(ctx, field)
+			case "callParticipants":
+				return ec.fieldContext_Room_callParticipants(ctx, field)
 			case "viewerNotificationPreference":
 				return ec.fieldContext_Room_viewerNotificationPreference(ctx, field)
 			case "roomPermissionOverrides":
@@ -9565,6 +9588,16 @@ func (ec *executionContext) fieldContext_Mutation_unarchiveRoom(ctx context.Cont
 				return ec.fieldContext_Room_archived(ctx, field)
 			case "autoJoin":
 				return ec.fieldContext_Room_autoJoin(ctx, field)
+			case "events":
+				return ec.fieldContext_Room_events(ctx, field)
+			case "event":
+				return ec.fieldContext_Room_event(ctx, field)
+			case "eventsAround":
+				return ec.fieldContext_Room_eventsAround(ctx, field)
+			case "voiceCallToken":
+				return ec.fieldContext_Room_voiceCallToken(ctx, field)
+			case "callParticipants":
+				return ec.fieldContext_Room_callParticipants(ctx, field)
 			case "viewerNotificationPreference":
 				return ec.fieldContext_Room_viewerNotificationPreference(ctx, field)
 			case "roomPermissionOverrides":
@@ -9654,6 +9687,16 @@ func (ec *executionContext) fieldContext_Mutation_setRoomAutoJoin(ctx context.Co
 				return ec.fieldContext_Room_archived(ctx, field)
 			case "autoJoin":
 				return ec.fieldContext_Room_autoJoin(ctx, field)
+			case "events":
+				return ec.fieldContext_Room_events(ctx, field)
+			case "event":
+				return ec.fieldContext_Room_event(ctx, field)
+			case "eventsAround":
+				return ec.fieldContext_Room_eventsAround(ctx, field)
+			case "voiceCallToken":
+				return ec.fieldContext_Room_voiceCallToken(ctx, field)
+			case "callParticipants":
+				return ec.fieldContext_Room_callParticipants(ctx, field)
 			case "viewerNotificationPreference":
 				return ec.fieldContext_Room_viewerNotificationPreference(ctx, field)
 			case "roomPermissionOverrides":
@@ -11249,6 +11292,16 @@ func (ec *executionContext) fieldContext_Mutation_startDM(ctx context.Context, f
 				return ec.fieldContext_Room_archived(ctx, field)
 			case "autoJoin":
 				return ec.fieldContext_Room_autoJoin(ctx, field)
+			case "events":
+				return ec.fieldContext_Room_events(ctx, field)
+			case "event":
+				return ec.fieldContext_Room_event(ctx, field)
+			case "eventsAround":
+				return ec.fieldContext_Room_eventsAround(ctx, field)
+			case "voiceCallToken":
+				return ec.fieldContext_Room_voiceCallToken(ctx, field)
+			case "callParticipants":
+				return ec.fieldContext_Room_callParticipants(ctx, field)
 			case "viewerNotificationPreference":
 				return ec.fieldContext_Room_viewerNotificationPreference(ctx, field)
 			case "roomPermissionOverrides":
@@ -12931,6 +12984,16 @@ func (ec *executionContext) fieldContext_Query_room(ctx context.Context, field g
 				return ec.fieldContext_Room_archived(ctx, field)
 			case "autoJoin":
 				return ec.fieldContext_Room_autoJoin(ctx, field)
+			case "events":
+				return ec.fieldContext_Room_events(ctx, field)
+			case "event":
+				return ec.fieldContext_Room_event(ctx, field)
+			case "eventsAround":
+				return ec.fieldContext_Room_eventsAround(ctx, field)
+			case "voiceCallToken":
+				return ec.fieldContext_Room_voiceCallToken(ctx, field)
+			case "callParticipants":
+				return ec.fieldContext_Room_callParticipants(ctx, field)
 			case "viewerNotificationPreference":
 				return ec.fieldContext_Room_viewerNotificationPreference(ctx, field)
 			case "roomPermissionOverrides":
@@ -12949,112 +13012,6 @@ func (ec *executionContext) fieldContext_Query_room(ctx context.Context, field g
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_room_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Query_roomEvents(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Query_roomEvents,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Query().RoomEvents(ctx, fc.Args["roomId"].(string), fc.Args["limit"].(*int32), fc.Args["before"].(*string), fc.Args["after"].(*string))
-		},
-		nil,
-		ec.marshalNRoomEventsConnection2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomEventsConnection,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Query_roomEvents(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Query",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "events":
-				return ec.fieldContext_RoomEventsConnection_events(ctx, field)
-			case "startCursor":
-				return ec.fieldContext_RoomEventsConnection_startCursor(ctx, field)
-			case "endCursor":
-				return ec.fieldContext_RoomEventsConnection_endCursor(ctx, field)
-			case "hasOlder":
-				return ec.fieldContext_RoomEventsConnection_hasOlder(ctx, field)
-			case "hasNewer":
-				return ec.fieldContext_RoomEventsConnection_hasNewer(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type RoomEventsConnection", field.Name)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Query_roomEvents_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Query_roomEventByEventId(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Query_roomEventByEventId,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Query().RoomEventByEventID(ctx, fc.Args["roomId"].(string), fc.Args["eventId"].(string))
-		},
-		nil,
-		ec.marshalORoomEvent2ᚖhmansᚗdeᚋchattoᚋinternalᚋpbᚋchattoᚋcoreᚋv1ᚐEvent,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_Query_roomEventByEventId(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Query",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "id":
-				return ec.fieldContext_RoomEvent_id(ctx, field)
-			case "createdAt":
-				return ec.fieldContext_RoomEvent_createdAt(ctx, field)
-			case "actorId":
-				return ec.fieldContext_RoomEvent_actorId(ctx, field)
-			case "actor":
-				return ec.fieldContext_RoomEvent_actor(ctx, field)
-			case "event":
-				return ec.fieldContext_RoomEvent_event(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type RoomEvent", field.Name)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Query_roomEventByEventId_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -13108,61 +13065,6 @@ func (ec *executionContext) fieldContext_Query_threadEvents(ctx context.Context,
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_threadEvents_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Query_roomEventsAround(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Query_roomEventsAround,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Query().RoomEventsAround(ctx, fc.Args["roomId"].(string), fc.Args["eventId"].(string), fc.Args["limit"].(*int32))
-		},
-		nil,
-		ec.marshalNRoomEventsAroundResult2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomEventsAroundResult,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Query_roomEventsAround(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Query",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "events":
-				return ec.fieldContext_RoomEventsAroundResult_events(ctx, field)
-			case "targetIndex":
-				return ec.fieldContext_RoomEventsAroundResult_targetIndex(ctx, field)
-			case "startCursor":
-				return ec.fieldContext_RoomEventsAroundResult_startCursor(ctx, field)
-			case "endCursor":
-				return ec.fieldContext_RoomEventsAroundResult_endCursor(ctx, field)
-			case "hasOlder":
-				return ec.fieldContext_RoomEventsAroundResult_hasOlder(ctx, field)
-			case "hasNewer":
-				return ec.fieldContext_RoomEventsAroundResult_hasNewer(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type RoomEventsAroundResult", field.Name)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Query_roomEventsAround_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -13982,51 +13884,6 @@ func (ec *executionContext) fieldContext_Query_hasUnreadFollowedThreads(_ contex
 	return fc, nil
 }
 
-func (ec *executionContext) _Query_voiceCallToken(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Query_voiceCallToken,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Query().VoiceCallToken(ctx, fc.Args["roomId"].(string))
-		},
-		nil,
-		ec.marshalOVoiceCallToken2ᚖhmansᚗdeᚋchattoᚋinternalᚋcoreᚐVoiceCallToken,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_Query_voiceCallToken(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Query",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "token":
-				return ec.fieldContext_VoiceCallToken_token(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type VoiceCallToken", field.Name)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Query_voiceCallToken_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Query_activeCallRoomIds(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -14052,59 +13909,6 @@ func (ec *executionContext) fieldContext_Query_activeCallRoomIds(_ context.Conte
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type ID does not have child fields")
 		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Query_callParticipants(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Query_callParticipants,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Query().CallParticipants(ctx, fc.Args["roomId"].(string))
-		},
-		nil,
-		ec.marshalNCallParticipant2ᚕᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐCallParticipantᚄ,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Query_callParticipants(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Query",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "userId":
-				return ec.fieldContext_CallParticipant_userId(ctx, field)
-			case "displayName":
-				return ec.fieldContext_CallParticipant_displayName(ctx, field)
-			case "login":
-				return ec.fieldContext_CallParticipant_login(ctx, field)
-			case "avatarUrl":
-				return ec.fieldContext_CallParticipant_avatarUrl(ctx, field)
-			case "joinedAt":
-				return ec.fieldContext_CallParticipant_joinedAt(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type CallParticipant", field.Name)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Query_callParticipants_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
 	}
 	return fc, nil
 }
@@ -14747,6 +14551,16 @@ func (ec *executionContext) fieldContext_ReplyNotificationItem_room(_ context.Co
 				return ec.fieldContext_Room_archived(ctx, field)
 			case "autoJoin":
 				return ec.fieldContext_Room_autoJoin(ctx, field)
+			case "events":
+				return ec.fieldContext_Room_events(ctx, field)
+			case "event":
+				return ec.fieldContext_Room_event(ctx, field)
+			case "eventsAround":
+				return ec.fieldContext_Room_eventsAround(ctx, field)
+			case "voiceCallToken":
+				return ec.fieldContext_Room_voiceCallToken(ctx, field)
+			case "callParticipants":
+				return ec.fieldContext_Room_callParticipants(ctx, field)
 			case "viewerNotificationPreference":
 				return ec.fieldContext_Room_viewerNotificationPreference(ctx, field)
 			case "roomPermissionOverrides":
@@ -16078,6 +15892,241 @@ func (ec *executionContext) fieldContext_Room_autoJoin(_ context.Context, field 
 	return fc, nil
 }
 
+func (ec *executionContext) _Room_events(ctx context.Context, field graphql.CollectedField, obj *corev1.Room) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Room_events,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Room().Events(ctx, obj, fc.Args["limit"].(*int32), fc.Args["before"].(*string), fc.Args["after"].(*string))
+		},
+		nil,
+		ec.marshalNRoomEventsConnection2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomEventsConnection,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Room_events(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Room",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "events":
+				return ec.fieldContext_RoomEventsConnection_events(ctx, field)
+			case "startCursor":
+				return ec.fieldContext_RoomEventsConnection_startCursor(ctx, field)
+			case "endCursor":
+				return ec.fieldContext_RoomEventsConnection_endCursor(ctx, field)
+			case "hasOlder":
+				return ec.fieldContext_RoomEventsConnection_hasOlder(ctx, field)
+			case "hasNewer":
+				return ec.fieldContext_RoomEventsConnection_hasNewer(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type RoomEventsConnection", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Room_events_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Room_event(ctx context.Context, field graphql.CollectedField, obj *corev1.Room) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Room_event,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Room().Event(ctx, obj, fc.Args["eventId"].(string))
+		},
+		nil,
+		ec.marshalORoomEvent2ᚖhmansᚗdeᚋchattoᚋinternalᚋpbᚋchattoᚋcoreᚋv1ᚐEvent,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Room_event(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Room",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_RoomEvent_id(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_RoomEvent_createdAt(ctx, field)
+			case "actorId":
+				return ec.fieldContext_RoomEvent_actorId(ctx, field)
+			case "actor":
+				return ec.fieldContext_RoomEvent_actor(ctx, field)
+			case "event":
+				return ec.fieldContext_RoomEvent_event(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type RoomEvent", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Room_event_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Room_eventsAround(ctx context.Context, field graphql.CollectedField, obj *corev1.Room) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Room_eventsAround,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Room().EventsAround(ctx, obj, fc.Args["eventId"].(string), fc.Args["limit"].(*int32))
+		},
+		nil,
+		ec.marshalNRoomEventsAroundResult2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomEventsAroundResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Room_eventsAround(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Room",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "events":
+				return ec.fieldContext_RoomEventsAroundResult_events(ctx, field)
+			case "targetIndex":
+				return ec.fieldContext_RoomEventsAroundResult_targetIndex(ctx, field)
+			case "startCursor":
+				return ec.fieldContext_RoomEventsAroundResult_startCursor(ctx, field)
+			case "endCursor":
+				return ec.fieldContext_RoomEventsAroundResult_endCursor(ctx, field)
+			case "hasOlder":
+				return ec.fieldContext_RoomEventsAroundResult_hasOlder(ctx, field)
+			case "hasNewer":
+				return ec.fieldContext_RoomEventsAroundResult_hasNewer(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type RoomEventsAroundResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Room_eventsAround_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Room_voiceCallToken(ctx context.Context, field graphql.CollectedField, obj *corev1.Room) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Room_voiceCallToken,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Room().VoiceCallToken(ctx, obj)
+		},
+		nil,
+		ec.marshalOVoiceCallToken2ᚖhmansᚗdeᚋchattoᚋinternalᚋcoreᚐVoiceCallToken,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Room_voiceCallToken(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Room",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "token":
+				return ec.fieldContext_VoiceCallToken_token(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type VoiceCallToken", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Room_callParticipants(ctx context.Context, field graphql.CollectedField, obj *corev1.Room) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Room_callParticipants,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Room().CallParticipants(ctx, obj)
+		},
+		nil,
+		ec.marshalNCallParticipant2ᚕᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐCallParticipantᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Room_callParticipants(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Room",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "userId":
+				return ec.fieldContext_CallParticipant_userId(ctx, field)
+			case "displayName":
+				return ec.fieldContext_CallParticipant_displayName(ctx, field)
+			case "login":
+				return ec.fieldContext_CallParticipant_login(ctx, field)
+			case "avatarUrl":
+				return ec.fieldContext_CallParticipant_avatarUrl(ctx, field)
+			case "joinedAt":
+				return ec.fieldContext_CallParticipant_joinedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CallParticipant", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Room_viewerNotificationPreference(ctx context.Context, field graphql.CollectedField, obj *corev1.Room) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -16949,6 +16998,16 @@ func (ec *executionContext) fieldContext_RoomLayout_unsectioned(_ context.Contex
 				return ec.fieldContext_Room_archived(ctx, field)
 			case "autoJoin":
 				return ec.fieldContext_Room_autoJoin(ctx, field)
+			case "events":
+				return ec.fieldContext_Room_events(ctx, field)
+			case "event":
+				return ec.fieldContext_Room_event(ctx, field)
+			case "eventsAround":
+				return ec.fieldContext_Room_eventsAround(ctx, field)
+			case "voiceCallToken":
+				return ec.fieldContext_Room_voiceCallToken(ctx, field)
+			case "callParticipants":
+				return ec.fieldContext_Room_callParticipants(ctx, field)
 			case "viewerNotificationPreference":
 				return ec.fieldContext_Room_viewerNotificationPreference(ctx, field)
 			case "roomPermissionOverrides":
@@ -17113,6 +17172,16 @@ func (ec *executionContext) fieldContext_RoomLayoutSection_rooms(_ context.Conte
 				return ec.fieldContext_Room_archived(ctx, field)
 			case "autoJoin":
 				return ec.fieldContext_Room_autoJoin(ctx, field)
+			case "events":
+				return ec.fieldContext_Room_events(ctx, field)
+			case "event":
+				return ec.fieldContext_Room_event(ctx, field)
+			case "eventsAround":
+				return ec.fieldContext_Room_eventsAround(ctx, field)
+			case "voiceCallToken":
+				return ec.fieldContext_Room_voiceCallToken(ctx, field)
+			case "callParticipants":
+				return ec.fieldContext_Room_callParticipants(ctx, field)
 			case "viewerNotificationPreference":
 				return ec.fieldContext_Room_viewerNotificationPreference(ctx, field)
 			case "roomPermissionOverrides":
@@ -17394,6 +17463,16 @@ func (ec *executionContext) fieldContext_RoomMessageNotificationItem_room(_ cont
 				return ec.fieldContext_Room_archived(ctx, field)
 			case "autoJoin":
 				return ec.fieldContext_Room_autoJoin(ctx, field)
+			case "events":
+				return ec.fieldContext_Room_events(ctx, field)
+			case "event":
+				return ec.fieldContext_Room_event(ctx, field)
+			case "eventsAround":
+				return ec.fieldContext_Room_eventsAround(ctx, field)
+			case "voiceCallToken":
+				return ec.fieldContext_Room_voiceCallToken(ctx, field)
+			case "callParticipants":
+				return ec.fieldContext_Room_callParticipants(ctx, field)
 			case "viewerNotificationPreference":
 				return ec.fieldContext_Room_viewerNotificationPreference(ctx, field)
 			case "roomPermissionOverrides":
@@ -18037,6 +18116,16 @@ func (ec *executionContext) fieldContext_Server_rooms(ctx context.Context, field
 				return ec.fieldContext_Room_archived(ctx, field)
 			case "autoJoin":
 				return ec.fieldContext_Room_autoJoin(ctx, field)
+			case "events":
+				return ec.fieldContext_Room_events(ctx, field)
+			case "event":
+				return ec.fieldContext_Room_event(ctx, field)
+			case "eventsAround":
+				return ec.fieldContext_Room_eventsAround(ctx, field)
+			case "voiceCallToken":
+				return ec.fieldContext_Room_voiceCallToken(ctx, field)
+			case "callParticipants":
+				return ec.fieldContext_Room_callParticipants(ctx, field)
 			case "viewerNotificationPreference":
 				return ec.fieldContext_Room_viewerNotificationPreference(ctx, field)
 			case "roomPermissionOverrides":
@@ -20663,6 +20752,16 @@ func (ec *executionContext) fieldContext_User_rooms(ctx context.Context, field g
 				return ec.fieldContext_Room_archived(ctx, field)
 			case "autoJoin":
 				return ec.fieldContext_Room_autoJoin(ctx, field)
+			case "events":
+				return ec.fieldContext_Room_events(ctx, field)
+			case "event":
+				return ec.fieldContext_Room_event(ctx, field)
+			case "eventsAround":
+				return ec.fieldContext_Room_eventsAround(ctx, field)
+			case "voiceCallToken":
+				return ec.fieldContext_Room_voiceCallToken(ctx, field)
+			case "callParticipants":
+				return ec.fieldContext_Room_callParticipants(ctx, field)
 			case "viewerNotificationPreference":
 				return ec.fieldContext_Room_viewerNotificationPreference(ctx, field)
 			case "roomPermissionOverrides":
@@ -29102,47 +29201,6 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
-		case "roomEvents":
-			field := field
-
-			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Query_roomEvents(ctx, field)
-				if res == graphql.Null {
-					atomic.AddUint32(&fs.Invalids, 1)
-				}
-				return res
-			}
-
-			rrm := func(ctx context.Context) graphql.Marshaler {
-				return ec.OperationContext.RootResolverMiddleware(ctx,
-					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
-		case "roomEventByEventId":
-			field := field
-
-			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Query_roomEventByEventId(ctx, field)
-				return res
-			}
-
-			rrm := func(ctx context.Context) graphql.Marshaler {
-				return ec.OperationContext.RootResolverMiddleware(ctx,
-					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "threadEvents":
 			field := field
 
@@ -29153,28 +29211,6 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_threadEvents(ctx, field)
-				if res == graphql.Null {
-					atomic.AddUint32(&fs.Invalids, 1)
-				}
-				return res
-			}
-
-			rrm := func(ctx context.Context) graphql.Marshaler {
-				return ec.OperationContext.RootResolverMiddleware(ctx,
-					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
-		case "roomEventsAround":
-			field := field
-
-			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Query_roomEventsAround(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -29493,25 +29529,6 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
-		case "voiceCallToken":
-			field := field
-
-			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Query_voiceCallToken(ctx, field)
-				return res
-			}
-
-			rrm := func(ctx context.Context) graphql.Marshaler {
-				return ec.OperationContext.RootResolverMiddleware(ctx,
-					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "activeCallRoomIds":
 			field := field
 
@@ -29522,28 +29539,6 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_activeCallRoomIds(ctx, field)
-				if res == graphql.Null {
-					atomic.AddUint32(&fs.Invalids, 1)
-				}
-				return res
-			}
-
-			rrm := func(ctx context.Context) graphql.Marshaler {
-				return ec.OperationContext.RootResolverMiddleware(ctx,
-					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
-		case "callParticipants":
-			field := field
-
-			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Query_callParticipants(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -30742,6 +30737,180 @@ func (ec *executionContext) _Room(ctx context.Context, sel ast.SelectionSet, obj
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "events":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Room_events(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "event":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Room_event(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "eventsAround":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Room_eventsAround(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "voiceCallToken":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Room_voiceCallToken(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "callParticipants":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Room_callParticipants(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "viewerNotificationPreference":
 			field := field
 
