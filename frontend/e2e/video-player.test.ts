@@ -9,6 +9,14 @@ import { TIMEOUTS } from './constants';
 const VIDEO_PROCESSING_TIMEOUT = 45_000;
 
 test.describe('video player', () => {
+	// Playwright's bundled Chromium for linux/arm64 lacks H.264 decode, so the
+	// transcoded H.264 MP4 never reaches "ready" and Vidstack never mounts its
+	// controls overlay. Skip the assertion-by-rendering test on ARM Linux.
+	test.skip(
+		process.platform === 'linux' && process.arch === 'arm64',
+		'Chromium linux/arm64 build lacks H.264 decode'
+	);
+
 	test.setTimeout(90_000);
 
 	test('uploaded video renders Vidstack player without settings menu', async ({
