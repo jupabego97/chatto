@@ -11,7 +11,7 @@ Chatto authenticates users via two parallel mechanisms: HTTP-only cookie session
 
 - **Login** — users sign in with login + password on a `/login` page. The page is also used for redirect-after-signup.
 - **OIDC login** — operators can configure OIDC providers (e.g. Chatto Hub, any OAuth/OIDC IdP). The login page shows a provider button; clicking takes the user through the standard authorization-code flow.
-- **AT Protocol login** — when enabled, the login page also offers a "Sign in with AT Protocol" form that takes an ATProto handle and redirects to the user's PDS for approval. See FDR-026 for the ATProto-specific design.
+- **AT Protocol login** — when enabled, the login page also offers a "Sign in with AT Protocol" form that takes an ATProto handle and redirects to the user's PDS for approval. See FDR-027 for the ATProto-specific design.
 - **Cookie session** — on successful auth from the embedded SPA, the server issues an HTTP-only, SameSite=Lax cookie with a 90-day expiry. The cookie carries the user ID; the server loads the user from KV per request.
 - **Bearer token** — every authentication endpoint also issues an opaque token (format: `cht_AT` + 14-char NanoID). Cross-origin clients store it (usually in `localStorage`) and send it as `Authorization: Bearer …` on HTTP requests and `connectionParams.token` on graphql-ws upgrades.
 - **WebSocket auth** — for the embedded SPA, the cookie is automatically attached to the WebSocket upgrade and the user is authenticated before the WS handshake completes. For cross-origin clients, the token in `connectionParams` is checked at upgrade time.
@@ -76,7 +76,7 @@ Authentication itself doesn't have a permission gate (you're either authenticate
 ## Related
 
 - **ADRs:** ADR-017 (cookie-session auth for WebSocket), ADR-024 (opaque bearer tokens for cross-origin auth), ADR-025 (multi-instance client architecture), ADR-032 (external identity integration boundaries)
-- **FDRs:** FDR-001 (Roles & Permissions), FDR-018 (Account Lifecycle), FDR-026 (Sign in with AT Protocol)
+- **FDRs:** FDR-001 (Roles & Permissions), FDR-018 (Account Lifecycle), FDR-027 (Sign in with AT Protocol)
 
 ## Open Questions
 

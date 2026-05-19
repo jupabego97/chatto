@@ -70,4 +70,4 @@ A user's profile carries the public identity they present to the rest of the ser
 ## Related
 
 - **ADRs:** ADR-007 (per-user encryption with crypto-shredding), ADR-021 (dual asset storage), ADR-032 (external identity integration boundaries)
-- **FDRs:** FDR-001 (Roles & Permissions), FDR-008 (File Attachments & Video Processing), FDR-018 (Account Lifecycle), FDR-026 (Sign in with AT Protocol)
+- **FDRs:** FDR-001 (Roles & Permissions), FDR-008 (File Attachments & Video Processing), FDR-018 (Account Lifecycle), FDR-027 (Sign in with AT Protocol)

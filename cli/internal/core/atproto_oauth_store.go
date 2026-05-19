@@ -24,7 +24,7 @@ import (
 // is known). The store nevertheless exists to make sign-in survive a server
 // restart mid-flow and to work in multi-replica deployments where the
 // callback may land on a different replica than the one that started the
-// flow. See ADR-024 (AUTH_TOKENS bucket) and FDR-026 for context.
+// flow. See ADR-024 (AUTH_TOKENS bucket) and FDR-027 for context.
 //
 // Session entries contain plaintext access tokens, refresh tokens, and a
 // DPoP private key. This matches the in-memory exposure of the previous

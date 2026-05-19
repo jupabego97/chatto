@@ -13,7 +13,7 @@ This FDR covers the user account from registration through deletion: signup, ema
 
 - **Password signup** — a user signs up with a login, email, and password. The login must pass uniqueness and format checks; emails are checked against the server's blocked-usernames list. After signup, a verification mail goes out; until the link is clicked the account has limited capabilities (configurable per server) — typically the restricted set defined by the `verified` role's grants. Clicking the link marks the email verified and the user gains the `verified` implicit role.
 - **OIDC signup** — when a user signs in via an OIDC provider for the first time and no Chatto account matches their subject or verified email, a new account is created. The email is treated as pre-verified (the IdP attested to it). The login is derived from the local-part of the email; the OIDC subject is stored as a stable identity link for future sign-ins. See FDR-023.
-- **AT Protocol signup** — when a user signs in via AT Protocol for the first time and no Chatto account matches their DID, a new account is created with their handle as the login. The sign-in flow requests the `account:email` scope; if the user grants it and their PDS-side email is confirmed, that email is attached to the new account as verified. If the user declines the scope, the account is created without an email and the user can add one later. See FDR-026.
+- **AT Protocol signup** — when a user signs in via AT Protocol for the first time and no Chatto account matches their DID, a new account is created with their handle as the login. The sign-in flow requests the `account:email` scope; if the user grants it and their PDS-side email is confirmed, that email is attached to the new account as verified. If the user declines the scope, the account is created without an email and the user can add one later. See FDR-027.
 - If a verified email matches an entry in `owners.emails` in the server config, the user is auto-assigned the `owner` role on verification. This applies to email verifications from any path (manual link-click, OIDC pre-verified email, or a later-added email on an ATProto account).
 
 ### Email management
@@ -83,7 +83,7 @@ This FDR covers the user account from registration through deletion: signup, ema
 ## Related
 
 - **ADRs:** ADR-007 (per-user encryption with crypto-shredding), ADR-032 (external identity integration boundaries)
-- **FDRs:** FDR-001 (Roles & Permissions), FDR-022 (User Profile), FDR-023 (Authentication & Sessions), FDR-026 (Sign in with AT Protocol)
+- **FDRs:** FDR-001 (Roles & Permissions), FDR-022 (User Profile), FDR-023 (Authentication & Sessions), FDR-027 (Sign in with AT Protocol)
 
 ## Open Questions
 

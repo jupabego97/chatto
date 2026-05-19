@@ -1,4 +1,4 @@
-# FDR-026: Sign in with AT Protocol
+# FDR-027: Sign in with AT Protocol
 
 **Status:** Active
 **Last reviewed:** 2026-05-19
