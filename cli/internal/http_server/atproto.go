@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 
@@ -58,7 +59,12 @@ func newATProtoHandler(s *HTTPServer) (*atprotoHandler, error) {
 		return nil, errors.New("webserver.url must be set to enable AT Protocol sign-in")
 	}
 
-	scopes := []string{"atproto"}
+	// account:email is requested so we can seed the Chatto account's
+	// verified-email list (and trigger owners.emails owner auto-promotion)
+	// on first sign-in. Users can decline just this scope on the PDS
+	// consent screen and still complete sign-in — the email seed becomes
+	// a no-op. See maybeSeedEmail.
+	scopes := []string{"atproto", "account:email"}
 
 	var cfg oauth.ClientConfig
 	if isLocalhostURL(publicURL) {
@@ -239,6 +245,12 @@ func (h *atprotoHandler) handleCallback(c *gin.Context) {
 		// Best-effort profile mirroring on first sign-in. Failures here must
 		// not block sign-in — the user exists; profile is just nice-to-have.
 		h.mirrorProfile(ctx, user.Id, did, sessData.HostURL)
+
+		// If the user granted account:email, seed a verified email. This
+		// also triggers owners.emails owner auto-promotion via the shared
+		// addVerifiedEmail hook. Best-effort: a declined scope or failed
+		// fetch leaves the user without an email; they can add one later.
+		h.maybeSeedEmail(ctx, user.Id, sessData)
 	}
 
 	// Always revoke the OAuth session. We don't keep ATProto credentials
@@ -342,6 +354,43 @@ func (s *HTTPServer) loginInUse(ctx context.Context, login string) bool {
 		return true
 	}
 	return u != nil
+}
+
+// maybeSeedEmail asks the user's PDS for their account email and, if it's
+// confirmed, attaches it to the Chatto user as a verified email. Skipped
+// silently if the user declined the account:email scope or anything along
+// the way fails — email seeding is a nicety, not a correctness requirement.
+func (h *atprotoHandler) maybeSeedEmail(ctx context.Context, userID string, sessData *oauth.ClientSessionData) {
+	if !slices.Contains(sessData.Scopes, "account:email") {
+		return
+	}
+
+	sess, err := h.app.ResumeSession(ctx, sessData.AccountDID, sessData.SessionID)
+	if err != nil {
+		log.Warn("ATProto email seed: ResumeSession failed", "error", err)
+		return
+	}
+
+	var resp struct {
+		Email          string `json:"email"`
+		EmailConfirmed bool   `json:"emailConfirmed"`
+	}
+	if err := sess.APIClient().Get(ctx, "com.atproto.server.getSession", nil, &resp); err != nil {
+		log.Warn("ATProto email seed: getSession failed", "error", err)
+		return
+	}
+
+	email := strings.ToLower(strings.TrimSpace(resp.Email))
+	if email == "" || !resp.EmailConfirmed {
+		return
+	}
+
+	if err := h.s.core.AddVerifiedEmailDirect(ctx, userID, email); err != nil {
+		// Most likely "email already claimed by another user" — not actionable
+		// from here; leave the ATProto account without an email and let the
+		// user resolve it manually if it matters.
+		log.Warn("ATProto email seed: AddVerifiedEmailDirect failed", "userId", userID, "error", err)
+	}
 }
 
 // mirrorProfile fetches the user's app.bsky.actor.profile record from their

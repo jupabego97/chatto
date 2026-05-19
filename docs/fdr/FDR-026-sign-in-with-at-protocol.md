@@ -15,7 +15,7 @@ Users can sign in to Chatto using their AT Protocol identity — a DID issued by
 - **First sign-in also seeds profile data.** Chatto reads the `app.bsky.actor.profile` record from the user's PDS and copies their display name and avatar into the new Chatto profile. The profile data is owned locally thereafter — Chatto does not re-sync from the PDS on later sign-ins.
 - **Users without a Bluesky profile degrade gracefully.** A handle that has never used the `app.bsky.actor.profile` lexicon (e.g. a Frontpage-only user) signs in successfully; their Chatto display name defaults to their handle and they get the standard initial-letter avatar placeholder.
 - **Subsequent sign-ins match by DID, not handle.** Handles can change at the protocol level; the DID is stable. The user's handle is re-resolved on each sign-in for display purposes but isn't used to identify them.
-- **No email is collected.** The current scope set requests only `atproto`, which doesn't include access to the user's email. ATProto-only accounts therefore land in Chatto without a verified email — they can add one later through the standard email-management flow if they need one (e.g. for password reset, or to receive `owners.emails` privileges).
+- **Email is requested but optional.** The sign-in flow asks for the `account:email` scope alongside the base `atproto` scope. If the user grants it on the PDS consent screen and their PDS-side email is confirmed, the address is added to the Chatto account as a verified email — which also triggers `owners.emails` owner auto-promotion through the shared verified-email hook. If the user declines the scope, sign-in still succeeds; the user simply lands without an email and can add one later through email management.
 - **No ATProto credentials are retained.** Once the callback has identified the user, Chatto revokes the OAuth session immediately. Chatto does not store ATProto tokens and cannot act on the user's behalf against their PDS.
 - **The resulting Chatto session is identical to any other.** Cookie + bearer token issued per FDR-023; from this point on the sign-in path is invisible to the rest of the application.
 
@@ -33,11 +33,11 @@ Users can sign in to Chatto using their AT Protocol identity — a DID issued by
 **Why:** Handles are already public, unique-within-PDS identifiers — perfect login material. Forcing the user to pick a fresh Chatto login at signup would be extra friction for no gain.
 **Tradeoff:** A user whose preferred handle collides with an existing Chatto login lands with `-2` appended; they can fix it via the standard rename flow. Better than a forced disambiguation prompt at signup.
 
-### 3. Phase 1 ships without the `account:email` scope
+### 3. Request `account:email` and gracefully handle denial
 
-**Decision:** The initial implementation requests only the `atproto` scope. Email isn't collected; ATProto sign-ups land without a verified email.
-**Why:** The `account:email` scope is a heavier consent ask — users see "this app wants to read your email address" on the approval screen. Phase 1 is identity-only; the email isn't load-bearing for anything yet. Adding the scope later is mechanical.
-**Tradeoff:** ATProto users can't be auto-promoted to owner via `owners.emails`, and don't receive admin-driven email notifications, until they manually add an email to their Chatto account. The `account:email` scope can be added later when those use cases become real.
+**Decision:** Sign-in requests both `atproto` and `account:email`. On the PDS consent screen the user can grant or deny each scope independently. If `account:email` is granted and the PDS-side email is confirmed, Chatto seeds the new account's verified-email list with it. If it's denied (or the email is unconfirmed, or the fetch fails), sign-in still succeeds — the user simply has no email on their Chatto account.
+**Why:** Email is what makes `owners.emails` auto-promotion work uniformly across all sign-in paths (password, OIDC, ATProto). Without it, an operator listing an owner's ATProto-side email gets nothing. The consent screen is honest — the user sees that the email is being asked for and can refuse without losing access.
+**Tradeoff:** The consent screen now lists two scopes instead of one, which is a touch more friction. Users who decline the email scope land with no `owners.emails` eligibility and no email-based notifications until they add one manually; that's their explicit choice, not Chatto's omission.
 
 ### 4. Profile mirroring on first sign-in only
 
@@ -64,6 +64,5 @@ Users can sign in to Chatto using their AT Protocol identity — a DID issued by
 
 ## Open Questions
 
-- Whether to request `account:email` in a follow-up so ATProto sign-ups land with a verified email and become eligible for `owners.emails` auto-promotion. The trade-off is the heavier consent screen.
 - Whether to define a `run.chatto.*` lexicon for Chatto-specific profile data on the user's PDS (cross-server discovery, "find me on these other Chatto servers"). Out of scope for Phase 1.
 - Account linking: today, a user with both a Chatto password account and an ATProto handle that resolves to the same person ends up with two separate Chatto accounts. A future settings-page action could merge them on explicit consent.
