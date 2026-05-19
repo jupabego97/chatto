@@ -83,14 +83,10 @@ func newATProtoHandler(s *HTTPServer) (*atprotoHandler, error) {
 	}
 	cfg.UserAgent = "chatto"
 
-	// MemStore persists the auth-request and session state in memory only.
-	// Two implications:
-	//   1) Multi-replica deployments will lose state if the callback hits a
-	//      different replica than the one that started the flow.
-	//   2) Restarting the server mid-flow aborts any in-flight sign-in.
-	// Phase 1 accepts both; a NATS-KV-backed store can replace MemStore later
-	// without changing handler code.
-	app := oauth.NewClientApp(&cfg, oauth.NewMemStore())
+	// State (in-flight auth requests + post-callback sessions) lives in the
+	// AUTH_TOKENS NATS KV bucket via atprotoOAuthStore. Survives server
+	// restart mid-flow and works in multi-replica deployments.
+	app := oauth.NewClientApp(&cfg, newATProtoOAuthStore(s.core))
 
 	return &atprotoHandler{
 		s:         s,
