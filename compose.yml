@@ -5,6 +5,13 @@ services:
       dockerfile: Dockerfile.compose
     environment:
       CHATTO_WEBSERVER_URL: https://${COMPOSE_PROJECT_NAME}.orb.local
+      # ATProto OAuth needs a publicly-reachable URL, and *.orb.local isn't
+      # one — so the dev (bootstrap-tag) build of Chatto hardwires the
+      # ATProto flow onto the loopback client form (http://127.0.0.1:5173)
+      # which doesn't require metadata hosting. Access Chatto at
+      # http://127.0.0.1:5173 specifically when testing ATProto sign-in;
+      # orb.local + OIDC + cookies on orb.local keep working unchanged.
+      # See cli/internal/http_server/atproto_dev_bootstrap.go for the hook.
       # Shared dev infrastructure runs in OrbStack's Kubernetes (see the
       # umbrella's Tiltfile). The hostnames below are reachable from inside
       # OrbStack's Docker side too — both stacks share the same VM.
@@ -25,6 +32,12 @@ services:
       context: ./frontend
       dockerfile: ../Dockerfile.frontend.compose
     working_dir: /app
+    # localhost:5173 is exposed in addition to the orb.local HTTPS proxy so
+    # ATProto OAuth localhost dev-mode works (PDSes redirect back to
+    # http://127.0.0.1:5173/auth/atproto/callback). Daily browser access still
+    # uses the orb.local URL; this is purely a second access path.
+    ports:
+      - "127.0.0.1:5173:5173"
     labels:
       dev.orbstack.http-port: 5173
       dev.orbstack.domains: ${COMPOSE_PROJECT_NAME}.orb.local
