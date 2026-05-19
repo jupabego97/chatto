@@ -22,19 +22,17 @@ It should be no surprise that we are working hard to move towards a release that
 
 ## Development with Conductor
 
-[Conductor](https://conductor.build) workspaces launch a fully containerized dev stack via Docker Compose. The `run` script in `conductor.json` invokes:
+[Conductor](https://conductor.build) workspaces run the dev stack natively via `mise dev` — no Docker. The `run` script in `conductor.json` wires Conductor's assigned `$CONDUCTOR_PORT` (and `+1` / `+2`) into the env vars `mise dev` reads:
 
-```sh
-docker compose -p instance-name up
-```
+| Port              | Process                              |
+| ----------------- | ------------------------------------ |
+| `$CONDUCTOR_PORT` | Vite dev server (user-facing URL)    |
+| `+1`              | Go backend (`CHATTO_WEBSERVER_PORT`) |
+| `+2`              | Embedded NATS                        |
 
-The stack is then reachable via OrbStack at:
+Outside Conductor, plain `mise dev` uses the defaults from `cli/chatto.toml` (Vite 5173, backend 4000, NATS 4555).
 
-```
-https://instance-name.orb.local/
-```
-
-Each instance is bootstrapped with the same dev credentials (configured in `compose.yml`):
+Each instance is bootstrapped with the same dev credentials (configured in `cli/chatto.toml` under `[[bootstrap.users]]`):
 
 - **Login:** `alice`
 - **Email:** `alice@example.com`
@@ -42,8 +40,31 @@ Each instance is bootstrapped with the same dev credentials (configured in `comp
 
 ## Instructions for Coding Agents
 
-- Please consult the additional rules in `.claude/rules/**` for more specific guidelines on coding style, architecture, planning, and testing.
-- Please use this project's GitHub Issues for planning work.
+This codebase keeps agent-relevant context in four places. Read the one that fits your task:
+
+- **`.claude/rules/**`** — always-on coding, testing, and review conventions, mostly path-scoped (`frontend.md` and `frontend-conventions.md` for SvelteKit work, `backend.md` for Go, `testing-frontend.md` / `testing-backend.md` for tests, `authorization.md` for permission changes, etc.). Start here for "how do we do things in this repo?"
+- **`docs/fdr/INDEX.md`** — **Feature** Decision Records, one per feature. They describe what a feature does *and* why it's designed that way. Read the relevant FDR before changing user-facing behavior.
+- **`docs/adr/INDEX.md`** — **Architecture** Decision Records. Cross-cutting choices like "NATS as primary data store" or "per-user encryption keys with crypto-shredding". Read when touching architectural seams.
+- **`docs/ARCHITECTURE.md`** — inventory of what currently exists (streams, KV buckets, subject patterns, GraphQL operations). Use when you need to know *what's where*, not *why*.
+
+### Maintenance slash commands
+
+Periodic codebase upkeep — all propose-only unless noted:
+
+| Command | Use when |
+| --- | --- |
+| `/chatto-checkup` | Standard documentation rounds; fans out to `/fdr`, `/adr`, `/chatto-architecture`. Points at other maintenance skills at the end. |
+| `/chatto-finalize-pr` | Pre-merge check on the current branch — runs `/fdr` + `/adr`. |
+| `/fdr [feature]` | Audit Feature Decision Records against the code, or create a new one. |
+| `/adr` | Audit Architecture Decision Records, or create a new one. |
+| `/chatto-architecture` | Refresh `docs/ARCHITECTURE.md` inventory. |
+| `/chatto-security-review` | Multi-agent security audit. |
+| `/update-project-dependencies` | Bump deps within semver, run tests. |
+| `/chatto-debugging` | `nats` CLI recipes for production debugging. |
+| `/chatto-dev-instance` | Deploy to dev (Argo Rollouts). |
+| `/chatto-release-announcement` | Generate release notes from git tags. |
+
+Use this project's GitHub Issues for planning work.
 
 ## License
 

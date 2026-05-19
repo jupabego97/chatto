@@ -10,14 +10,14 @@ ADR-027 collapsed the historical three-tier model (Instance → Space → Room) 
 
 The Space tier is therefore *behaviourally* retired, but its mechanical residue is still load-bearing in four places:
 
-1. **A vestigial primary-space record with stale readers.** Every deployment has one `Space` proto stored in `INSTANCE` KV at key `space.{spaceId}` with fields `id`, `name`, `description`. The branding (logo, banner) and the canonical server name/description already live in `INSTANCE_CONFIG` (`ServerConfig` proto + separate `instance.logo`/`instance.banner` keys). Four code paths still read from the Space record anyway:
-   - `cli/internal/core/dm.go:97` — bootstrap creates a `DMSpaceID` Space record
-   - `cli/internal/graph/mutation.resolvers.go:483` — explicit "until PR(c)" dual-write of name/description
-   - `cli/internal/http_server/opengraph.go:210` — OG metadata reads `space.Name` / `space.Description` (stale; `ServerConfig` is the right source)
-   - `cli/internal/graph/space_helpers.go:25` — thin GraphQL wrapper
+1. **A vestigial primary-space record with stale readers.** Every deployment has one `Space` proto stored in `INSTANCE` KV at key `space.{spaceId}` with fields `id`, `name`, `description`. The branding (logo, banner) and the canonical server name/description already live in `INSTANCE_CONFIG` (`ServerConfig` proto + separate `instance.logo`/`instance.banner` keys). Four code paths still read from the Space record anyway (line numbers omitted — these files have since shifted):
+   - `cli/internal/core/dm.go` — bootstrap creates a `DMSpaceID` Space record
+   - `cli/internal/graph/mutation.resolvers.go` — explicit "until PR(c)" dual-write of name/description
+   - `cli/internal/http_server/opengraph.go` — OG metadata reads `space.Name` / `space.Description` (stale; `ServerConfig` is the right source)
+   - `cli/internal/graph/space_helpers.go` — thin GraphQL wrapper
    These are dead-end reads of stale data. Once they're removed, the persisted `space.{spaceId}` KV record becomes an orphan and can be left alone — one tiny entry per server, zero functional impact.
 
-2. **`spaceID` plumbing on the core API.** Roughly 80 functions across `cli/internal/core/*.go` still take a `spaceID string` parameter. Every one of them either ignores the value or feeds it into `kindForSpace(spaceID)` (`dm.go:38`), which exists only to map a sentinel `DMSpaceID` to `"dm"` and everything else to `"channel"`. The parameter is a one-bit DM flag dressed up as an ID.
+2. **`spaceID` plumbing on the core API.** Roughly 80 functions across `cli/internal/core/*.go` still take a `spaceID string` parameter. Every one of them either ignores the value or feeds it into `KindForSpace(spaceID)` (in `cli/internal/core/dm.go`), which exists only to map a sentinel `DMSpaceID` to `"dm"` and everything else to `"channel"`. The parameter is a one-bit DM flag dressed up as an ID.
 
 3. **DMs are still modelled as a hidden space.** ADR-015's "hidden DM space" predates the room-`kind` discriminator. With the `kind` field now baked into KV keys and NATS subjects, the DM scope is determined by `kind == "dm"` directly; the `DMSpaceID` sentinel is the only thing that needs the Space-shaped routing to survive.
 
@@ -55,7 +55,7 @@ In-scope for this ADR:
 5. **Rename `live.server.space.{spaceId}.>` NATS subjects** to `live.server.{eventType}` (or another deployment-scoped pattern — to be decided in Phase 1). Live subjects have no persistence; rename freely.
 6. **Rename `SpaceUserPreferences` → `UserPreferences`** in proto + storage key naming. Same wire-format-safe argument (preferences are a small KV-stored proto, not in JetStream).
 7. **Frontend rename `$lib/state/space/*` → `$lib/state/server/*` (or merge in).** Cosmetic; the store is "the active server's room/permissions state", not "a space's".
-8. **Update `agent-docs/features/`, `docs/ARCHITECTURE.md`, and `.claude/rules/` to drop residual "space" prose** that survived ADR-029's docs sweep (those described what the code looked like at the time; this ADR makes them stale).
+8. **Update `docs/fdr/`, `docs/ARCHITECTURE.md`, and `.claude/rules/` to drop residual "space" prose** that survived ADR-029's docs sweep (those described what the code looked like at the time; this ADR makes them stale).
 
 Out of scope (deferred):
 

@@ -54,15 +54,6 @@ func (s *HTTPServer) setupATProtoRoutes() {
 
 func newATProtoHandler(s *HTTPServer) (*atprotoHandler, error) {
 	publicURL := strings.TrimRight(s.config.Webserver.URL, "/")
-	// In bootstrap (dev-image) builds, swap in the loopback URL so the
-	// ATProto OAuth flow works without exposing the deployment publicly —
-	// orb.local-style dev hostnames aren't reachable from a real PDS, and
-	// the loopback `client_id` form sidesteps the metadata-fetch entirely.
-	// This is a build-time-only override; release builds always use
-	// webserver.url and require it to be publicly reachable.
-	if override := devATProtoURLOverride; override != "" {
-		publicURL = strings.TrimRight(override, "/")
-	}
 	if publicURL == "" {
 		return nil, errors.New("webserver.url must be set to enable AT Protocol sign-in")
 	}
