@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"slices"
 	"strings"
-	"sync"
 
 	"github.com/bluesky-social/indigo/atproto/auth/oauth"
 	"github.com/charmbracelet/log"
@@ -31,8 +30,6 @@ type atprotoHandler struct {
 	app       *oauth.ClientApp
 	clientURI string // public origin used in client metadata
 	scopes    []string
-
-	mu sync.Mutex
 }
 
 func (s *HTTPServer) setupATProtoRoutes() {

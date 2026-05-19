@@ -41,6 +41,9 @@ func (c *ChattoCore) LinkATProtoDID(ctx context.Context, did, userID string) err
 	key := userByATProtoDIDKey(did)
 
 	if _, err := c.storage.serverKV.Create(ctx, key, []byte(userID)); err != nil {
+		if !errors.Is(err, jetstream.ErrKeyExists) {
+			return fmt.Errorf("failed to link ATProto DID: %w", err)
+		}
 		entry, getErr := c.storage.serverKV.Get(ctx, key)
 		if getErr == nil && string(entry.Value()) == userID {
 			return nil
