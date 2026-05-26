@@ -89,7 +89,7 @@ test.describe('Account Deletion', () => {
       await chatPage.createSpace();
       await chatPage.enterRoom('general');
 
-      const spaceId = await chatPage.getSpaceId();
+      await chatPage.getSpaceId();
       const messageText = `Hello from ${userA.login} at ${Date.now()}`;
       await roomPage.sendMessage(messageText);
 
@@ -159,7 +159,7 @@ test.describe('Account Deletion', () => {
       await chatPage.createSpace();
       await chatPage.enterRoom('general');
 
-      const spaceId = await chatPage.getSpaceId();
+      await chatPage.getSpaceId();
       const messageText = `Real-time test from ${userA.login} at ${Date.now()}`;
       await roomPage.sendMessage(messageText);
 
@@ -223,7 +223,7 @@ test.describe('Account Deletion', () => {
       await chatPage.createSpace();
       await chatPage.enterRoom('general');
 
-      const spaceId = await chatPage.getSpaceId();
+      await chatPage.getSpaceId();
 
       // User B joins the space (this creates a join event)
       const context2 = await browser!.newContext({ baseURL: serverURL });
@@ -282,7 +282,7 @@ test.describe('Account Deletion', () => {
       await chatPage.createSpace();
       await chatPage.enterRoom('general');
 
-      const spaceId = await chatPage.getSpaceId();
+      await chatPage.getSpaceId();
 
       // User B joins the space and room
       const context2 = await browser!.newContext({ baseURL: serverURL });

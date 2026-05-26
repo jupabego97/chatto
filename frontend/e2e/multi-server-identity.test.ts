@@ -45,7 +45,7 @@ test.describe('Multi-Instance Identity', () => {
 		// Remote instance: owner creates a space, browser user joins via API
 		const baseURL = remoteBaseURL(remoteServer);
 		const remoteOwner = await createUserOnRemote(baseURL, 'remoteowner1', 'password123');
-		const spaceId = await createSpaceOnRemote(baseURL, remoteOwner.token, 'Remote Edit Test');
+		await createSpaceOnRemote(baseURL, remoteOwner.token, 'Remote Edit Test');
 		const remoteBrowser = await createUserOnRemote(baseURL, 'remotebrowser1', 'password123');
 		await joinSpaceOnRemote(baseURL, remoteBrowser.token);
 		const roomId = await getRoomOnRemote(baseURL, remoteOwner.token, 'general');
@@ -78,7 +78,7 @@ test.describe('Multi-Instance Identity', () => {
 		// Remote instance: owner creates a space, browser user joins via API
 		const baseURL = remoteBaseURL(remoteServer);
 		const remoteOwner = await createUserOnRemote(baseURL, 'remoteowner2', 'password123');
-		const spaceId = await createSpaceOnRemote(baseURL, remoteOwner.token, 'Remote Typing Test');
+		await createSpaceOnRemote(baseURL, remoteOwner.token, 'Remote Typing Test');
 		const remoteBrowser = await createUserOnRemote(baseURL, 'remotebrowser2', 'password123');
 		await joinSpaceOnRemote(baseURL, remoteBrowser.token);
 		const roomId = await getRoomOnRemote(baseURL, remoteOwner.token, 'general');
@@ -113,7 +113,7 @@ test.describe('Multi-Instance Identity', () => {
 		// Remote instance: owner creates the space, viewer joins
 		const baseURL = remoteBaseURL(remoteServer);
 		const remoteOwner = await createUserOnRemote(baseURL, 'remoteowner3', 'password123');
-		const spaceId = await createSpaceOnRemote(baseURL, remoteOwner.token, 'Remote Typing Visible');
+		await createSpaceOnRemote(baseURL, remoteOwner.token, 'Remote Typing Visible');
 		const remoteViewer = await createUserOnRemote(baseURL, 'remoteviewer3', 'password123');
 		await joinSpaceOnRemote(baseURL, remoteViewer.token);
 		const roomId = await getRoomOnRemote(baseURL, remoteOwner.token, 'general');

@@ -169,7 +169,7 @@ test.describe('Notification Level - Server-Side Enforcement', () => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.createSpace('API Test');
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     // Set space level to MUTED via API
     await setServerNotificationLevel(page, 'MUTED');
@@ -190,7 +190,7 @@ test.describe('Notification Level - Server-Side Enforcement', () => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.createSpace('Inherit Test');
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
     const roomId = await getRoomIdByName(page, 'general');
 
     // Set space level to MUTED
@@ -216,7 +216,7 @@ test.describe('Notification Level - Server-Side Enforcement', () => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.createSpace('Override Test');
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
     const roomId = await getRoomIdByName(page, 'general');
 
     // Set space level to MUTED

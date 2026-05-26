@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import { test } from './setup';
-import { AdminPage, ChatPage } from './pages';
+import { AdminPage } from './pages';
 import * as routes from './routes';
 import { TIMEOUTS } from './constants';
 import {
@@ -954,4 +954,3 @@ test.describe('Identity Editing', () => {
     await regularContext.close();
   });
 });
-

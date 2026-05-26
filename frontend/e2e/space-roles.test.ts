@@ -666,7 +666,7 @@ test.describe.skip('Space Permission Enforcement', () => {
     test('space admin can create a room via admin page', async ({ page }) => {
       // Create admin user and space
       await createAndLoginTestUser(page);
-      const space = await createSpaceViaAPI(page);
+      await createSpaceViaAPI(page);
 
       // Navigate to admin rooms page
       await page.goto(routes.serverAdminRooms);
@@ -751,7 +751,7 @@ test.describe.skip('Space Permission Enforcement', () => {
 
       // Create admin user and space
       await createAndLoginTestUser(page);
-      const space = await createSpaceViaAPI(page);
+      await createSpaceViaAPI(page);
 
       // Navigate to space
       await page.goto(routes.space());

@@ -58,7 +58,7 @@ test.describe('Cross-instance dots', () => {
 		const ts = Date.now();
 		const viewerLogin = `xviewer${ts}`;
 		const owner = await createUserOnRemote(baseURL, `xowner${ts}`, 'password123');
-		const spaceId = await createSpaceOnRemote(baseURL, owner.token, 'Cross Instance Mention');
+		await createSpaceOnRemote(baseURL, owner.token, 'Cross Instance Mention');
 		const viewer = await createUserOnRemote(baseURL, viewerLogin, 'password123');
 		await joinSpaceOnRemote(baseURL, viewer.token);
 		const mentioner = await createUserOnRemote(baseURL, `xmentioner${ts}`, 'password123');
@@ -109,7 +109,7 @@ test.describe('Cross-instance dots', () => {
 		const userA = await createAndLoginTestUser(page);
 		await chatPage.goto();
 		await chatPage.createSpace();
-		const spaceId = await chatPage.getSpaceId();
+		await chatPage.getSpaceId();
 
 		await chatPage.enterRoom('general');
 		const generalRoomId = await getRoomIdByName(page, 'general');

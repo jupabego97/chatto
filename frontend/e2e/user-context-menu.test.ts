@@ -19,7 +19,7 @@ test.describe('User context menu', () => {
       await createAndLoginTestUser(page);
       await chatPage.goto();
       await chatPage.createSpace();
-      const spaceId = await chatPage.getSpaceId();
+      await chatPage.getSpaceId();
       await chatPage.enterRoom('general');
       await roomPage.sendMessage('Hello from User A');
 

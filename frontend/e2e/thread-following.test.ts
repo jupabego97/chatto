@@ -153,7 +153,7 @@ test.describe('Thread Following', () => {
     await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     const rootText = `Root ${Date.now()}`;
     const rootMsg = await roomPage.sendMessage(rootText);
@@ -205,7 +205,7 @@ test.describe('Thread Following', () => {
     await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     const rootText = `Root ${Date.now()}`;
     await roomPage.sendMessage(rootText);
@@ -254,7 +254,7 @@ test.describe('Thread Following', () => {
     await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     // User A posts root message and creates a thread
     const rootText = `Root ${Date.now()}`;
@@ -315,7 +315,7 @@ test.describe('Thread Following', () => {
     await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     const firstMsg = await roomPage.sendMessage(`First ${Date.now()}`);
 

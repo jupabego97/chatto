@@ -7,7 +7,6 @@ import {
 } from './fixtures/testUser';
 import { SpaceAdminPage } from './pages';
 import { TIMEOUTS } from './constants';
-import { postMessageViaAPI } from './fixtures/graphqlHelpers';
 import * as routes from './routes';
 
 // ============================================================================
@@ -509,7 +508,7 @@ test.describe('Room Layout', () => {
   test.describe('API & Permissions', () => {
     test('admin can configure room layout via API', async ({ page }) => {
       await createAndLoginTestUser(page);
-      const space = await createSpaceViaAPI(page);
+      await createSpaceViaAPI(page);
 
       const { generalId, announcementsId } = await getDefaultRoomIds(page);
       const alphaId = await createRoomViaAPI(page, 'alpha');
@@ -552,7 +551,7 @@ test.describe('Room Layout', () => {
     }) => {
       // User A (owner) creates space
       await createAndLoginTestUser(page);
-      const space = await createSpaceViaAPI(page);
+      await createSpaceViaAPI(page);
       const { generalId } = await getDefaultRoomIds(page);
 
       // User B joins as regular member
@@ -596,7 +595,7 @@ test.describe('Room Layout', () => {
     }) => {
       // User A (owner) creates space
       await createAndLoginTestUser(page);
-      const space = await createSpaceViaAPI(page);
+      await createSpaceViaAPI(page);
 
       // User B joins as regular member
       const context2 = await browser!.newContext({ baseURL: serverURL });
@@ -812,7 +811,7 @@ test.describe('Room Layout', () => {
     test('archived room disappears from member sidebar', async ({ page, browser, serverURL }) => {
       // User A (owner) creates space and rooms
       await createAndLoginTestUser(page);
-      const space = await createSpaceViaAPI(page);
+      await createSpaceViaAPI(page);
       const roomId = await createRoomViaAPI(page, 'will-vanish');
       await joinRoomViaAPI(page, roomId);
 
@@ -845,7 +844,7 @@ test.describe('Room Layout', () => {
 
     test('archived room excluded from Browse Rooms', async ({ page, browser, serverURL }) => {
       await createAndLoginTestUser(page);
-      const space = await createSpaceViaAPI(page);
+      await createSpaceViaAPI(page);
       const visibleId = await createRoomViaAPI(page, 'visible-room');
       const hiddenId = await createRoomViaAPI(page, 'hidden-room');
       await joinRoomViaAPI(page, visibleId);
@@ -878,7 +877,7 @@ test.describe('Room Layout', () => {
 
     test('unarchived room reappears in member sidebar', async ({ page, browser, serverURL }) => {
       await createAndLoginTestUser(page);
-      const space = await createSpaceViaAPI(page);
+      await createSpaceViaAPI(page);
       const roomId = await createRoomViaAPI(page, 'comeback');
       await joinRoomViaAPI(page, roomId);
 

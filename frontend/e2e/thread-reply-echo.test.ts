@@ -192,14 +192,13 @@ test.describe('Thread Reply Echo ("Also send to channel")', () => {
     browser,
     serverURL
   }) => {
-    let spaceId: string;
 
     await test.step('User A creates space and posts root message', async () => {
       await createAndLoginTestUser(page);
       await chatPage.goto();
       await chatPage.createSpace();
       await chatPage.enterRoom('general');
-      spaceId = await chatPage.getSpaceId();
+      await chatPage.getSpaceId();
     });
 
     const rootMessage = `Root for realtime echo ${Date.now()}`;
@@ -836,14 +835,13 @@ test.describe('Thread Reply Echo ("Also send to channel")', () => {
     browser,
     serverURL
   }) => {
-    let spaceId: string;
 
     await test.step('User A creates space and posts root message', async () => {
       await createAndLoginTestUser(page);
       await chatPage.goto();
       await chatPage.createSpace();
       await chatPage.enterRoom('general');
-      spaceId = await chatPage.getSpaceId();
+      await chatPage.getSpaceId();
     });
 
     const rootMessage = `Root for unread test ${Date.now()}`;

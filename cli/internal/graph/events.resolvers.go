@@ -471,6 +471,21 @@ func (r *presenceChangedEventResolver) Status(ctx context.Context, obj *corev1.P
 	return model.PresenceStatus(obj.Status), nil
 }
 
+// ID is the resolver for the id field.
+func (r *roomEventResolver) ID(ctx context.Context, obj *corev1.Event) (string, error) {
+	return obj.GetId(), nil
+}
+
+// CreatedAt is the resolver for the createdAt field.
+func (r *roomEventResolver) CreatedAt(ctx context.Context, obj *corev1.Event) (*timestamppb.Timestamp, error) {
+	return obj.GetCreatedAt(), nil
+}
+
+// ActorID is the resolver for the actorId field.
+func (r *roomEventResolver) ActorID(ctx context.Context, obj *corev1.Event) (string, error) {
+	return obj.GetActorId(), nil
+}
+
 // Actor is the resolver for the actor field.
 func (r *roomEventResolver) Actor(ctx context.Context, obj *corev1.Event) (*corev1.User, error) {
 	return r.resolveEventActor(ctx, obj)
@@ -522,6 +537,21 @@ func (r *roomEventResolver) ThreadReplies(ctx context.Context, obj *corev1.Event
 // arrival is the signal; clients refetch Server.roomGroups.
 func (r *roomGroupsUpdatedEventResolver) Changed(ctx context.Context, obj *corev1.RoomGroupsUpdatedEvent) (bool, error) {
 	return true, nil
+}
+
+// ID is the resolver for the id field.
+func (r *serverEventResolver) ID(ctx context.Context, obj *corev1.Event) (string, error) {
+	return obj.GetId(), nil
+}
+
+// CreatedAt is the resolver for the createdAt field.
+func (r *serverEventResolver) CreatedAt(ctx context.Context, obj *corev1.Event) (*timestamppb.Timestamp, error) {
+	return obj.GetCreatedAt(), nil
+}
+
+// ActorID is the resolver for the actorId field.
+func (r *serverEventResolver) ActorID(ctx context.Context, obj *corev1.Event) (string, error) {
+	return obj.GetActorId(), nil
 }
 
 // Actor is the resolver for the actor field.

@@ -103,8 +103,8 @@
   // the message-attachments query. Returns an empty map on error;
   // callers should fall back to the pre-baked URLs in that case rather
   // than blocking the action entirely.
-  async function refreshUrlsForMessage(): Promise<Map<string, string>> {
-    const fresh = new Map<string, string>();
+  async function refreshUrlsForMessage(): Promise<Record<string, string>> {
+    const fresh: Record<string, string> = {};
     const result = await connection()
       .client.query(RefreshMessageAttachmentUrlsQuery, { roomId, eventId })
       .toPromise();
@@ -115,7 +115,7 @@
     const inner = result.data?.room?.event?.event;
     if (inner && inner.__typename === 'MessagePostedEvent') {
       for (const att of inner.attachments) {
-        fresh.set(att.id, att.url);
+        fresh[att.id] = att.url;
       }
     }
     return fresh;
@@ -127,7 +127,7 @@
     // lightbox can't hit an expired URL mid-session.
     const freshUrls = await refreshUrlsForMessage();
     const imageItems: ImageItem[] = imageAttachments.map((a) => ({
-      src: freshUrls.get(a.id) ?? a.url,
+      src: freshUrls[a.id] ?? a.url,
       alt: a.filename,
       filename: a.filename
     }));
@@ -146,7 +146,7 @@
     // "Open in new tab", which the browser handles before this runs.
     event.preventDefault();
     const freshUrls = await refreshUrlsForMessage();
-    const fresh = freshUrls.get(attachment.id) ?? attachment.url;
+    const fresh = freshUrls[attachment.id] ?? attachment.url;
     if (!fresh) {
       toast.error('Could not refresh download link');
       return;

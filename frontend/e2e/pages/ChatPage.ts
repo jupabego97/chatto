@@ -168,11 +168,9 @@ export class ChatPage {
    */
   async createRoom(name?: string, description?: string): Promise<string> {
     const roomName = name ?? `test-room-${Date.now()}`;
-    const spaceId = await this.getSpaceId();
-
     // Create and join room via API
     const result = await this.page.evaluate(
-      async ({ spaceId, roomName, description }) => {
+      async ({ roomName, description }) => {
         const createRes = await fetch('/api/graphql', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-REQUEST-TYPE': 'GraphQL' },
@@ -201,7 +199,7 @@ export class ChatPage {
 
         return { roomId };
       },
-      { spaceId, roomName, description }
+      { roomName, description }
     );
 
     // Navigate to the new room

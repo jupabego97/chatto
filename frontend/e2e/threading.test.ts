@@ -86,7 +86,7 @@ test.describe('Message Threading', () => {
       await chatPage.enterRoom('general');
     });
 
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     const rootMessage = `Root message ${Date.now()}`;
     let message1: Awaited<ReturnType<typeof roomPage.sendMessage>>;
@@ -155,7 +155,7 @@ test.describe('Message Threading', () => {
     await chatPage.goto();
     await chatPage.createSpace();
     await chatPage.enterRoom('general');
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     const rootMessage = `Thread root ${Date.now()}`;
     const message1 = await roomPage.sendMessage(rootMessage);
@@ -216,7 +216,7 @@ test.describe('Message Threading', () => {
     await chatPage.goto();
     await chatPage.createSpace();
     await chatPage.enterRoom('general');
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     const rootMessage = `Thread root for edit ${Date.now()}`;
     const message1 = await roomPage.sendMessage(rootMessage);
@@ -887,7 +887,7 @@ test.describe('Message Threading', () => {
     await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     const rootMessage = `Unread separator test ${Date.now()}`;
     const message1 = await roomPage.sendMessage(rootMessage);
@@ -1220,7 +1220,7 @@ test.describe('Message Threading', () => {
     await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     // Extract roomId from URL
     const url = page.url();

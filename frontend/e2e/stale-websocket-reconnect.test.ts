@@ -46,7 +46,7 @@ test.describe('WebSocket reconnect recovery', () => {
     await chatPage.enterRoom('general');
     await waitForRoomReady(page, 'general');
 
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
     const baselineMessage = `baseline-${Date.now()}`;
     await roomPage.sendMessage(baselineMessage);
     await roomPage.expectMessageVisible(baselineMessage);
@@ -95,7 +95,7 @@ test.describe('WebSocket reconnect recovery', () => {
     await chatPage.enterRoom('general');
     await waitForRoomReady(page, 'general');
 
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     // Post a message that will become the thread root
     const threadRoot = `thread-root-${Date.now()}`;

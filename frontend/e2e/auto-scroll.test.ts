@@ -56,7 +56,7 @@ test.describe('Message pane auto-scroll', () => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     const testSpaceName = await chatPage.createSpace();
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
     await chatPage.enterRoom('general');
 
     // Extract roomId from URL for API-based message posting
@@ -175,7 +175,7 @@ test.describe('Message pane auto-scroll', () => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     const testSpaceName = await chatPage.createSpace();
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
     await chatPage.enterRoom('general');
 
     // Extract roomId from URL for API-based message posting
@@ -282,7 +282,7 @@ test.describe('Message pane auto-scroll', () => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     const testSpaceName = await chatPage.createSpace();
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
     await chatPage.enterRoom('general');
 
     // Extract roomId from URL for API-based message posting
@@ -358,7 +358,7 @@ test.describe('Message pane auto-scroll', () => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     const testSpaceName = await chatPage.createSpace();
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
     await chatPage.enterRoom('general');
 
     // Extract roomId from URL for API-based message posting
@@ -463,7 +463,7 @@ test.describe('Message pane auto-scroll', () => {
     const url = page.url();
     const match = url.match(/\/chat\/-\/([^/]+)/);
     const roomId = match![1];
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     const timestamp = Date.now();
 
@@ -527,7 +527,7 @@ test.describe('Message pane auto-scroll', () => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.createSpace();
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
     await chatPage.enterRoom('general');
 
     // Extract roomId from URL for API-based message posting
@@ -594,7 +594,7 @@ test.describe('Message pane auto-scroll', () => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.createSpace();
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
     await chatPage.enterRoom('general');
 
     // Extract roomId from URL for API-based message posting
@@ -671,7 +671,7 @@ test.describe('Message pane auto-scroll', () => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.createSpace();
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
     await chatPage.enterRoom('general');
 
     const url = page.url();
@@ -752,7 +752,7 @@ test.describe('Message pane auto-scroll', () => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.createSpace();
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
     await chatPage.enterRoom('general');
 
     // Extract roomId from URL for API-based message posting
@@ -816,7 +816,7 @@ test.describe('Message pane auto-scroll', () => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.createSpace();
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
     await chatPage.enterRoom('general');
 
     // Extract roomId from URL for API-based message posting
@@ -878,7 +878,7 @@ Line 8: This is the last line of this long message.`;
     await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.createSpace();
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
     await chatPage.enterRoom('general');
 
     // Extract roomId from URL for API-based message posting
@@ -939,7 +939,7 @@ Line 8: This is the last line of this long message.`;
     await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.createSpace();
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
     await chatPage.enterRoom('general');
 
     // Extract roomId from URL for API-based message posting

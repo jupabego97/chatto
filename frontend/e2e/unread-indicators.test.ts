@@ -24,7 +24,7 @@ test.describe('Multi-Tab Unread Sync', () => {
     const userA = await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.createSpace();
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     // Navigate User A to announcements room (not general) so general stays unread
     await chatPage.enterRoom('announcements');
@@ -116,7 +116,7 @@ test.describe('Multi-window unread sync', () => {
     const userA = await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.createSpace('Shared Space');
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     // User A visits general room then leaves to announcements
     await chatPage.enterRoom('general');
@@ -206,7 +206,7 @@ test.describe('Unread indicators', () => {
     await chatPage.goto();
     await chatPage.createSpace();
 
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     // Navigate to "announcements" room (User A will observe from here)
     await chatPage.enterRoom('announcements');
@@ -315,7 +315,7 @@ test.describe('Room unread separator', () => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.createSpace('Separator Test Space');
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     // User A enters general room and posts initial messages
     await chatPage.enterRoom('general');
@@ -386,7 +386,7 @@ test.describe('Room unread separator', () => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.createSpace('First Visit Test');
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     // User A enters general room and posts a message
     await chatPage.enterRoom('general');
@@ -431,7 +431,7 @@ test.describe('Room unread separator', () => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.createSpace('Fixed Separator Test');
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     // User A enters general room and posts initial message
     await chatPage.enterRoom('general');
@@ -505,7 +505,7 @@ test.describe('Room unread separator', () => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.createSpace('Hidden Tab Separator Test');
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     await chatPage.enterRoom('general');
     await waitForRoomReady(page, 'general');
@@ -714,7 +714,7 @@ test.describe('Room unread separator', () => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.createSpace('Own Message Hidden Tab Test');
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     await chatPage.enterRoom('general');
     await waitForRoomReady(page, 'general');
@@ -779,7 +779,7 @@ test.describe('Room unread separator', () => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.createSpace('Own Message Test');
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     // Enter room
     await chatPage.enterRoom('general');
@@ -901,7 +901,7 @@ test.describe('Unread dot stability after loadRooms refresh', () => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.createSpace('Sticky Dot Test');
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     // User A enters general room and posts a message
     await chatPage.enterRoom('general');
@@ -1015,7 +1015,7 @@ test.describe('Thread reply unread behavior', () => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.createSpace('Thread Unread Test');
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     // User A enters general room and posts a root message
     await chatPage.enterRoom('general');

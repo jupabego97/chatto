@@ -315,7 +315,7 @@ test.describe('My Threads', () => {
 		await chatPage.createSpace();
 		await chatPage.enterRoom('general');
 
-		const spaceId = await chatPage.getSpaceId();
+		await chatPage.getSpaceId();
 		const myThreads = new MyThreadsPage(page);
 
 		// User A creates a thread

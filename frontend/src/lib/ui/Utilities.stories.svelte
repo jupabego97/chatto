@@ -1,5 +1,6 @@
 <script module lang="ts">
   import { defineMeta } from '@storybook/addon-svelte-csf';
+  import { resolve } from '$app/paths';
 
   const { Story } = defineMeta({
     title: 'Foundations/Utilities',
@@ -17,15 +18,16 @@
     </p>
     <div class="flex flex-col gap-3 rounded border border-input-border bg-surface p-4 text-text">
       <p>
-        Forgot your password? <a href="#" class="link">Request a reset link</a>.
+        Forgot your password?
+        <a href={resolve('/forgot-password')} class="link">Request a reset link</a>.
       </p>
       <p>
-        Head to the <a href="#" class="link">Overview</a> to browse rooms, or jump back to the
-        <a href="#" class="link">← previous page</a>.
+        Head to the <a href={resolve('/chat')} class="link">Overview</a> to browse rooms, or jump
+        back to the <a href={resolve('/')} class="link">← previous page</a>.
       </p>
       <p class="text-sm text-muted">
         Combines cleanly with text-size utilities:
-        <a href="#" class="link text-sm">Edit role</a>.
+        <a href={resolve('/chat/notifications')} class="link text-sm">Edit role</a>.
       </p>
     </div>
   </div>

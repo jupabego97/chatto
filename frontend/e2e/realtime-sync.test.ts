@@ -315,7 +315,7 @@ test.describe('Real-time synchronization', () => {
     await chatPage.goto();
     await chatPage.createSpace();
 
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     // Navigate to "general" room to see member list
     const roomPage = await chatPage.enterRoom('general');

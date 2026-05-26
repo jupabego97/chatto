@@ -1,5 +1,6 @@
 <script lang="ts">
   import { afterNavigate, goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import { page } from '$app/state';
   import { onNotificationClick } from '$lib/notifications/pushNotifications';
   import ServerGutter from '$lib/ServerGutter.svelte';
@@ -32,6 +33,44 @@
   useServerRegistry(() => data.user);
   useVisualViewport();
   usePinchZoomPrevention();
+
+  function gotoNotificationPath(target: URL): void {
+    if (target.pathname === '/') {
+      void goto(resolve('/'));
+      return;
+    }
+    if (target.pathname === '/chat') {
+      void goto(resolve('/chat'));
+      return;
+    }
+    if (target.pathname === '/chat/notifications') {
+      void goto(resolve('/chat/notifications'));
+      return;
+    }
+
+    const [, root, serverId, roomId, threadOrMarker, messageId] = target.pathname.split('/');
+    if (root !== 'chat' || !serverId) return;
+
+    if (!roomId) {
+      void goto(resolve('/chat/[serverId]', { serverId }));
+      return;
+    }
+    if (!threadOrMarker) {
+      void goto(resolve('/chat/[serverId]/[roomId]', { serverId, roomId }));
+      return;
+    }
+    if (threadOrMarker === 'm' && messageId) {
+      void goto(resolve('/chat/[serverId]/[roomId]/m/[messageId]', { serverId, roomId, messageId }));
+      return;
+    }
+    void goto(
+      resolve('/chat/[serverId]/[roomId]/[threadId]', {
+        serverId,
+        roomId,
+        threadId: threadOrMarker
+      })
+    );
+  }
 
   // Mark the origin store's currentUser as not-loading at app init.
   // SvelteKit's load function already resolved auth state by the time this
@@ -90,7 +129,7 @@
       try {
         const target = new URL(url);
         if (target.origin !== window.location.origin) return;
-        void goto(target.pathname + target.search + target.hash);
+        gotoNotificationPath(target);
       } catch {
         // Ignore malformed URLs from the SW.
       }

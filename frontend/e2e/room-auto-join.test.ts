@@ -16,7 +16,7 @@ test.describe('Room auto-join', () => {
     await chatPage.goto();
     await chatPage.createSpace();
 
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     // User B: Create account and join the space
     const context2 = await browser!.newContext({ baseURL: serverURL });
@@ -66,7 +66,7 @@ test.describe('Room auto-join', () => {
     await chatPage.goto();
     await chatPage.createSpace();
 
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     // User A enters general room and posts a message
     await chatPage.enterRoom('general');

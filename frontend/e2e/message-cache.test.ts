@@ -21,7 +21,7 @@ test.describe('Message Cache - Cross-Room and Cross-Space Scenarios', () => {
       await chatPage.createSpace();
       await chatPage.enterRoom('general');
 
-      const spaceId = await chatPage.getSpaceId();
+      await chatPage.getSpaceId();
 
       // User A posts root message
       const rootMessage = `Root message for cross-room test ${Date.now()}`;
@@ -91,7 +91,7 @@ test.describe('Message Cache - Cross-Room and Cross-Space Scenarios', () => {
       await chatPage.createSpace();
       await chatPage.enterRoom('general');
 
-      const spaceId = await chatPage.getSpaceId();
+      await chatPage.getSpaceId();
 
       const rootMessage = `Cross-room realtime test ${Date.now()}`;
       const message1 = await roomPage.sendMessage(rootMessage);
@@ -163,7 +163,7 @@ test.describe('Message Cache - Cross-Room and Cross-Space Scenarios', () => {
       await chatPage.createSpace();
       await chatPage.enterRoom('general');
 
-      const spaceId = await chatPage.getSpaceId();
+      await chatPage.getSpaceId();
 
       const rootMessage = `Multiple replies test ${Date.now()}`;
       await roomPage.sendMessage(rootMessage);

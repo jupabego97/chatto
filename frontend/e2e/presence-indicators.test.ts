@@ -18,7 +18,7 @@ test.describe('Presence indicators', () => {
     await chatPage.goto();
     await chatPage.createSpace();
 
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     // Navigate to "general" room to see member list
     const roomPage = await chatPage.enterRoom('general');
@@ -177,7 +177,7 @@ test.describe('Member list display format', () => {
     await chatPage.goto();
     await chatPage.createSpace();
 
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
     const roomPage = await chatPage.enterRoom('general');
 
     // Verify User A's display format (test users get "Test User {timestamp}")
@@ -249,7 +249,7 @@ test.describe('Member list grouping', () => {
     await chatPage.goto();
     await chatPage.createSpace();
 
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
     const roomPage = await chatPage.enterRoom('general');
 
     // Initially only online section with User A
@@ -313,7 +313,7 @@ test.describe('Member list grouping', () => {
     await chatPage.goto();
     await chatPage.createSpace();
 
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
     const roomPage = await chatPage.enterRoom('general');
 
     // Wait for member list to load

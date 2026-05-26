@@ -15,6 +15,11 @@ import (
 	corev1 "hmans.de/chatto/internal/pb/chatto/core/v1"
 )
 
+// ID is the resolver for the id field.
+func (r *roomResolver) ID(ctx context.Context, obj *corev1.Room) (string, error) {
+	return obj.GetId(), nil
+}
+
 // Type is the resolver for the type field.
 //
 // Derived from `Room.kind` — the canonical kind discriminator since
@@ -25,6 +30,17 @@ func (r *roomResolver) Type(ctx context.Context, obj *corev1.Room) (model.RoomTy
 		return model.RoomTypeDm, nil
 	}
 	return model.RoomTypeChannel, nil
+}
+
+// Name is the resolver for the name field.
+func (r *roomResolver) Name(ctx context.Context, obj *corev1.Room) (string, error) {
+	return obj.GetName(), nil
+}
+
+// Description is the resolver for the description field.
+func (r *roomResolver) Description(ctx context.Context, obj *corev1.Room) (*string, error) {
+	description := obj.GetDescription()
+	return &description, nil
 }
 
 // Members is the resolver for the members field.
@@ -173,6 +189,16 @@ func (r *roomResolver) ViewerCanManageRoom(ctx context.Context, obj *corev1.Room
 		return false, nil
 	}
 	return r.core.PermResolver().HasRoomPermission(ctx, user.Id, core.KindOfRoom(obj), obj.Id, core.PermRoomManage)
+}
+
+// Archived is the resolver for the archived field.
+func (r *roomResolver) Archived(ctx context.Context, obj *corev1.Room) (bool, error) {
+	return obj.GetArchived(), nil
+}
+
+// GroupID is the resolver for the groupId field.
+func (r *roomResolver) GroupID(ctx context.Context, obj *corev1.Room) (string, error) {
+	return obj.GetGroupId(), nil
 }
 
 // Events is the resolver for the events field.

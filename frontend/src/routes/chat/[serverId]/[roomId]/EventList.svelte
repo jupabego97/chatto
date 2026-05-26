@@ -583,7 +583,6 @@
     </div>
   {/if}
 
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <ScrollFader
     top
     bottom

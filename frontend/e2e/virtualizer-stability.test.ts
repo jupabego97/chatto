@@ -45,7 +45,7 @@ test.describe('Virtualizer stability', () => {
     await chatPage.goto();
     await chatPage.createSpace();
 
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     // Enter the default "general" room and post many messages
     await chatPage.enterRoom('general');
@@ -117,7 +117,7 @@ test.describe('Virtualizer stability', () => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.createSpace();
-    const spaceId = await chatPage.getSpaceId();
+    await chatPage.getSpaceId();
 
     await chatPage.enterRoom('general');
     const generalRoomId = getRoomIdFromUrl(page);

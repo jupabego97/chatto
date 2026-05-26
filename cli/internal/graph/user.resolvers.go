@@ -15,6 +15,26 @@ import (
 	corev1 "hmans.de/chatto/internal/pb/chatto/core/v1"
 )
 
+// ID is the resolver for the id field.
+func (r *userResolver) ID(ctx context.Context, obj *corev1.User) (string, error) {
+	return obj.GetId(), nil
+}
+
+// Login is the resolver for the login field.
+func (r *userResolver) Login(ctx context.Context, obj *corev1.User) (string, error) {
+	return obj.GetLogin(), nil
+}
+
+// DisplayName is the resolver for the displayName field.
+func (r *userResolver) DisplayName(ctx context.Context, obj *corev1.User) (string, error) {
+	return obj.GetDisplayName(), nil
+}
+
+// CreatedAt is the resolver for the createdAt field.
+func (r *userResolver) CreatedAt(ctx context.Context, obj *corev1.User) (*timestamppb.Timestamp, error) {
+	return obj.GetCreatedAt(), nil
+}
+
 // AvatarURL is the resolver for the avatarURL field.
 func (r *userResolver) AvatarURL(ctx context.Context, obj *corev1.User, width *int32, height *int32) (*string, error) {
 	var w, h *int

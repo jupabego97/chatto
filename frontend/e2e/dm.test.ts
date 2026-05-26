@@ -9,7 +9,6 @@ import {
 import { DMPage } from './pages/DMPage';
 import { RoomPage } from './pages/RoomPage';
 import { postMessageViaAPI } from './fixtures/graphqlHelpers';
-import { DM_SPACE_ID } from '../src/lib/constants';
 import * as routes from './routes';
 import { TIMEOUTS } from './constants';
 
@@ -192,7 +191,7 @@ test.describe('Direct Messages (room-shaped)', () => {
     browser,
     serverURL
   }) => {
-    const userA = await createAndLoginTestUser(page);
+    await createAndLoginTestUser(page);
 
     const ctxB = await browser.newContext({ baseURL: serverURL });
     const ctxC = await browser.newContext({ baseURL: serverURL });

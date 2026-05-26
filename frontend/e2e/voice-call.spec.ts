@@ -69,7 +69,7 @@ test.describe('Voice calls', () => {
 		await createAndLoginTestUser(page);
 		await chatPage.goto();
 		await chatPage.createSpace();
-		const spaceId = await chatPage.getSpaceId();
+		await chatPage.getSpaceId();
 		await chatPage.enterRoom('general');
 		const roomId = await getRoomIdByName(page, 'general');
 
@@ -96,7 +96,7 @@ test.describe('Voice calls', () => {
 		await createAndLoginTestUser(page);
 		await chatPage.goto();
 		await chatPage.createSpace();
-		const spaceId = await chatPage.getSpaceId();
+		await chatPage.getSpaceId();
 		await chatPage.enterRoom('general');
 		const roomId = await getRoomIdByName(page, 'general');
 
@@ -155,7 +155,7 @@ test.describe('Voice calls', () => {
 		await createAndLoginTestUser(page);
 		await chatPage.goto();
 		await chatPage.createSpace();
-		const spaceId = await chatPage.getSpaceId();
+		await chatPage.getSpaceId();
 
 		const data = await graphqlQuery<{ activeCallRoomIds: string[] }>(
 			page,
