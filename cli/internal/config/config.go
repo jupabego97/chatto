@@ -157,16 +157,31 @@ type AssetsConfig struct {
 	Cache          AssetsCacheConfig `toml:"cache" comment:"Caching configuration for resized images."`
 }
 
+// IdentityClaimsConfig contains the deterministic HMAC keyring used to derive
+// PII-free identity-claim aggregate IDs. New claims use ActiveKeyID; lookups
+// may check every configured key so old claims remain discoverable after
+// rotation.
+type IdentityClaimsConfig struct {
+	ActiveKeyID string                   `toml:"active_key_id" env:"CHATTO_CORE_IDENTITY_CLAIMS_ACTIVE_KEY_ID" comment:"Key ID used for newly created login/email/OIDC identity claim IDs."`
+	Keys        []IdentityClaimKeyConfig `toml:"keys" comment:"Versioned HMAC keys for identity claim IDs. Keep old keys configured until their claims have been rebuilt with a newer key."`
+}
+
+type IdentityClaimKeyConfig struct {
+	ID     string `toml:"id" comment:"Stable key identifier embedded into identity claim IDs, e.g. v1."`
+	Secret string `toml:"secret" comment:"Secret for HMAC-derived identity claim IDs. Losing old keys does not destroy user data, but old claim IDs must be rebuilt before they can be checked by value again."`
+}
+
 // CoreConfig contains settings for the Chatto core service.
 type CoreConfig struct {
-	SecretKey          string        `toml:"secret_key" env:"CHATTO_CORE_SECRET_KEY" comment:"Server-wide secret for deriving HMAC verifiers for bearer tokens and account-flow links. NEVER SHARE THIS!\nIf it changes, existing bearer tokens and pending registration, verification, password reset, account deletion, and OAuth authorization-code links become invalid."`
-	Assets             AssetsConfig  `toml:"assets"`
-	ESBootVerify       bool          `toml:"es_boot_verify,commented" env:"CHATTO_CORE_ES_BOOT_VERIFY" comment:"Log event-sourcing import/projection verification during boot. Intended for local rollout dry-runs; scans EVT and legacy stores."`
-	ESBootVerifyStrict bool          `toml:"es_boot_verify_strict,commented" env:"CHATTO_CORE_ES_BOOT_VERIFY_STRICT" comment:"Fail boot when event-sourcing import/projection verification reports problems. Intended for live cutover and rollout gates."`
-	AuthTokenTTL       time.Duration `toml:"-" env:"-"` // Set by caller from AuthConfig.TokenTTLOrDefault()
-	Replicas           int           `toml:"-" env:"-"` // Set by caller from NATSConfig.ReplicasOrDefault()
-	Limits             LimitsConfig  `toml:"-" env:"-"` // Set by caller from ChattoConfig.Limits
-	Owners             OwnersConfig  `toml:"-" env:"-"` // Set by caller from ChattoConfig.Owners — used by core to auto-promote on email verification
+	SecretKey          string               `toml:"secret_key" env:"CHATTO_CORE_SECRET_KEY" comment:"Server-wide secret for deriving HMAC verifiers for bearer tokens and account-flow links. NEVER SHARE THIS!\nIf it changes, existing bearer tokens and pending registration, verification, password reset, account deletion, and OAuth authorization-code links become invalid."`
+	Assets             AssetsConfig         `toml:"assets"`
+	IdentityClaims     IdentityClaimsConfig `toml:"identity_claims"`
+	ESBootVerify       bool                 `toml:"es_boot_verify,commented" env:"CHATTO_CORE_ES_BOOT_VERIFY" comment:"Log event-sourcing import/projection verification during boot. Intended for local rollout dry-runs; scans EVT and legacy stores."`
+	ESBootVerifyStrict bool                 `toml:"es_boot_verify_strict,commented" env:"CHATTO_CORE_ES_BOOT_VERIFY_STRICT" comment:"Fail boot when event-sourcing import/projection verification reports problems. Intended for live cutover and rollout gates."`
+	AuthTokenTTL       time.Duration        `toml:"-" env:"-"` // Set by caller from AuthConfig.TokenTTLOrDefault()
+	Replicas           int                  `toml:"-" env:"-"` // Set by caller from NATSConfig.ReplicasOrDefault()
+	Limits             LimitsConfig         `toml:"-" env:"-"` // Set by caller from ChattoConfig.Limits
+	Owners             OwnersConfig         `toml:"-" env:"-"` // Set by caller from ChattoConfig.Owners — used by core to auto-promote on email verification
 }
 
 // OIDCConfig contains settings for a generic OIDC provider (e.g. Chatto Hub via Zitadel).
@@ -477,6 +492,9 @@ func (c *ChattoConfig) Validate() error {
 	if c.Core.SecretKey == "" {
 		errs = append(errs, "core.secret_key is required")
 	}
+	if identityClaimsConfigured(c.Core.IdentityClaims) {
+		errs = append(errs, validateIdentityClaimsConfig(c.Core.IdentityClaims)...)
+	}
 
 	// Port ranges (port 0 is allowed when TLS is enabled, as it defaults to 443)
 	if c.Webserver.Port < 0 || c.Webserver.Port > 65535 {
@@ -613,6 +631,63 @@ func (c *ChattoConfig) Validate() error {
 		return fmt.Errorf("config validation failed:\n  - %s", strings.Join(errs, "\n  - "))
 	}
 	return nil
+}
+
+func identityClaimsConfigured(c IdentityClaimsConfig) bool {
+	return c.ActiveKeyID != "" || len(c.Keys) > 0
+}
+
+func validateIdentityClaimsConfig(c IdentityClaimsConfig) []string {
+	var errs []string
+	if c.ActiveKeyID == "" {
+		errs = append(errs, "core.identity_claims.active_key_id is required when identity claim keys are configured")
+	}
+	if len(c.Keys) == 0 {
+		errs = append(errs, "core.identity_claims.keys is required when identity claims are configured")
+	}
+
+	seen := make(map[string]bool, len(c.Keys))
+	activeFound := false
+	for i, key := range c.Keys {
+		path := fmt.Sprintf("core.identity_claims.keys[%d]", i)
+		if key.ID == "" {
+			errs = append(errs, path+".id is required")
+		} else {
+			if !validIdentityClaimKeyID(key.ID) {
+				errs = append(errs, path+".id must contain only letters, digits, underscores, or hyphens")
+			}
+			if seen[key.ID] {
+				errs = append(errs, "core.identity_claims.keys contains duplicate id "+key.ID)
+			}
+			seen[key.ID] = true
+			if key.ID == c.ActiveKeyID {
+				activeFound = true
+			}
+		}
+		if key.Secret == "" {
+			errs = append(errs, path+".secret is required")
+		}
+	}
+	if c.ActiveKeyID != "" && !validIdentityClaimKeyID(c.ActiveKeyID) {
+		errs = append(errs, "core.identity_claims.active_key_id must contain only letters, digits, underscores, or hyphens")
+	}
+	if c.ActiveKeyID != "" && len(c.Keys) > 0 && !activeFound {
+		errs = append(errs, "core.identity_claims.active_key_id must match a configured key id")
+	}
+	return errs
+}
+
+func validIdentityClaimKeyID(id string) bool {
+	if id == "" {
+		return false
+	}
+	for _, r := range id {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 // ReadConfig reads configuration from the specified file path (or "chatto.toml" if empty),

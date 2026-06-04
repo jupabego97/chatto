@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package chatto.core.v1;
+
+option go_package = "hmans.de/chatto/internal/pb/chatto/core/v1;corev1";
+
+// ============================================================================
+// IDENTITY CLAIM EVENTS (server-scoped)
+//
+// Top-level Event oneof tags owned by this file:
+//   - 200-209: durable identity-claim aggregate events on evt.identity_claim.{claimId}.*
+//
+// Identity claims reserve globally unique login/email/OIDC keys without storing
+// the raw value in EVT. claim_id is a stable HMAC token derived from the
+// normalized identity value.
+// ============================================================================
+
+enum IdentityClaimKind {
+  IDENTITY_CLAIM_KIND_UNSPECIFIED = 0;
+  IDENTITY_CLAIM_KIND_LOGIN = 1;
+  IDENTITY_CLAIM_KIND_EMAIL = 2;
+  IDENTITY_CLAIM_KIND_OIDC_SUBJECT = 3;
+}
+
+message IdentityClaimedEvent {
+  string claim_id = 1;
+  string owner_user_id = 2;
+  IdentityClaimKind kind = 3;
+}
+
+message IdentityClaimReleasedEvent {
+  string claim_id = 1;
+  string owner_user_id = 2;
+  IdentityClaimKind kind = 3;
+}

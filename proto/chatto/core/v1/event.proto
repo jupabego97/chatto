@@ -11,6 +11,7 @@ import "chatto/core/v1/reaction_events.proto";
 import "chatto/core/v1/room_events.proto";
 import "chatto/core/v1/room_group_events.proto";
 import "chatto/core/v1/config_events.proto";
+import "chatto/core/v1/identity_claim_events.proto";
 import "chatto/core/v1/user_events.proto";
 
 option go_package = "hmans.de/chatto/internal/pb/chatto/core/v1;corev1";
@@ -61,6 +62,10 @@ message Event {
     // Changing field numbers or message structure below affects stored
     // data. Message definitions live in the sibling *_events.proto files.
     // =================================================================
+
+    // ----- Identity claims (200-209, durable, evt.identity_claim.{claimId}) -----
+    IdentityClaimedEvent identity_claimed = 200;
+    IdentityClaimReleasedEvent identity_claim_released = 201;
 
     // ----- Room lifecycle (300-309) -----
     RoomCreatedEvent room_created = 300;
@@ -156,7 +161,7 @@ message Event {
     UserKeyShreddedEvent user_key_shredded = 712;
     UserDEKGeneratedEvent user_dek_generated = 713;
 
-    // ----- RBAC (800-839, durable, evt.rbac.>) -----
+    // ----- RBAC (800-899, durable, evt.rbac.>) -----
     RbacRoleCreatedEvent rbac_role_created = 800;
     RbacRoleDisplayNameChangedEvent rbac_role_display_name_changed = 801;
     RbacRoleDescriptionChangedEvent rbac_role_description_changed = 802;

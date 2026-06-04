@@ -318,6 +318,88 @@ func TestChattoConfig_Validate_RequiredSecrets(t *testing.T) {
 	}
 }
 
+func TestChattoConfig_Validate_IdentityClaimsKeyring(t *testing.T) {
+	base := ChattoConfig{
+		Webserver: WebserverConfig{Port: 4000, CookieSigningSecret: "web-secret"},
+		Core: CoreConfig{
+			SecretKey: "core-secret",
+			Assets:    AssetsConfig{SigningSecret: "asset-secret"},
+			IdentityClaims: IdentityClaimsConfig{
+				ActiveKeyID: "v1",
+				Keys: []IdentityClaimKeyConfig{{
+					ID:     "v1",
+					Secret: "identity-secret",
+				}},
+			},
+		},
+	}
+
+	tests := []struct {
+		name     string
+		modify   func(*ChattoConfig)
+		errorMsg string
+	}{
+		{
+			name:     "valid keyring",
+			modify:   func(*ChattoConfig) {},
+			errorMsg: "",
+		},
+		{
+			name: "missing active key",
+			modify: func(c *ChattoConfig) {
+				c.Core.IdentityClaims.ActiveKeyID = ""
+			},
+			errorMsg: "core.identity_claims.active_key_id is required",
+		},
+		{
+			name: "active key must exist",
+			modify: func(c *ChattoConfig) {
+				c.Core.IdentityClaims.ActiveKeyID = "v2"
+			},
+			errorMsg: "core.identity_claims.active_key_id must match a configured key id",
+		},
+		{
+			name: "key ID must be subject token safe",
+			modify: func(c *ChattoConfig) {
+				c.Core.IdentityClaims.Keys[0].ID = "v1.bad"
+			},
+			errorMsg: "core.identity_claims.keys[0].id must contain only letters, digits, underscores, or hyphens",
+		},
+		{
+			name: "key secret required",
+			modify: func(c *ChattoConfig) {
+				c.Core.IdentityClaims.Keys[0].Secret = ""
+			},
+			errorMsg: "core.identity_claims.keys[0].secret is required",
+		},
+		{
+			name: "duplicate key IDs rejected",
+			modify: func(c *ChattoConfig) {
+				c.Core.IdentityClaims.Keys = append(c.Core.IdentityClaims.Keys, IdentityClaimKeyConfig{ID: "v1", Secret: "other-secret"})
+			},
+			errorMsg: "core.identity_claims.keys contains duplicate id v1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := base
+			cfg.Core.IdentityClaims.Keys = append([]IdentityClaimKeyConfig(nil), base.Core.IdentityClaims.Keys...)
+			tt.modify(&cfg)
+			err := cfg.Validate()
+			if tt.errorMsg == "" {
+				if err != nil {
+					t.Fatalf("Validate() unexpected error = %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.errorMsg) {
+				t.Fatalf("Validate() error = %v, want to contain %q", err, tt.errorMsg)
+			}
+		})
+	}
+}
+
 func TestLimitsConfig_Defaults(t *testing.T) {
 	c := &LimitsConfig{}
 	if got := c.MaxUsersOrDefault(); got != -1 {

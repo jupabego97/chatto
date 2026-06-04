@@ -654,6 +654,22 @@ func TestSubjectHelpers(t *testing.T) {
 		}
 	})
 
+	t.Run("IdentityClaimAggregate", func(t *testing.T) {
+		got := IdentityClaimAggregate("login_abc123").Subject(EventIdentityClaimed)
+		want := "evt.identity_claim.login_abc123.claimed"
+		if got != want {
+			t.Errorf("IdentityClaimAggregate.Subject: got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("IdentityClaimSubjectFilter", func(t *testing.T) {
+		got := IdentityClaimSubjectFilter()
+		want := "evt.identity_claim.>"
+		if got != want {
+			t.Errorf("IdentityClaimSubjectFilter: got %q, want %q", got, want)
+		}
+	})
+
 	t.Run("ParseRoomSubject", func(t *testing.T) {
 		cases := []struct {
 			subject string
@@ -854,6 +870,32 @@ func TestEventTypeOf_MessageEvents(t *testing.T) {
 			},
 			want: EventBearerTokenRevoked,
 		},
+		{
+			name: "IdentityClaimed",
+			event: &corev1.Event{
+				Event: &corev1.Event_IdentityClaimed{
+					IdentityClaimed: &corev1.IdentityClaimedEvent{
+						ClaimId:     "login_hash",
+						OwnerUserId: "U1",
+						Kind:        corev1.IdentityClaimKind_IDENTITY_CLAIM_KIND_LOGIN,
+					},
+				},
+			},
+			want: EventIdentityClaimed,
+		},
+		{
+			name: "IdentityClaimReleased",
+			event: &corev1.Event{
+				Event: &corev1.Event_IdentityClaimReleased{
+					IdentityClaimReleased: &corev1.IdentityClaimReleasedEvent{
+						ClaimId:     "login_hash",
+						OwnerUserId: "U1",
+						Kind:        corev1.IdentityClaimKind_IDENTITY_CLAIM_KIND_LOGIN,
+					},
+				},
+			},
+			want: EventIdentityClaimReleased,
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -882,6 +924,9 @@ func TestEventTypeOf_MessageEvents(t *testing.T) {
 			}
 			if c.want == EventLoginFailed {
 				agg = AuthAggregate()
+			}
+			if c.want == EventIdentityClaimed || c.want == EventIdentityClaimReleased {
+				agg = IdentityClaimAggregate("login_hash")
 			}
 			subject := agg.SubjectFor(c.event)
 			wantSubject := agg.Subject(c.want)

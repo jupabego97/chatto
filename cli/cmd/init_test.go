@@ -36,4 +36,20 @@ func TestInitGeneratesCoreSecret(t *testing.T) {
 	if _, err := hex.DecodeString(cfg.Core.SecretKey); err != nil {
 		t.Fatalf("generated core secret should be hex: %v", err)
 	}
+	if cfg.Core.IdentityClaims.ActiveKeyID != "v1" {
+		t.Fatalf("generated identity claim active key = %q, want v1", cfg.Core.IdentityClaims.ActiveKeyID)
+	}
+	if len(cfg.Core.IdentityClaims.Keys) != 1 {
+		t.Fatalf("generated identity claim keys = %d, want 1", len(cfg.Core.IdentityClaims.Keys))
+	}
+	key := cfg.Core.IdentityClaims.Keys[0]
+	if key.ID != "v1" {
+		t.Fatalf("generated identity claim key ID = %q, want v1", key.ID)
+	}
+	if len(key.Secret) != 64 {
+		t.Fatalf("generated identity claim secret length = %d, want 64", len(key.Secret))
+	}
+	if _, err := hex.DecodeString(key.Secret); err != nil {
+		t.Fatalf("generated identity claim secret should be hex: %v", err)
+	}
 }

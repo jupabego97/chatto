@@ -21,13 +21,14 @@ const (
 
 // Aggregate type segments. Stable identifiers; once written, never renamed.
 const (
-	AggregateRoom   = "room"
-	AggregateConfig = "config"
-	AggregateGroup  = "group"
-	AggregateLayout = "layout"
-	AggregateUser   = "user"
-	AggregateRBAC   = "rbac"
-	AggregateAuth   = "auth"
+	AggregateRoom          = "room"
+	AggregateConfig        = "config"
+	AggregateGroup         = "group"
+	AggregateLayout        = "layout"
+	AggregateUser          = "user"
+	AggregateRBAC          = "rbac"
+	AggregateIdentityClaim = "identity_claim"
+	AggregateAuth          = "auth"
 )
 
 // ConfigSingletonID is the sentinel aggregate ID for server-wide config
@@ -143,6 +144,10 @@ const (
 	EventRBACPermissionGranted      = "permission_granted"
 	EventRBACPermissionDenied       = "permission_denied"
 	EventRBACPermissionCleared      = "permission_cleared"
+
+	// Identity claim aggregate
+	EventIdentityClaimed       = "claimed"
+	EventIdentityClaimReleased = "released"
 
 	// Auth/security audit
 	EventRegistrationLinkIssued            = "registration_link_issued"
@@ -311,6 +316,11 @@ func EventTypeOf(e *corev1.Event) string {
 	case *corev1.Event_RbacPermissionCleared:
 		return EventRBACPermissionCleared
 
+	case *corev1.Event_IdentityClaimed:
+		return EventIdentityClaimed
+	case *corev1.Event_IdentityClaimReleased:
+		return EventIdentityClaimReleased
+
 	case *corev1.Event_RegistrationLinkIssued:
 		return EventRegistrationLinkIssued
 	case *corev1.Event_EmailVerificationLinkIssued:
@@ -441,6 +451,12 @@ func RBACScopedAggregate(scopeID string) Aggregate {
 	return Aggregate{Type: AggregateRBAC, ID: scopeID}
 }
 
+// IdentityClaimAggregate is the typed constructor for global identity claims.
+// The aggregate ID is a stable, PII-free claim token such as login_<hash>.
+func IdentityClaimAggregate(claimID string) Aggregate {
+	return Aggregate{Type: AggregateIdentityClaim, ID: claimID}
+}
+
 // AuthAggregate is the typed constructor for server-wide auth audit facts.
 func AuthAggregate() Aggregate {
 	return Aggregate{Type: AggregateAuth, ID: AuthServerID}
@@ -475,6 +491,11 @@ func UserSubjectFilter() string { return SubjectRoot + AggregateUser + ".>" }
 // event.
 // Pattern: evt.rbac.>
 func RBACSubjectFilter() string { return SubjectRoot + AggregateRBAC + ".>" }
+
+// IdentityClaimSubjectFilter returns the wildcard filter matching every
+// identity claim aggregate event.
+// Pattern: evt.identity_claim.>
+func IdentityClaimSubjectFilter() string { return SubjectRoot + AggregateIdentityClaim + ".>" }
 
 // AuthSubjectFilter returns the wildcard filter matching server-wide auth
 // audit facts.

@@ -503,6 +503,19 @@ Notes: `INSTANCE` is legacy import-only. Current user/account/profile state is p
 
 These audit payloads include only safe request metadata: capped user agent and an HMAC-SHA256 IP hash when request metadata is available. Raw tokens, links, passwords, auth codes, raw IP addresses, and raw email/login identifiers are not persisted in EVT audit payloads.
 
+**EVT identity claim subjects:**
+
+| Subject                                            | Description |
+| -------------------------------------------------- | ----------- |
+| `evt.identity_claim.login_{keyId}_{hmac}.claimed`  | Login/username uniqueness claim acquired by a user. |
+| `evt.identity_claim.login_{keyId}_{hmac}.released` | Login/username uniqueness claim released by its owner. |
+| `evt.identity_claim.email_{keyId}_{hmac}.claimed`  | Verified-email uniqueness claim acquired by a user. |
+| `evt.identity_claim.email_{keyId}_{hmac}.released` | Verified-email uniqueness claim released by its owner. |
+| `evt.identity_claim.oidc_{keyId}_{hmac}.claimed`   | OIDC issuer/subject uniqueness claim acquired by a user. |
+| `evt.identity_claim.oidc_{keyId}_{hmac}.released`  | OIDC issuer/subject uniqueness claim released by its owner. |
+
+Notes: Identity claim aggregate IDs are deterministic, PII-free HMAC tokens derived from `[core.identity_claims]` keyring entries. The key ID is embedded in the subject so new claims can move to a rotated active key while old claims remain discoverable by checking all configured keys. The event payload records the `claim_id`, owning user ID, and claim kind; it does not store raw login, email, issuer, or OIDC subject values.
+
 **INSTANCE_CONFIG keys:**
 
 | Key               | Description                                                                  |

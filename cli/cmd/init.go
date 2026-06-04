@@ -60,6 +60,14 @@ var initCmd = &cobra.Command{
 		}
 		coreSecretString := hex.EncodeToString(coreSecret)
 
+		// Generate a random identity-claim HMAC key. This derives stable,
+		// PII-free EVT aggregate IDs for login/email/OIDC uniqueness claims.
+		identityClaimSecret := make([]byte, 32)
+		if _, err := rand.Read(identityClaimSecret); err != nil {
+			log.Fatal("Failed to generate identity claim secret", "error", err)
+		}
+		identityClaimSecretString := hex.EncodeToString(identityClaimSecret)
+
 		// Generate a random auth token for NATS connections (32 bytes = 256 bits)
 		authToken := make([]byte, 32)
 		if _, err := rand.Read(authToken); err != nil {
@@ -88,6 +96,13 @@ var initCmd = &cobra.Command{
 			},
 			Core: config.CoreConfig{
 				SecretKey: coreSecretString,
+				IdentityClaims: config.IdentityClaimsConfig{
+					ActiveKeyID: "v1",
+					Keys: []config.IdentityClaimKeyConfig{{
+						ID:     "v1",
+						Secret: identityClaimSecretString,
+					}},
+				},
 				Assets: config.AssetsConfig{
 					SigningSecret: signingSecretString,
 					MaxUploadSize: 25 * datasize.MB,
