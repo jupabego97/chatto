@@ -584,6 +584,120 @@ func TestProjector_WaitForSeq_ReturnsProjectionError(t *testing.T) {
 	}
 }
 
+func TestProjectionManager_GroupsProjectorsByCanonicalSubjects(t *testing.T) {
+	_, stream := setupTestStream(t)
+	p1 := NewProjector(nil, stream, newTrackingProjection("evt.room.*.user_left", "evt.room.*.user_joined"), testLogger())
+	p2 := NewProjector(nil, stream, newTrackingProjection("evt.room.*.user_joined", "evt.room.*.user_left", "evt.room.*.user_left"), testLogger())
+	p3 := NewProjector(nil, stream, newTrackingProjection(RoomSubjectFilter()), testLogger())
+
+	manager := NewProjectionManager(stream, []*Projector{p1, p2, p3}, testLogger())
+	groups := manager.groups()
+
+	if len(groups) != 2 {
+		t.Fatalf("group count = %d, want 2", len(groups))
+	}
+	for _, group := range groups {
+		if len(group.projectors) == 2 {
+			want := []string{"evt.room.*.user_joined", "evt.room.*.user_left"}
+			if len(group.subjects) != len(want) {
+				t.Fatalf("shared group subjects = %v, want %v", group.subjects, want)
+			}
+			for i := range want {
+				if group.subjects[i] != want[i] {
+					t.Fatalf("shared group subjects = %v, want %v", group.subjects, want)
+				}
+			}
+			return
+		}
+	}
+	t.Fatal("no group contained the two equivalent subject-filter projectors")
+}
+
+func TestProjectionManager_SharedGroupAppliesToAllProjectors(t *testing.T) {
+	js, stream := setupTestStream(t)
+	pub := NewPublisher(js, stream, testLogger())
+
+	projA := newTrackingProjection(RoomSubjectFilter())
+	projB := newTrackingProjection(RoomSubjectFilter())
+	projectorA := NewProjector(js, stream, projA, testLogger())
+	projectorB := NewProjector(js, stream, projB, testLogger())
+	manager := NewProjectionManager(stream, []*Projector{projectorA, projectorB}, testLogger())
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	t.Cleanup(cancelRun)
+	go func() { _ = manager.Run(runCtx) }()
+
+	ctx := testContext(t)
+	seq, err := pub.Append(ctx, RoomAggregate("R1").Subject(EventUserJoinedRoom), makeEvent("R1", "U1"))
+	if err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	for name, projector := range map[string]*Projector{"A": projectorA, "B": projectorB} {
+		deadline, cancel := context.WithTimeout(ctx, 2*time.Second)
+		if err := projector.WaitForSeq(deadline, seq); err != nil {
+			cancel()
+			t.Fatalf("projector %s WaitForSeq: %v", name, err)
+		}
+		cancel()
+	}
+	if got := projA.Count(); got != 1 {
+		t.Fatalf("projection A count = %d, want 1", got)
+	}
+	if got := projB.Count(); got != 1 {
+		t.Fatalf("projection B count = %d, want 1", got)
+	}
+}
+
+func TestProjectionManager_IsolatesProjectionFailureWithinSharedGroup(t *testing.T) {
+	js, stream := setupTestStream(t)
+	pub := NewPublisher(js, stream, testLogger())
+	applyErr := errors.New("apply failed")
+
+	failing := &failingProjection{
+		trackingProjection: newTrackingProjection(RoomSubjectFilter()),
+		err:                applyErr,
+	}
+	healthy := newTrackingProjection(RoomSubjectFilter())
+	failingProjector := NewProjector(js, stream, failing, testLogger())
+	healthyProjector := NewProjector(js, stream, healthy, testLogger())
+	manager := NewProjectionManager(stream, []*Projector{failingProjector, healthyProjector}, testLogger())
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	t.Cleanup(cancelRun)
+	go func() { _ = manager.Run(runCtx) }()
+
+	ctx := testContext(t)
+	seq1, err := pub.Append(ctx, RoomAggregate("R1").Subject(EventUserJoinedRoom), makeEvent("R1", "U1"))
+	if err != nil {
+		t.Fatalf("first Append: %v", err)
+	}
+	if err := healthyProjector.WaitForSeq(ctx, seq1); err != nil {
+		t.Fatalf("healthy WaitForSeq first event: %v", err)
+	}
+	err = failingProjector.WaitForSeq(ctx, seq1)
+	if !errors.Is(err, ErrProjectionFailed) {
+		t.Fatalf("failing WaitForSeq want ErrProjectionFailed, got %v", err)
+	}
+	if !errors.Is(err, applyErr) {
+		t.Fatalf("failing WaitForSeq want wrapped apply error, got %v", err)
+	}
+
+	seq2, err := pub.Append(ctx, RoomAggregate("R1").Subject(EventUserJoinedRoom), makeEvent("R1", "U2"))
+	if err != nil {
+		t.Fatalf("second Append: %v", err)
+	}
+	if err := healthyProjector.WaitForSeq(ctx, seq2); err != nil {
+		t.Fatalf("healthy WaitForSeq second event: %v", err)
+	}
+	if got := healthy.Count(); got != 2 {
+		t.Fatalf("healthy projection count = %d, want 2", got)
+	}
+	if got := failingProjector.LastSeq(); got >= seq1 {
+		t.Fatalf("failing LastSeq = %d, want less than failed seq %d", got, seq1)
+	}
+}
+
 // ============================================================================
 // Subject helpers
 // ============================================================================

@@ -87,7 +87,7 @@ type ChattoCore struct {
 	// user-facing resolver. Inspectable via an admin endpoint.
 	RoomMembership *RoomMembershipProjection
 
-	// RoomMembershipProjector runs the consumer + apply loop that keeps
+	// RoomMembershipProjector is the lifecycle/wait handle that keeps
 	// RoomMembership current. Started by (*ChattoCore).Run; exposed here
 	// so writers can call WaitForSeq for read-your-writes.
 	RoomMembershipProjector *events.Projector
@@ -98,7 +98,7 @@ type ChattoCore struct {
 	// than the old server-config snapshot.
 	ServerConfig *ConfigProjection
 
-	// ServerConfigProjector runs the consumer + apply loop that keeps
+	// ServerConfigProjector is the lifecycle/wait handle that keeps
 	// ServerConfig current. Started by (*ChattoCore).Run; exposed here
 	// so writers (ConfigManager mutations) can call WaitForSeq.
 	ServerConfigProjector *events.Projector
@@ -108,7 +108,7 @@ type ChattoCore struct {
 	// Coexists with RoomMembership on the same subject family.
 	RoomCatalog *RoomCatalogProjection
 
-	// RoomCatalogProjector runs the consumer for RoomCatalog. Exposed
+	// RoomCatalogProjector is the lifecycle/wait handle for RoomCatalog. Exposed
 	// for WaitForSeq from room-metadata writers.
 	RoomCatalogProjector *events.Projector
 
@@ -116,7 +116,7 @@ type ChattoCore struct {
 	// ordered room membership, derived from evt.group.>.
 	RoomGroups *RoomGroupProjection
 
-	// RoomGroupsProjector runs the consumer for RoomGroups. Exposed
+	// RoomGroupsProjector is the lifecycle/wait handle for RoomGroups. Exposed
 	// for WaitForSeq from group writers.
 	RoomGroupsProjector *events.Projector
 
@@ -124,7 +124,7 @@ type ChattoCore struct {
 	// the sidebar, derived from evt.layout.> events.
 	RoomLayout *RoomLayoutProjection
 
-	// RoomLayoutProjector runs the consumer for RoomLayout. Exposed
+	// RoomLayoutProjector is the lifecycle/wait handle for RoomLayout. Exposed
 	// for WaitForSeq from layout writers.
 	RoomLayoutProjector *events.Projector
 
@@ -133,7 +133,7 @@ type ChattoCore struct {
 	// truth for room timeline reads post-cutover.
 	RoomTimeline *RoomTimelineProjection
 
-	// RoomTimelineProjector runs the consumer for RoomTimeline.
+	// RoomTimelineProjector is the lifecycle/wait handle for RoomTimeline.
 	// Exposed for WaitForSeq from message writers.
 	RoomTimelineProjector *events.Projector
 
@@ -142,7 +142,7 @@ type ChattoCore struct {
 	// for thread-pane reads post-cutover.
 	Threads *ThreadProjection
 
-	// ThreadsProjector runs the consumer for Threads. Exposed for
+	// ThreadsProjector is the lifecycle/wait handle for Threads. Exposed for
 	// WaitForSeq from message writers that touch threads.
 	ThreadsProjector *events.Projector
 
@@ -150,7 +150,7 @@ type ChattoCore struct {
 	// from durable room-aggregate reaction events.
 	Reactions *ReactionProjection
 
-	// ReactionsProjector runs the consumer for Reactions. Exposed
+	// ReactionsProjector is the lifecycle/wait handle for Reactions. Exposed
 	// for WaitForSeq from reaction writers.
 	ReactionsProjector *events.Projector
 
@@ -158,7 +158,7 @@ type ChattoCore struct {
 	// from durable user-aggregate events.
 	Users *UserProjection
 
-	// UsersProjector runs the consumer for Users. Exposed for
+	// UsersProjector is the lifecycle/wait handle for Users. Exposed for
 	// WaitForSeq from user/account writers.
 	UsersProjector *events.Projector
 
@@ -166,7 +166,7 @@ type ChattoCore struct {
 	// message bodies and durable user PII.
 	ContentKeys *ContentKeyProjection
 
-	// ContentKeysProjector runs the consumer for ContentKeys. Exposed for
+	// ContentKeysProjector is the lifecycle/wait handle for ContentKeys. Exposed for
 	// WaitForSeq from encryption writers.
 	ContentKeysProjector *events.Projector
 
@@ -174,16 +174,20 @@ type ChattoCore struct {
 	// from durable RBAC aggregate events.
 	RBAC *RBACProjection
 
-	// RBACProjector runs the consumer for RBAC. Exposed for WaitForSeq
+	// RBACProjector is the lifecycle/wait handle for RBAC. Exposed for WaitForSeq
 	// from role and permission writers.
 	RBACProjector *events.Projector
 
 	// projectors is the set of all event-sourcing projectors owned by
 	// this core. Each new aggregate migration (ADR-035) appends here
-	// during NewChattoCore; Run iterates the slice. Adding a projector
-	// is one line at construction and zero changes at call sites — see
-	// (*ChattoCore).Run.
+	// during NewChattoCore. Adding a projector is one line at construction
+	// and zero changes at call sites — see (*ChattoCore).Run.
 	projectors []*events.Projector
+
+	// projectionManager owns the shared ordered consumers for projectors.
+	// Projectors keep per-projection lag/readiness/failure state while
+	// the manager groups identical subject filters onto one consumer.
+	projectionManager *events.ProjectionManager
 
 	// bootDone is closed by Run once all projectors are started AND
 	// boot-time mutations (ensureChannelRoomsAreInAGroup) have
@@ -194,7 +198,7 @@ type ChattoCore struct {
 }
 
 // Run starts every background service owned by the core — currently
-// PresenceHub and every registered projector — and blocks until ctx is
+// PresenceHub and the shared projection manager — and blocks until ctx is
 // cancelled or any service returns an error. Returns the first error
 // observed (or ctx.Err on shutdown).
 //
@@ -203,16 +207,14 @@ type ChattoCore struct {
 // cancels. Background services are not designed to be restarted.
 //
 // New projectors should be appended to c.projectors during NewChattoCore;
-// they are then started automatically here without any additional wiring.
+// the projection manager then starts them automatically here without any
+// additional wiring.
 func (c *ChattoCore) Run(ctx context.Context) error {
 	g, gctx := errgroup.WithContext(ctx)
 
-	for _, p := range c.projectors {
-		p := p
-		g.Go(func() error { return p.Run(gctx) })
-	}
+	g.Go(func() error { return c.projectionManager.Run(gctx) })
 
-	// Block until every projector has entered Run before issuing
+	// Block until every projector has entered its runtime lifecycle before issuing
 	// projection-backed mutations during boot. Without this,
 	// ensureChannelRoomsAreInAGroup's reads against an empty
 	// projection would silently skip the WaitForSeq path and leave
@@ -666,13 +668,13 @@ func NewChattoCore(ctx context.Context, nc *nats.Conn, cfg config.CoreConfig) (*
 	// Build the event-sourcing primitives before any aggregate-specific
 	// wiring so projections and managers that need them can be passed the
 	// concrete deps at construction. Order: publisher → projections →
-	// projectors → managers that depend on them.
+	// projectors → manager that depends on them.
 	eventPublisher := events.NewPublisher(js, storage.serverEvtStream, logger)
 
 	// newProjector wraps the (projection, logger-prefix) → Projector
 	// construction so the per-aggregate wiring below stays one line per
 	// projection. Each projector also gets appended to the slice that
-	// (*ChattoCore).Run iterates.
+	// the shared projection manager runs.
 	var projectors []*events.Projector
 	newProjector := func(p events.Projection, name string) *events.Projector {
 		pr := events.NewProjector(js, storage.serverEvtStream, p, logger.WithPrefix("core."+name))
@@ -716,6 +718,11 @@ func NewChattoCore(ctx context.Context, nc *nats.Conn, cfg config.CoreConfig) (*
 
 	rbac := NewRBACProjection()
 	rbacProjector := newProjector(rbac, "RBACProjector")
+	projectionManager := events.NewProjectionManager(
+		storage.serverEvtStream,
+		projectors,
+		logger.WithPrefix("core.ProjectionManager"),
+	)
 
 	configService := NewConfigService(eventPublisher, serverConfigProjector, serverConfigProjection)
 	configMgr := NewConfigManager(configService, serverConfigProjection)
@@ -753,6 +760,7 @@ func NewChattoCore(ctx context.Context, nc *nats.Conn, cfg config.CoreConfig) (*
 		RBAC:                    rbac,
 		RBACProjector:           rbacProjector,
 		projectors:              projectors,
+		projectionManager:       projectionManager,
 		bootDone:                make(chan struct{}),
 	}
 

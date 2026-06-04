@@ -16,9 +16,8 @@ import (
 //
 // The projection coexists with RoomMembershipProjection on the same
 // subject family (evt.room.>); each ignores the other's event
-// variants per the Projection.Apply forward-compat rule. This is the
-// first concrete pair of projections on a shared filter — see the
-// "single consumer per filter" out-of-scope note in ADR-033.
+// variants per the Projection.Apply forward-compat rule. Projectors
+// with identical subject filters share one ordered consumer per ADR-038.
 type RoomCatalogProjection struct {
 	events.MemoryProjection
 	rooms map[string]*roomCatalogEntry

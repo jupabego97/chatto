@@ -361,6 +361,8 @@ User-facing live delivery is built from two internal NATS Core subject roots:
 
 The `myEvents` GraphQL subscription is backed by one core stream (`StreamMyEvents`) that subscribes to `live.sync.>` and `live.evt.>`. For deliverable raw EVT room messages, it reads the republished `Nats-Sequence` header, waits for the local projections needed by authorization and follow-up resolvers, filters by the subscribing user, and then emits the GraphQL event. Transient `LiveEvent` messages are adapted at this API boundary into the public GraphQL event shape. There is no per-connection JetStream consumer.
 
+Projection consumers are process-local and managed as shared filter groups ([ADR-038](adr/ADR-038-shared-projection-consumers.md)). Each projection keeps its own `Projector` handle for `WaitForSeq`, lag, readiness, and failure state, while the projection manager starts one ordered JetStream consumer for each canonical subject-filter set. If one projection fails to apply an event, that projection is marked failed and its waiters receive `ErrProjectionFailed`; healthy projections in the same consumer group continue advancing.
+
 ### Event Streams
 
 | Stream                       | Wrapper          | Scope      | Description                                      |
@@ -397,13 +399,13 @@ Filtering examples:
 
 Note: Event type (created, joined, etc.) is determined by the event payload, not the subject. Actor/user information is also in payloads, not subjects (optimized for low subject cardinality).
 
-**User Personal Streams** (transient):
+**User-scoped live sync subjects** (transient):
 
-- Subject: `user.{userId}.event`
-- Published via NATS Core (not JetStream) - transient, not persisted
-- Receives events relevant to the user (space joins/leaves, room joins/leaves)
-- Powers real-time notifications and user-centric subscriptions
-- Events are dual-published: to primary stream (audit trail) and user stream (notifications)
+- Pattern: `live.sync.user.{userId}.{eventType}`
+- Published via NATS Core as `corev1.LiveEvent` messages (not JetStream) - transient, not persisted
+- Delivers user-targeted sync such as mention notifications, DM notifications, notification changes, preferences, read state, session termination, and account lifecycle invalidation
+- `profile_updated` is the exception to strict user targeting: it is broadcast so other users can refresh member lists, message authors, and mention autocomplete
+- Durable facts are not dual-published to this subject family. Event-sourced facts land in `EVT` and reach live delivery through `live.evt.>`; user-scoped sync subjects are for non-durable UI invalidation and notifications
 
 **Live Subject Space**:
 
@@ -414,7 +416,7 @@ Patterns: `live.sync.>` for transient `LiveEvent` pubsub and `live.evt.>` for ra
 
 `SERVER_EVENTS` no longer has a `RePublish` live path and runtime code no longer writes legacy `server.>` mirrors. Remaining use is boot-import/read-only inspection of pre-ES data.
 
-**Transient live sync events** (`live.sync.{user,config,room}.>`):
+**Transient live sync events** (`live.sync.{user,config,member,room}.>`):
 
 | Subject                                                  | Description                  |
 | -------------------------------------------------------- | ---------------------------- |
@@ -766,7 +768,7 @@ Messages are persisted as durable `EVT` facts with encrypted message bodies embe
 **@Mentions:**
 
 - `@username` patterns in message body are extracted via regex (ASCII alphanumeric, underscore, hyphen)
-- Usernames are resolved to user IDs; only space members are included (non-members silently ignored)
+- Usernames are resolved to user IDs; only server members are included (non-members silently ignored)
 - `MessagePostedEvent.mentioned_user_ids` contains resolved user IDs
 - Pending mention state is a notification record in `RUNTIME_STATE` (`notification.{userId}.{notificationId}`); sidebar orange dots derive from pending notifications, not a separate mention flag.
 - Live notification published to `live.sync.user.{userId}.mentioned` for toast display

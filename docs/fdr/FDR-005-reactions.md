@@ -47,5 +47,5 @@ Users can react to a message with emoji. Reactions are aggregated into pills sho
 
 ## Related
 
-- **ADRs:** ADR-026 (event identity via NanoID), ADR-033 (event-sourced state with projections), ADR-034 (single event stream), ADR-035 (per-aggregate migration)
+- **ADRs:** ADR-026 (event identity via NanoID), ADR-033 (event-sourced state with projections), ADR-034 (single event stream), ADR-035 (per-aggregate migration), ADR-038 (shared projection consumers)
 - **FDRs:** FDR-003 (Thread Reply Echo)

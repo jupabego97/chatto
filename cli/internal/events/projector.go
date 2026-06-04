@@ -43,11 +43,11 @@ func (*MemoryProjection) Restore(_ []byte) error { return nil }
 // Projection is the read side. Implementations are in-memory Go data
 // structures that consume events from a subject filter and serve reads.
 //
-// Concurrency contract: Apply is called from a single goroutine owned by
-// the Projector, in stream order. Implementations don't need internal
-// locking on the write path. They DO need a read lock if external code
-// (e.g. GraphQL resolvers) reads concurrently — projections typically
-// embed a sync.RWMutex for this.
+// Concurrency contract: Apply is called serially by the projector runtime,
+// in stream order for the projection's consumer group. Implementations don't
+// need internal locking on the write path. They DO need a read lock if
+// external code (e.g. GraphQL resolvers) reads concurrently — projections
+// typically embed a sync.RWMutex for this.
 //
 // Idempotency: Apply(e, n) followed by Apply(e, n) must produce the same
 // state as a single Apply(e, n). Snapshots aren't implemented yet, but the
@@ -73,7 +73,11 @@ type Projection interface {
 	Restore(snapshot []byte) error
 }
 
-// Projector runs the consumer + apply loop for one projection.
+// Projector is the per-projection lifecycle and wait handle.
+//
+// A Projector may run by itself via Run, but ChattoCore normally runs
+// projectors through ProjectionManager so projectors with identical
+// subject filters can share one ordered consumer.
 type Projector struct {
 	js     jetstream.JetStream
 	stream jetstream.Stream
@@ -99,7 +103,7 @@ type seqWaiter struct {
 }
 
 // NewProjector binds a projection to a stream. Does not start the consumer
-// — call Run for that.
+// — call Run, or register the projector with a ProjectionManager.
 func NewProjector(js jetstream.JetStream, stream jetstream.Stream, proj Projection, logger Logger) *Projector {
 	return &Projector{
 		js:     js,
@@ -117,9 +121,10 @@ func (p *Projector) LastSeq() uint64 {
 	return p.lastSeq
 }
 
-// Started reports whether Run has entered its body — i.e. whether
-// the projector's consumer is being set up / has been set up. Used by
-// test helpers (and lifecycle code) that need to wait for projectors
+// Started reports whether the projector has entered its runtime lifecycle.
+// When run through ProjectionManager, this means its projection has been
+// restored and its shared consumer group is being set up / has been set up.
+// Used by test helpers and lifecycle code that need to wait for projectors
 // to come online before issuing reads against the projection.
 func (p *Projector) Started() bool {
 	p.mu.Lock()
@@ -180,11 +185,11 @@ func (p *Projector) AppendEventuallyAndWait(ctx context.Context, pub *Publisher,
 // If LastSeq() is already >= seq when called, returns immediately with no
 // error. Otherwise registers a waiter and blocks.
 //
-// Precondition: the projector's Run loop is expected to be active by
-// the time any code reaches WaitForSeq. Callers that mutate during
-// boot (ensureChannelRoomsAreInAGroup, SeedDefaultRooms) are
-// orchestrated by core.Run / core.WaitForBoot to make this true.
-// Calling before Run started would block forever waiting for a
+// Precondition: the projector runtime is expected to be active by the
+// time any code reaches WaitForSeq. Callers that mutate during boot
+// (ensureChannelRoomsAreInAGroup, SeedDefaultRooms) are orchestrated by
+// core.Run / core.WaitForBoot to make this true. Calling before the
+// runtime started would block forever waiting for a
 // sequence that never advances — that's the symptom we want, since
 // the alternative (silently skipping the wait) leaves the projection
 // out of sync with the KV write and produces orphan-room bugs.
@@ -270,7 +275,7 @@ func (p *Projector) CurrentTargetSeq(ctx context.Context) (uint64, error) {
 }
 
 // advance updates lastSeq and releases any waiters that have now been
-// reached. Called from the consumer goroutine after each successful Apply.
+// reached. Called from the consumer callback after each successful Apply.
 func (p *Projector) advance(seq uint64) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -304,18 +309,60 @@ func (p *Projector) fail(seq uint64, err error) {
 	p.waiters = nil
 }
 
-// Run starts the consumer + apply loop. Blocks until ctx is cancelled.
-// Returns the context's error on shutdown.
-//
-// Snapshot orchestration is deferred (ADR-033). For now, Restore is always
-// called with nil and the loop replays from the beginning of the stream.
-func (p *Projector) Run(ctx context.Context) error {
+func (p *Projector) start() error {
 	p.mu.Lock()
 	p.started = true
 	p.mu.Unlock()
 
 	if err := p.proj.Restore(nil); err != nil {
 		return fmt.Errorf("restore projection: %w", err)
+	}
+	return nil
+}
+
+func (p *Projector) failed() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.failedErr != nil
+}
+
+func (p *Projector) advanceIfHealthy(seq uint64) {
+	if p.failed() {
+		return
+	}
+	p.advance(seq)
+}
+
+func (p *Projector) applyEvent(event *corev1.Event, seq uint64, subject string) {
+	if p.failed() {
+		return
+	}
+
+	if err := p.proj.Apply(event, seq); err != nil {
+		eventID := ""
+		if event != nil {
+			eventID = event.GetId()
+		}
+		p.logger.Error("Projection Apply failed",
+			"subject", subject,
+			"seq", seq,
+			"event_id", eventID,
+			"error", err)
+		p.fail(seq, err)
+		return
+	}
+
+	p.advance(seq)
+}
+
+// Run starts the consumer + apply loop. Blocks until ctx is cancelled.
+// Returns the context's error on shutdown.
+//
+// Snapshot orchestration is deferred (ADR-033). For now, Restore is always
+// called with nil and the loop replays from the beginning of the stream.
+func (p *Projector) Run(ctx context.Context) error {
+	if err := p.start(); err != nil {
+		return err
 	}
 
 	cons, err := p.stream.OrderedConsumer(ctx, jetstream.OrderedConsumerConfig{
@@ -374,21 +421,11 @@ func (p *Projector) handleMessage(msg jetstream.Msg) {
 			"subject", msg.Subject(),
 			"seq", meta.Sequence.Stream,
 			"error", err)
-		p.advance(meta.Sequence.Stream)
+		p.advanceIfHealthy(meta.Sequence.Stream)
 		return
 	}
 
-	if err := p.proj.Apply(&event, meta.Sequence.Stream); err != nil {
-		p.logger.Error("Projection Apply failed",
-			"subject", msg.Subject(),
-			"seq", meta.Sequence.Stream,
-			"event_id", event.GetId(),
-			"error", err)
-		p.fail(meta.Sequence.Stream, err)
-		return
-	}
-
-	p.advance(meta.Sequence.Stream)
+	p.applyEvent(&event, meta.Sequence.Stream, msg.Subject())
 }
 
 // handleConsumeErr is invoked by the SDK when the OrderedConsumer's

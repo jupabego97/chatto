@@ -45,3 +45,4 @@ For more about ADRs, see [Michael Nygard's article](https://cognitect.com/blog/2
 | [ADR-035](ADR-035-per-aggregate-phased-migration.md) | Per-Aggregate Phased Migration to Event Sourcing | 2026-05-24 |
 | [ADR-036](ADR-036-runtime-state-kv-boundary.md) | Persist Runtime State in RUNTIME_STATE | 2026-05-27 |
 | [ADR-037](ADR-037-dm-access-via-membership.md) | DM Access via Membership, Not a Read Permission | 2026-05-31 |
+| [ADR-038](ADR-038-shared-projection-consumers.md) | Shared Projection Consumers with Projection-Scoped Failure Isolation | 2026-06-04 |
