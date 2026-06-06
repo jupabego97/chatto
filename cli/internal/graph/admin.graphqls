@@ -272,10 +272,8 @@ extend type AdminQueries {
   projections: [ProjectionState!]! @goField(forceResolver: true)
 }
 
-"Admin mutations for configuration management."
+"Admin mutations for user management."
 type AdminMutations {
-  "Update server configuration. Returns the updated config section."
-  updateServerConfig(input: UpdateServerConfigInput!): AdminServerConfig! @goField(forceResolver: true)
   "Update a user's login and/or display name. Bypasses the 30-day login change cooldown but otherwise reuses the same validation as updateProfile."
   updateUser(input: AdminUpdateUserInput!): User! @goField(forceResolver: true)
   "Clear the 30-day login change cooldown for a user, allowing them to immediately rename themselves. Idempotent."
@@ -299,6 +297,9 @@ input AdminUpdateUserInput {
 }
 
 extend type Mutation {
+  "Update runtime-editable server configuration. Requires `server.manage`."
+  updateServerConfig(input: UpdateServerConfigInput!): AdminServerConfig! @goField(forceResolver: true)
+
   "Admin mutations. Returns null if user lacks admin permission."
   admin: AdminMutations @goField(forceResolver: true)
 }

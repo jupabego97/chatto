@@ -22,7 +22,7 @@ Operators can customize how their Chatto server presents itself. The server's na
 
 ### 1. One config surface, with nil-preserve semantics
 
-**Decision:** `updateServer` accepts every config field as nullable. A nil input for a field leaves the existing value untouched; only fields the caller explicitly sets get changed.
+**Decision:** `updateServerConfig` accepts every text/config field as nullable. A nil input for a field leaves the existing value untouched; only fields the caller explicitly sets get changed.
 **Why:** Partial-update semantics let UI forms send only changed fields without GET-then-PUT round-trips and without overwriting other fields with whatever defaults the form thinks they should be. It also makes API clients (CLI tools, scripts) safer.
 **Tradeoff:** Two ways to "clear" a string field: empty-string vs unset. The API treats empty string as a clear and nil as "leave alone". Documented; consistent across all string fields.
 
@@ -34,8 +34,8 @@ Operators can customize how their Chatto server presents itself. The server's na
 
 ### 3. Logo and banner have their own upload mutations
 
-**Decision:** `uploadServerLogo` and `uploadServerBanner` are separate from `updateServer`. They accept multipart uploads, process the image, store the binary in the asset store, and update the server's logo or banner pointer through the same event-sourced configuration flow as the rest of the server config.
-**Why:** Image upload is a different shape from string config — multipart bodies, content-type validation, asset storage. Keeping it in its own mutations means `updateServer` stays simple, while storing the current pointer in configuration events keeps branding restorable from the event log instead of depending on legacy KV state.
+**Decision:** `uploadServerLogo` and `uploadServerBanner` are separate from `updateServerConfig`. They accept multipart uploads, process the image, store the binary in the asset store, and update the server's logo or banner pointer through the same event-sourced configuration flow as the rest of the server config.
+**Why:** Image upload is a different shape from string config — multipart bodies, content-type validation, asset storage. Keeping it in its own mutations means `updateServerConfig` stays simple, while storing the current pointer in configuration events keeps branding restorable from the event log instead of depending on legacy KV state.
 **Tradeoff:** The admin UI needs separate forms / flows for branding text vs branding images. In practice the UX is clearer this way (the image upload is its own focused interaction).
 
 ### 4. Branding asset bytes stay outside EVT
@@ -70,7 +70,7 @@ Operators can customize how their Chatto server presents itself. The server's na
 
 ## Permissions
 
-- `server.manage` — gates every server-config mutation (`updateServer`, `uploadServerLogo`, `uploadServerBanner`).
+- `server.manage` — gates every server-config mutation (`updateServerConfig`, `uploadServerLogo`, `uploadServerBanner`, `deleteServerLogo`, `deleteServerBanner`).
 
 ## Related
 

@@ -137,7 +137,7 @@ Admin queries are nested under a single `admin: AdminQueries` field that returns
 
 | Mutation                | Description                                                |
 | ----------------------- | ---------------------------------------------------------- |
-| `updateServer`          | Update server name / description.                          |
+| `updateServerConfig`    | Update runtime-editable server text/configuration fields.  |
 | `uploadServerLogo`      | Upload server logo.                                        |
 | `deleteServerLogo`      | Delete server logo.                                        |
 | `uploadServerBanner`    | Upload server banner.                                      |
@@ -244,7 +244,6 @@ There is no `adminAuditLogEvents` subscription — audit events arrive through `
 | `admin.serverPermissions`                        | Query     | List every available server permission identifier (catalog).                                 |
 | `admin.groupRolePermissions(groupId, roleName)`  | Query     | Explicit grants and denials for a role on a specific room group.                             |
 | `admin.groupUserPermissions(groupId, userId)`    | Query     | Explicit grants and denials for a user on a specific room group.                             |
-| `admin.updateServerConfig(input)`                | Mutation  | Update server configuration.                                                                 |
 | `admin.resetServerConfig`                        | Mutation  | Reset server configuration to defaults.                                                      |
 | `admin.updateUser(input)`                        | Mutation  | Update a user's login / display name (bypasses the 30-day cooldown).                         |
 | `admin.clearUsernameCooldown(userId)`            | Mutation  | Manually clear a user's login change cooldown.                                               |

@@ -53,31 +53,23 @@ export type AddReactionInput = {
   roomId: Scalars['ID']['input'];
 };
 
-/** Admin mutations for configuration management. */
+/** Admin mutations for user management. */
 export type AdminMutations = {
   __typename?: 'AdminMutations';
   /** Clear the 30-day login change cooldown for a user, allowing them to immediately rename themselves. Idempotent. */
   clearUsernameCooldown: Scalars['Boolean']['output'];
-  /** Update server configuration. Returns the updated config section. */
-  updateServerConfig: AdminServerConfig;
   /** Update a user's login and/or display name. Bypasses the 30-day login change cooldown but otherwise reuses the same validation as updateProfile. */
   updateUser: User;
 };
 
 
-/** Admin mutations for configuration management. */
+/** Admin mutations for user management. */
 export type AdminMutationsClearUsernameCooldownArgs = {
   input: ClearUsernameCooldownInput;
 };
 
 
-/** Admin mutations for configuration management. */
-export type AdminMutationsUpdateServerConfigArgs = {
-  input: UpdateServerConfigInput;
-};
-
-
-/** Admin mutations for configuration management. */
+/** Admin mutations for user management. */
 export type AdminMutationsUpdateUserArgs = {
   input: AdminUpdateUserInput;
 };
@@ -1282,8 +1274,8 @@ export type Mutation = {
   updateRoom: Room;
   /** Update a room group's name/description. Requires `role.manage`. */
   updateRoomGroup: RoomGroup;
-  /** Update the server's name. Requires server.manage permission. */
-  updateServer: Server;
+  /** Update runtime-editable server configuration. Requires `server.manage`. */
+  updateServerConfig: AdminServerConfig;
   /**
    * Update a user's display settings. Authorization: caller is self, OR
    * caller holds `role.assign` AND either is an owner or outranks the
@@ -1629,8 +1621,8 @@ export type MutationUpdateRoomGroupArgs = {
 
 
 /** Root mutation type for modifying data. */
-export type MutationUpdateServerArgs = {
-  input: UpdateServerInput;
+export type MutationUpdateServerConfigArgs = {
+  input: UpdateServerConfigInput;
 };
 
 
@@ -2365,15 +2357,17 @@ export type Room = {
   /** Fetch a single event in this room by event ID. Returns null if not found. */
   event?: Maybe<Event>;
   /**
-   * Fetch historical events for this room (default limit: 50). Use the
-   * opaque `before` cursor for backward pagination and `after` for forward
-   * pagination — pass the `startCursor` / `endCursor` from a previous
-   * `RoomEventsConnection` response. Cursors are opaque strings; clients
-   * must not attempt to parse them.
+   * Fetch historical events for this room (default limit: 50, max: 500;
+   * larger values are silently clamped). Use the opaque `before` cursor
+   * for backward pagination and `after` for forward pagination — pass the
+   * `startCursor` / `endCursor` from a previous `RoomEventsConnection`
+   * response. Cursors are opaque strings; clients must not attempt to
+   * parse them.
    */
   events: RoomEventsConnection;
   /**
-   * Fetch events in this room centered around a specific event.
+   * Fetch events in this room centered around a specific event (default
+   * limit: 50, max: 500; larger values are silently clamped).
    * Returns a window of events with the target event roughly in the middle.
    * Used for "jump to message" when clicking reply links to messages not in the loaded range.
    */
@@ -3249,18 +3243,6 @@ export type UpdateServerConfigInput = {
   welcomeMessage?: InputMaybe<Scalars['String']['input']>;
 };
 
-/** Input for updating the server. */
-export type UpdateServerInput = {
-  /** The new description for the server. Set to empty string to clear. */
-  description?: InputMaybe<Scalars['String']['input']>;
-  /** Message of the Day, displayed in the chat header. Set to empty string to clear. */
-  motd?: InputMaybe<Scalars['String']['input']>;
-  /** The new name for the server. */
-  name: Scalars['String']['input'];
-  /** Welcome message shown on the login page (markdown supported). Set to empty string to clear. */
-  welcomeMessage?: InputMaybe<Scalars['String']['input']>;
-};
-
 /**
  * Input for updating a user's settings. All preference fields are optional.
  * Only provided fields will be updated; omitted fields are left unchanged.
@@ -3716,11 +3698,11 @@ export type ServerSettingsModalQueryVariables = Exact<{ [key: string]: never; }>
 export type ServerSettingsModalQuery = { __typename?: 'Query', server: { __typename?: 'Server', viewerCanManageServer: boolean, config: { __typename?: 'ServerConfig', serverName: string, description?: string | null, motd?: string | null, welcomeMessage?: string | null, logoUrl?: string | null, bannerUrl?: string | null } } };
 
 export type UpdateServerSettingsModalMutationVariables = Exact<{
-  input: UpdateServerInput;
+  input: UpdateServerConfigInput;
 }>;
 
 
-export type UpdateServerSettingsModalMutation = { __typename?: 'Mutation', updateServer: { __typename?: 'Server', config: { __typename?: 'ServerConfig', serverName: string, description?: string | null, motd?: string | null, welcomeMessage?: string | null } } };
+export type UpdateServerSettingsModalMutation = { __typename?: 'Mutation', updateServerConfig: { __typename?: 'AdminServerConfig', serverName: string, description?: string | null, motd?: string | null, welcomeMessage?: string | null } };
 
 export type UploadInstanceLogoMutationVariables = Exact<{
   input: UploadServerLogoInput;
@@ -4774,7 +4756,7 @@ export type UpdateSecurityConfigMutationVariables = Exact<{
 }>;
 
 
-export type UpdateSecurityConfigMutation = { __typename?: 'Mutation', admin?: { __typename?: 'AdminMutations', updateServerConfig: { __typename?: 'AdminServerConfig', blockedUsernames?: string | null } } | null };
+export type UpdateSecurityConfigMutation = { __typename?: 'Mutation', updateServerConfig: { __typename?: 'AdminServerConfig', blockedUsernames?: string | null } };
 
 export type AdminSystemInfoQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -4854,7 +4836,7 @@ export const RoomEventViewFragmentDoc = {"kind":"Document","definitions":[{"kind
 export const CreateRoomDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateRoom"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateRoomInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createRoom"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}}]} as unknown as DocumentNode<CreateRoomMutation, CreateRoomMutationVariables>;
 export const JoinRoomDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"JoinRoom"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"JoinRoomInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"joinRoom"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]} as unknown as DocumentNode<JoinRoomMutation, JoinRoomMutationVariables>;
 export const ServerSettingsModalDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ServerSettingsModal"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"server"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"config"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"serverName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"motd"}},{"kind":"Field","name":{"kind":"Name","value":"welcomeMessage"}},{"kind":"Field","name":{"kind":"Name","value":"logoUrl"}},{"kind":"Field","name":{"kind":"Name","value":"bannerUrl"}}]}},{"kind":"Field","name":{"kind":"Name","value":"viewerCanManageServer"}}]}}]}}]} as unknown as DocumentNode<ServerSettingsModalQuery, ServerSettingsModalQueryVariables>;
-export const UpdateServerSettingsModalDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateServerSettingsModal"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateServerInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateServer"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"config"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"serverName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"motd"}},{"kind":"Field","name":{"kind":"Name","value":"welcomeMessage"}}]}}]}}]}}]} as unknown as DocumentNode<UpdateServerSettingsModalMutation, UpdateServerSettingsModalMutationVariables>;
+export const UpdateServerSettingsModalDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateServerSettingsModal"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateServerConfigInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateServerConfig"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"serverName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"motd"}},{"kind":"Field","name":{"kind":"Name","value":"welcomeMessage"}}]}}]}}]} as unknown as DocumentNode<UpdateServerSettingsModalMutation, UpdateServerSettingsModalMutationVariables>;
 export const UploadInstanceLogoDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UploadInstanceLogo"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UploadServerLogoInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uploadServerLogo"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"config"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"logoUrl"}}]}}]}}]}}]} as unknown as DocumentNode<UploadInstanceLogoMutation, UploadInstanceLogoMutationVariables>;
 export const DeleteInstanceLogoDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteInstanceLogo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteServerLogo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"config"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"logoUrl"}}]}}]}}]}}]} as unknown as DocumentNode<DeleteInstanceLogoMutation, DeleteInstanceLogoMutationVariables>;
 export const UploadInstanceBannerDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UploadInstanceBanner"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UploadServerBannerInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uploadServerBanner"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"config"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"bannerUrl"}}]}}]}}]}}]} as unknown as DocumentNode<UploadInstanceBannerMutation, UploadInstanceBannerMutationVariables>;
@@ -4962,7 +4944,7 @@ export const UnarchiveRoomDocument = {"kind":"Document","definitions":[{"kind":"
 export const AdminGroupPermissionsNameDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AdminGroupPermissionsName"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"server"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"roomGroups"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]}}]} as unknown as DocumentNode<AdminGroupPermissionsNameQuery, AdminGroupPermissionsNameQueryVariables>;
 export const AdminRoomPermissionsNameDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AdminRoomPermissionsName"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"roomId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"room"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"roomId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"roomId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]} as unknown as DocumentNode<AdminRoomPermissionsNameQuery, AdminRoomPermissionsNameQueryVariables>;
 export const AdminSecurityConfigDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AdminSecurityConfig"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"admin"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"serverConfig"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"blockedUsernames"}}]}}]}}]}}]} as unknown as DocumentNode<AdminSecurityConfigQuery, AdminSecurityConfigQueryVariables>;
-export const UpdateSecurityConfigDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateSecurityConfig"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateServerConfigInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"admin"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateServerConfig"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"blockedUsernames"}}]}}]}}]}}]} as unknown as DocumentNode<UpdateSecurityConfigMutation, UpdateSecurityConfigMutationVariables>;
+export const UpdateSecurityConfigDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateSecurityConfig"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateServerConfigInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateServerConfig"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"blockedUsernames"}}]}}]}}]} as unknown as DocumentNode<UpdateSecurityConfigMutation, UpdateSecurityConfigMutationVariables>;
 export const AdminSystemInfoDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AdminSystemInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"admin"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"systemInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"connection"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"connected"}},{"kind":"Field","name":{"kind":"Name","value":"serverId"}},{"kind":"Field","name":{"kind":"Name","value":"serverName"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"maxPayload"}},{"kind":"Field","name":{"kind":"Name","value":"rtt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"account"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"memory"}},{"kind":"Field","name":{"kind":"Name","value":"memoryUsed"}},{"kind":"Field","name":{"kind":"Name","value":"storage"}},{"kind":"Field","name":{"kind":"Name","value":"storageUsed"}},{"kind":"Field","name":{"kind":"Name","value":"streams"}},{"kind":"Field","name":{"kind":"Name","value":"streamsUsed"}},{"kind":"Field","name":{"kind":"Name","value":"consumers"}},{"kind":"Field","name":{"kind":"Name","value":"consumersUsed"}}]}},{"kind":"Field","name":{"kind":"Name","value":"nats"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"totalMessages"}},{"kind":"Field","name":{"kind":"Name","value":"totalBytes"}},{"kind":"Field","name":{"kind":"Name","value":"totalConsumerPending"}},{"kind":"Field","name":{"kind":"Name","value":"totalAckPending"}},{"kind":"Field","name":{"kind":"Name","value":"streams"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"subjects"}},{"kind":"Field","name":{"kind":"Name","value":"storage"}},{"kind":"Field","name":{"kind":"Name","value":"messages"}},{"kind":"Field","name":{"kind":"Name","value":"bytes"}},{"kind":"Field","name":{"kind":"Name","value":"firstSequence"}},{"kind":"Field","name":{"kind":"Name","value":"lastSequence"}},{"kind":"Field","name":{"kind":"Name","value":"consumerCount"}},{"kind":"Field","name":{"kind":"Name","value":"replicas"}},{"kind":"Field","name":{"kind":"Name","value":"clusterLeader"}}]}},{"kind":"Field","name":{"kind":"Name","value":"consumers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"stream"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"durable"}},{"kind":"Field","name":{"kind":"Name","value":"filterSubject"}},{"kind":"Field","name":{"kind":"Name","value":"filterSubjects"}},{"kind":"Field","name":{"kind":"Name","value":"ackPolicy"}},{"kind":"Field","name":{"kind":"Name","value":"pullBased"}},{"kind":"Field","name":{"kind":"Name","value":"pushBound"}},{"kind":"Field","name":{"kind":"Name","value":"pending"}},{"kind":"Field","name":{"kind":"Name","value":"ackPending"}},{"kind":"Field","name":{"kind":"Name","value":"redelivered"}},{"kind":"Field","name":{"kind":"Name","value":"waiting"}},{"kind":"Field","name":{"kind":"Name","value":"deliveredConsumerSequence"}},{"kind":"Field","name":{"kind":"Name","value":"deliveredStreamSequence"}},{"kind":"Field","name":{"kind":"Name","value":"ackFloorConsumerSequence"}},{"kind":"Field","name":{"kind":"Name","value":"ackFloorStreamSequence"}}]}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"projections"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"subjects"}},{"kind":"Field","name":{"kind":"Name","value":"started"}},{"kind":"Field","name":{"kind":"Name","value":"lastAppliedSequence"}},{"kind":"Field","name":{"kind":"Name","value":"matchingStreamSequence"}},{"kind":"Field","name":{"kind":"Name","value":"streamLastSequence"}},{"kind":"Field","name":{"kind":"Name","value":"lag"}},{"kind":"Field","name":{"kind":"Name","value":"entryCount"}},{"kind":"Field","name":{"kind":"Name","value":"estimatedBytes"}},{"kind":"Field","name":{"kind":"Name","value":"averageEntryBytes"}}]}}]}}]}}]} as unknown as DocumentNode<AdminSystemInfoQuery, AdminSystemInfoQueryVariables>;
 export const GetMyLastLoginChangeDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetMyLastLoginChange"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"viewer"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"user"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"lastLoginChange"}}]}}]}}]}}]} as unknown as DocumentNode<GetMyLastLoginChangeQuery, GetMyLastLoginChangeQueryVariables>;
 export const UploadAvatarDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UploadAvatar"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UploadAvatarInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uploadAvatar"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"avatarUrl"}}]}}]}}]} as unknown as DocumentNode<UploadAvatarMutation, UploadAvatarMutationVariables>;

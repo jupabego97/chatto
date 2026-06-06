@@ -88,7 +88,6 @@ type ComplexityRoot struct {
 
 	AdminMutations struct {
 		ClearUsernameCooldown func(childComplexity int, input model.ClearUsernameCooldownInput) int
-		UpdateServerConfig    func(childComplexity int, input model.UpdateServerConfigInput) int
 		UpdateUser            func(childComplexity int, input model.AdminUpdateUserInput) int
 	}
 
@@ -369,7 +368,7 @@ type ComplexityRoot struct {
 		UpdateRole                 func(childComplexity int, input model.UpdateRoleInput) int
 		UpdateRoom                 func(childComplexity int, input model.UpdateRoomInput) int
 		UpdateRoomGroup            func(childComplexity int, input model.UpdateRoomGroupInput) int
-		UpdateServer               func(childComplexity int, input model.UpdateServerInput) int
+		UpdateServerConfig         func(childComplexity int, input model.UpdateServerConfigInput) int
 		UpdateSettings             func(childComplexity int, input model.UpdateSettingsInput) int
 		UploadAvatar               func(childComplexity int, input model.UploadAvatarInput) int
 		UploadServerBanner         func(childComplexity int, input model.UploadServerBannerInput) int
@@ -949,7 +948,6 @@ type ComplexityRoot struct {
 }
 
 type AdminMutationsResolver interface {
-	UpdateServerConfig(ctx context.Context, obj *model.AdminMutations, input model.UpdateServerConfigInput) (*model.AdminServerConfig, error)
 	UpdateUser(ctx context.Context, obj *model.AdminMutations, input model.AdminUpdateUserInput) (*corev1.User, error)
 	ClearUsernameCooldown(ctx context.Context, obj *model.AdminMutations, input model.ClearUsernameCooldownInput) (bool, error)
 }
@@ -1056,7 +1054,6 @@ type MutationResolver interface {
 	UnarchiveRoom(ctx context.Context, input model.UnarchiveRoomInput) (*corev1.Room, error)
 	JoinGroup(ctx context.Context, input model.JoinGroupInput) ([]string, error)
 	PostMessage(ctx context.Context, input model.PostMessageInput) (core.EventEnvelope, error)
-	UpdateServer(ctx context.Context, input model.UpdateServerInput) (*model.Server, error)
 	UploadServerLogo(ctx context.Context, input model.UploadServerLogoInput) (*model.Server, error)
 	DeleteServerLogo(ctx context.Context) (*model.Server, error)
 	UploadServerBanner(ctx context.Context, input model.UploadServerBannerInput) (*model.Server, error)
@@ -1079,6 +1076,7 @@ type MutationResolver interface {
 	DeleteAvatar(ctx context.Context, input model.DeleteAvatarInput) (*corev1.User, error)
 	RequestAccountDeletion(ctx context.Context) (string, error)
 	DeleteMyAccount(ctx context.Context, input model.DeleteMyAccountInput) (bool, error)
+	UpdateServerConfig(ctx context.Context, input model.UpdateServerConfigInput) (*model.AdminServerConfig, error)
 	Admin(ctx context.Context) (*model.AdminMutations, error)
 	StartDm(ctx context.Context, input model.StartDMInput) (*corev1.Room, error)
 	SetServerNotificationLevel(ctx context.Context, input model.SetServerNotificationLevelInput) (*model.ViewerNotificationPreference, error)
@@ -1347,17 +1345,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.AdminMutations.ClearUsernameCooldown(childComplexity, args["input"].(model.ClearUsernameCooldownInput)), true
-	case "AdminMutations.updateServerConfig":
-		if e.ComplexityRoot.AdminMutations.UpdateServerConfig == nil {
-			break
-		}
-
-		args, err := ec.field_AdminMutations_updateServerConfig_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.ComplexityRoot.AdminMutations.UpdateServerConfig(childComplexity, args["input"].(model.UpdateServerConfigInput)), true
 	case "AdminMutations.updateUser":
 		if e.ComplexityRoot.AdminMutations.UpdateUser == nil {
 			break
@@ -2875,17 +2862,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.UpdateRoomGroup(childComplexity, args["input"].(model.UpdateRoomGroupInput)), true
-	case "Mutation.updateServer":
-		if e.ComplexityRoot.Mutation.UpdateServer == nil {
+	case "Mutation.updateServerConfig":
+		if e.ComplexityRoot.Mutation.UpdateServerConfig == nil {
 			break
 		}
 
-		args, err := ec.field_Mutation_updateServer_args(ctx, rawArgs)
+		args, err := ec.field_Mutation_updateServerConfig_args(ctx, rawArgs)
 		if err != nil {
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Mutation.UpdateServer(childComplexity, args["input"].(model.UpdateServerInput)), true
+		return e.ComplexityRoot.Mutation.UpdateServerConfig(childComplexity, args["input"].(model.UpdateServerConfigInput)), true
 	case "Mutation.updateSettings":
 		if e.ComplexityRoot.Mutation.UpdateSettings == nil {
 			break
@@ -5338,7 +5325,6 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputUpdateRoomGroupInput,
 		ec.unmarshalInputUpdateRoomInput,
 		ec.unmarshalInputUpdateServerConfigInput,
-		ec.unmarshalInputUpdateServerInput,
 		ec.unmarshalInputUpdateSettingsInput,
 		ec.unmarshalInputUploadAvatarInput,
 		ec.unmarshalInputUploadServerBannerInput,
@@ -5504,8 +5490,6 @@ func (ec *executionContext) childFields_AccountInfo(ctx context.Context, field g
 
 func (ec *executionContext) childFields_AdminMutations(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
-	case "updateServerConfig":
-		return ec.fieldContext_AdminMutations_updateServerConfig(ctx, field)
 	case "updateUser":
 		return ec.fieldContext_AdminMutations_updateUser(ctx, field)
 	case "clearUsernameCooldown":
@@ -6654,20 +6638,6 @@ func (ec *executionContext) field_AdminMutations_clearUsernameCooldown_args(ctx 
 	return args, nil
 }
 
-func (ec *executionContext) field_AdminMutations_updateServerConfig_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
-		func(ctx context.Context, v any) (model.UpdateServerConfigInput, error) {
-			return ec.unmarshalNUpdateServerConfigInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐUpdateServerConfigInput(ctx, v)
-		})
-	if err != nil {
-		return nil, err
-	}
-	args["input"] = arg0
-	return args, nil
-}
-
 func (ec *executionContext) field_AdminMutations_updateUser_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -7696,12 +7666,12 @@ func (ec *executionContext) field_Mutation_updateRoom_args(ctx context.Context, 
 	return args, nil
 }
 
-func (ec *executionContext) field_Mutation_updateServer_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+func (ec *executionContext) field_Mutation_updateServerConfig_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
-		func(ctx context.Context, v any) (model.UpdateServerInput, error) {
-			return ec.unmarshalNUpdateServerInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐUpdateServerInput(ctx, v)
+		func(ctx context.Context, v any) (model.UpdateServerConfigInput, error) {
+			return ec.unmarshalNUpdateServerConfigInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐUpdateServerConfigInput(ctx, v)
 		})
 	if err != nil {
 		return nil, err
@@ -8570,50 +8540,6 @@ func (ec *executionContext) _AccountInfo_consumersUsed(ctx context.Context, fiel
 }
 func (ec *executionContext) fieldContext_AccountInfo_consumersUsed(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("AccountInfo", field, false, false, errors.New("field of type Int does not have child fields"))
-}
-
-func (ec *executionContext) _AdminMutations_updateServerConfig(ctx context.Context, field graphql.CollectedField, obj *model.AdminMutations) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_AdminMutations_updateServerConfig(ctx, field)
-		},
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.AdminMutations().UpdateServerConfig(ctx, obj, fc.Args["input"].(model.UpdateServerConfigInput))
-		},
-		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v *model.AdminServerConfig) graphql.Marshaler {
-			return ec.marshalNAdminServerConfig2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐAdminServerConfig(ctx, selections, v)
-		},
-		true,
-		true,
-	)
-}
-func (ec *executionContext) fieldContext_AdminMutations_updateServerConfig(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "AdminMutations",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.childFields_AdminServerConfig(ctx, field)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_AdminMutations_updateServerConfig_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
 }
 
 func (ec *executionContext) _AdminMutations_updateUser(ctx context.Context, field graphql.CollectedField, obj *model.AdminMutations) (ret graphql.Marshaler) {
@@ -12447,50 +12373,6 @@ func (ec *executionContext) fieldContext_Mutation_postMessage(ctx context.Contex
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_updateServer(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_Mutation_updateServer(ctx, field)
-		},
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().UpdateServer(ctx, fc.Args["input"].(model.UpdateServerInput))
-		},
-		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v *model.Server) graphql.Marshaler {
-			return ec.marshalNServer2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐServer(ctx, selections, v)
-		},
-		true,
-		true,
-	)
-}
-func (ec *executionContext) fieldContext_Mutation_updateServer(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Mutation",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.childFields_Server(ctx, field)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_updateServer_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Mutation_uploadServerLogo(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -13408,6 +13290,50 @@ func (ec *executionContext) fieldContext_Mutation_deleteMyAccount(ctx context.Co
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_deleteMyAccount_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateServerConfig(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_updateServerConfig(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateServerConfig(ctx, fc.Args["input"].(model.UpdateServerConfigInput))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.AdminServerConfig) graphql.Marshaler {
+			return ec.marshalNAdminServerConfig2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐAdminServerConfig(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_updateServerConfig(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_AdminServerConfig(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateServerConfig_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -27442,57 +27368,6 @@ func (ec *executionContext) unmarshalInputUpdateServerConfigInput(ctx context.Co
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputUpdateServerInput(ctx context.Context, obj any) (model.UpdateServerInput, error) {
-	var it model.UpdateServerInput
-	if obj == nil {
-		return it, nil
-	}
-
-	asMap := map[string]any{}
-	for k, v := range obj.(map[string]any) {
-		asMap[k] = v
-	}
-
-	fieldsInOrder := [...]string{"name", "description", "motd", "welcomeMessage"}
-	for _, k := range fieldsInOrder {
-		v, ok := asMap[k]
-		if !ok {
-			continue
-		}
-		switch k {
-		case "name":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
-			data, err := ec.unmarshalNString2string(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.Name = data
-		case "description":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("description"))
-			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.Description = data
-		case "motd":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("motd"))
-			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.Motd = data
-		case "welcomeMessage":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("welcomeMessage"))
-			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.WelcomeMessage = data
-		}
-	}
-	return it, nil
-}
-
 func (ec *executionContext) unmarshalInputUpdateSettingsInput(ctx context.Context, obj any) (model.UpdateSettingsInput, error) {
 	var it model.UpdateSettingsInput
 	if obj == nil {
@@ -27981,42 +27856,6 @@ func (ec *executionContext) _AdminMutations(ctx context.Context, sel ast.Selecti
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("AdminMutations")
-		case "updateServerConfig":
-			field := field
-
-			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._AdminMutations_updateServerConfig(ctx, field, obj)
-				if res == graphql.Null {
-					atomic.AddUint32(&fs.Invalids, 1)
-				}
-				return res
-			}
-
-			if field.Deferrable != nil {
-				dfs, ok := deferred[field.Deferrable.Label]
-				di := 0
-				if ok {
-					dfs.AddField(field)
-					di = len(dfs.Values) - 1
-				} else {
-					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
-					deferred[field.Deferrable.Label] = dfs
-				}
-				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
-					return innerFunc(ctx, dfs)
-				})
-
-				// don't run the out.Concurrently() call below
-				out.Values[i] = graphql.Null
-				continue
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "updateUser":
 			field := field
 
@@ -31465,13 +31304,6 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "updateServer":
-			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_updateServer(ctx, field)
-			})
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "uploadServerLogo":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_uploadServerLogo(ctx, field)
@@ -31622,6 +31454,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "deleteMyAccount":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_deleteMyAccount(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateServerConfig":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateServerConfig(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -40993,11 +40832,6 @@ func (ec *executionContext) unmarshalNUpdateRoomInput2hmansᚗdeᚋchattoᚋinte
 
 func (ec *executionContext) unmarshalNUpdateServerConfigInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐUpdateServerConfigInput(ctx context.Context, v any) (model.UpdateServerConfigInput, error) {
 	res, err := ec.unmarshalInputUpdateServerConfigInput(ctx, v)
-	return res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) unmarshalNUpdateServerInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐUpdateServerInput(ctx context.Context, v any) (model.UpdateServerInput, error) {
-	res, err := ec.unmarshalInputUpdateServerInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 

@@ -55,10 +55,8 @@ type AddReactionInput struct {
 	Emoji string `json:"emoji"`
 }
 
-// Admin mutations for configuration management.
+// Admin mutations for user management.
 type AdminMutations struct {
-	// Update server configuration. Returns the updated config section.
-	UpdateServerConfig *AdminServerConfig `json:"updateServerConfig"`
 	// Update a user's login and/or display name. Bypasses the 30-day login change cooldown but otherwise reuses the same validation as updateProfile.
 	UpdateUser *corev1.User `json:"updateUser"`
 	// Clear the 30-day login change cooldown for a user, allowing them to immediately rename themselves. Idempotent.
@@ -1212,18 +1210,6 @@ type UpdateServerConfigInput struct {
 	BlockedUsernames *string `json:"blockedUsernames,omitempty"`
 	// Short server description for OG link-preview metadata. Set to empty string to clear.
 	Description *string `json:"description,omitempty"`
-}
-
-// Input for updating the server.
-type UpdateServerInput struct {
-	// The new name for the server.
-	Name string `json:"name"`
-	// The new description for the server. Set to empty string to clear.
-	Description *string `json:"description,omitempty"`
-	// Message of the Day, displayed in the chat header. Set to empty string to clear.
-	Motd *string `json:"motd,omitempty"`
-	// Welcome message shown on the login page (markdown supported). Set to empty string to clear.
-	WelcomeMessage *string `json:"welcomeMessage,omitempty"`
 }
 
 // Input for updating a user's settings. All preference fields are optional.
