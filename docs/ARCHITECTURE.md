@@ -249,7 +249,6 @@ Diagnostic fields (`admin.systemInfo`, `admin.eventLog`, `admin.eventLogEntry`, 
 | `admin.eventLog(limit, before)`                  | Query     | Diagnostic event-log browser, newest first (`limit` default 50, max 200).                    |
 | `admin.eventLogEntry(sequence)`                  | Query     | Diagnostic event-log entry lookup by sequence.                                               |
 | `admin.projections`                              | Query     | Projection lag, rough memory estimates, and diagnostic metric buckets.                       |
-| `admin.resetServerConfig`                        | Mutation  | Reset server configuration to defaults.                                                      |
 | `admin.updateBlockedUsernames(input)`            | Mutation  | Update the newline-separated blocked-username list.                                          |
 | `admin.updateUser(input)`                        | Mutation  | Update a user's login / display name (bypasses the 30-day cooldown).                         |
 | `admin.clearUsernameCooldown(userId)`            | Mutation  | Manually clear a user's login change cooldown.                                               |

@@ -283,7 +283,7 @@ type AdminMutations {
 "Input for AdminMutations.updateBlockedUsernames."
 input UpdateBlockedUsernamesInput {
   "Blocked usernames (newline-separated). Set to empty string to clear."
-  blockedUsernames: String!
+  blockedUsernames: String! @length(max: 10000)
 }
 
 "Input for AdminMutations.clearUsernameCooldown."
