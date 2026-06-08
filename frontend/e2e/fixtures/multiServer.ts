@@ -14,7 +14,7 @@ export async function startSecondServer(testInfo: TestInfo): Promise<ServerInfo>
 		parallelIndex: testInfo.parallelIndex + 5
 	} as TestInfo;
 
-	return startServer(modifiedTestInfo);
+	return startServer(modifiedTestInfo, { publicHost: '127.0.0.1' });
 }
 
 /**

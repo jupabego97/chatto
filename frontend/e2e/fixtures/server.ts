@@ -67,6 +67,8 @@ async function waitForServer(port: number, timeoutMs = 45000): Promise<void> {
 }
 
 export interface StartServerOptions {
+  /** Hostname advertised as this server's canonical public URL */
+  publicHost?: string;
   /** Additional environment variables for the server process */
   env?: Record<string, string>;
 }
@@ -80,6 +82,8 @@ export async function startServer(
   options: StartServerOptions = {}
 ): Promise<ServerInfo> {
   const ports = getPortsForTest(testInfo.workerIndex, testInfo.parallelIndex);
+  const publicHost = options.publicHost ?? 'localhost';
+  const baseURL = `http://${publicHost}:${ports.webserver}`;
   // Use testId for unique data directory per test
   const dataDir = path.join(__dirname, `data-${testInfo.testId.replace(/[^a-zA-Z0-9]/g, '-')}`);
 
@@ -97,13 +101,13 @@ export async function startServer(
       cwd: __dirname,
       env: {
         ...process.env,
-        ...options.env,
         CHATTO_WEBSERVER_PORT: String(ports.webserver),
-        CHATTO_WEBSERVER_URL: `http://localhost:${ports.webserver}`,
+        CHATTO_WEBSERVER_URL: baseURL,
         CHATTO_NATS_EMBEDDED_PORT: '0',
         CHATTO_NATS_EMBEDDED_HTTP_PORT: '0',
         CHATTO_NATS_EMBEDDED_DATA_DIR: dataDir,
-        CHATTO_TEST_EMAIL_ENDPOINT: 'true' // Enable test email endpoint for E2E tests
+        CHATTO_TEST_EMAIL_ENDPOINT: 'true', // Enable test email endpoint for E2E tests
+        ...options.env
       },
       stdio: ['ignore', 'pipe', 'pipe']
     }
@@ -128,7 +132,7 @@ export async function startServer(
   await waitForServer(ports.webserver);
 
   return {
-    baseURL: `http://localhost:${ports.webserver}`,
+    baseURL,
     port: ports.webserver,
     process: serverProcess
   };
