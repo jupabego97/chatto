@@ -287,6 +287,92 @@ func TestServeSPAFallback(t *testing.T) {
 	})
 }
 
+func TestCanonicalRedirect(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	newRouter := func(webserverURL string) *gin.Engine {
+		server := &HTTPServer{
+			config: config.ChattoConfig{Webserver: config.WebserverConfig{URL: webserverURL}},
+		}
+		router := gin.New()
+		router.Use(server.canonicalRedirectMiddleware())
+		router.Any("/*path", func(c *gin.Context) {
+			c.String(http.StatusOK, "content")
+		})
+		return router
+	}
+
+	t.Run("redirects alias-host requests to configured origin", func(t *testing.T) {
+		router := newRouter("https://chat.example.com")
+
+		req := httptest.NewRequest("GET", "/chat/-/room-1?thread=abc", nil)
+		req.Host = "alias.example.com"
+		req.Header.Set("X-Forwarded-Proto", "https")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusPermanentRedirect, w.Code)
+		assert.Equal(t, "https://chat.example.com/chat/-/room-1?thread=abc", w.Header().Get("Location"))
+	})
+
+	t.Run("redirects alias-host requests for any method and path", func(t *testing.T) {
+		router := newRouter("https://chat.example.com")
+
+		tests := []struct {
+			method string
+			path   string
+		}{
+			{method: "HEAD", path: "/chat/-"},
+			{method: "POST", path: "/api/graphql"},
+			{method: "OPTIONS", path: "/api/server"},
+			{method: "GET", path: "/_app/immutable/app.hash.js"},
+			{method: "GET", path: "/assets/attachments/test"},
+			{method: "GET", path: "/healthz"},
+			{method: "GET", path: "/webhooks/livekit"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.method+" "+tt.path, func(t *testing.T) {
+				req := httptest.NewRequest(tt.method, tt.path, nil)
+				req.Host = "alias.example.com"
+				req.Header.Set("X-Forwarded-Proto", "https")
+				w := httptest.NewRecorder()
+				router.ServeHTTP(w, req)
+
+				assert.Equal(t, http.StatusPermanentRedirect, w.Code)
+				assert.Equal(t, "https://chat.example.com"+tt.path, w.Header().Get("Location"))
+			})
+		}
+	})
+
+	t.Run("does not redirect canonical-host requests", func(t *testing.T) {
+		router := newRouter("https://chat.example.com")
+
+		req := httptest.NewRequest("GET", "/chat/-", nil)
+		req.Host = "chat.example.com"
+		req.Header.Set("X-Forwarded-Proto", "https")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, "content", w.Body.String())
+		assert.Empty(t, w.Header().Get("Location"))
+	})
+
+	t.Run("does not redirect when webserver url is unset", func(t *testing.T) {
+		router := newRouter("")
+
+		req := httptest.NewRequest("GET", "/chat/-", nil)
+		req.Host = "alias.example.com"
+		req.Header.Set("X-Forwarded-Proto", "https")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Empty(t, w.Header().Get("Location"))
+	})
+}
+
 func TestSecurityHeaders(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

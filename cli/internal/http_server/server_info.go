@@ -9,6 +9,7 @@ import (
 
 // serverInfoResponse is the JSON response for GET /api/server.
 type serverInfoResponse struct {
+	URL              string   `json:"url,omitempty"`
 	Name             string   `json:"name"`
 	Version          string   `json:"version"`
 	AuthMethods      []string `json:"authMethods"`
@@ -95,6 +96,7 @@ func (s *HTTPServer) handleServerInfo(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, serverInfoResponse{
+		URL:              canonicalServerOrigin(s.config.Webserver.URL),
 		Name:             name,
 		Version:          s.version,
 		AuthMethods:      authMethods,

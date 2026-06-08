@@ -100,6 +100,8 @@ func newHTTPServer(addr string, handler http.Handler) *http.Server {
 }
 
 func (s *HTTPServer) setupRoutes() error {
+	s.router.Use(s.canonicalRedirectMiddleware())
+
 	// SESSION MANAGEMENT
 
 	// Configure session middleware

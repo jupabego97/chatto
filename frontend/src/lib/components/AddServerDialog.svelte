@@ -32,6 +32,7 @@ ADR-027 — only user-facing copy says "server".
   } = $props();
 
   type InstanceInfo = {
+    url?: string;
     name: string;
     version?: string;
     authMethods: string[];
@@ -116,6 +117,37 @@ ADR-027 — only user-facing copy says "server".
     }
   }
 
+  function findConnectedServer(url: string) {
+    const normalizedUrl = normalizeUrl(url).toLowerCase();
+    return serverRegistry.servers.find(
+      (server) => normalizeUrl(server.url).toLowerCase() === normalizedUrl
+        && (server.token || server.userId)
+    );
+  }
+
+  function canonicalUrlFromInfo(info: InstanceInfo, fallbackUrl: string): string {
+    if (!info.url) return fallbackUrl;
+
+    try {
+      const parsed = new URL(info.url.trim());
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        throw new Error('unsupported scheme');
+      }
+      return parsed.origin;
+    } catch {
+      throw new Error('This server returned an invalid canonical URL.');
+    }
+  }
+
+  function authorizeUrlForServer(serverUrl: string, authorizeUrl: string, params: URLSearchParams): string {
+    const url = new URL(authorizeUrl, serverUrl);
+    if (url.origin !== serverUrl) {
+      throw new Error('This server returned an invalid sign-in URL.');
+    }
+    url.search = params.toString();
+    return url.toString();
+  }
+
   async function handleProbe() {
     formError = '';
 
@@ -128,10 +160,7 @@ ADR-027 — only user-facing copy says "server".
       return;
     }
 
-    const existing = serverRegistry.servers.find(
-      (i) => i.url.toLowerCase() === url.toLowerCase()
-    );
-    if (existing && (existing.token || existing.userId)) {
+    if (findConnectedServer(url)) {
       formError = 'This server is already connected.';
       return;
     }
@@ -158,7 +187,13 @@ ADR-027 — only user-facing copy says "server".
         return;
       }
 
-      probedUrl = probedFromUrl;
+      const canonicalUrl = canonicalUrlFromInfo(info, probedFromUrl);
+      if (findConnectedServer(canonicalUrl)) {
+        formError = 'This server is already connected.';
+        return;
+      }
+
+      probedUrl = canonicalUrl;
       probedInfo = info;
       stage = 'preview';
     } catch (err) {
@@ -202,7 +237,7 @@ ADR-027 — only user-facing copy says "server".
         state
       });
 
-      window.location.href = `${probedUrl}${probedInfo.authorizeUrl}?${params}`;
+      window.location.href = authorizeUrlForServer(probedUrl, probedInfo.authorizeUrl, params);
     } catch (err) {
       connecting = false;
       formError = err instanceof Error ? err.message : 'Failed to start sign-in.';

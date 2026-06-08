@@ -130,6 +130,43 @@ describe('AddServerDialog', () => {
     expect(visible).toBe(true);
   });
 
+  it('uses the advertised canonical URL when probing an alias', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      makeProbeResponse({
+        url: 'https://chat.example.com',
+        name: 'Canonical Chatto',
+        version: '0.1.0',
+        authMethods: ['password'],
+        registrationOpen: true,
+        authorizeUrl: '/oauth/authorize'
+      })
+    ) as unknown as typeof fetch;
+
+    const { container } = render(AddServerDialog, {
+      props: { visible: true, onclose: () => {} }
+    });
+
+    const input = container.querySelector<HTMLInputElement>('#add-server-url')!;
+    input.value = 'https://alias.example.com';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+
+    container.querySelector('form')!.requestSubmit();
+
+    await vi.waitFor(() => {
+      const submit = container.querySelector<HTMLButtonElement>('button[type="submit"]');
+      expect(submit?.textContent ?? '').toMatch(/^\s*Sign in\s*$/);
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      'https://alias.example.com/api/server',
+      expect.any(Object)
+    );
+    expect(container.textContent).toContain('Canonical Chatto');
+    expect(container.textContent).toContain('chat.example.com');
+    expect(container.textContent).not.toContain('alias.example.com');
+  });
+
   it('shows an error when the probe response is not a Chatto server', async () => {
     globalThis.fetch = vi.fn(async () =>
       makeProbeResponse({ unrelated: true })
@@ -186,5 +223,53 @@ describe('AddServerDialog', () => {
     });
 
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('blocks adding an alias for an already connected canonical server', async () => {
+    serverRegistry.servers = [
+      {
+        id: 'remote',
+        url: 'https://chat.example.com',
+        name: 'Remote',
+        iconUrl: null,
+        token: 'abc',
+        userId: 'user-1',
+        userLogin: 'someone',
+        userDisplayName: null,
+        userAvatarUrl: null,
+        addedAt: 0
+      }
+    ];
+
+    globalThis.fetch = vi.fn(async () =>
+      makeProbeResponse({
+        url: 'https://chat.example.com',
+        name: 'Remote',
+        version: '0.1.0',
+        authMethods: ['password'],
+        registrationOpen: true,
+        authorizeUrl: '/oauth/authorize'
+      })
+    ) as unknown as typeof fetch;
+
+    const { container } = render(AddServerDialog, {
+      props: { visible: true, onclose: () => {} }
+    });
+
+    const input = container.querySelector<HTMLInputElement>('#add-server-url')!;
+    input.value = 'https://alias.example.com';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+
+    container.querySelector('form')!.requestSubmit();
+
+    await vi.waitFor(() => {
+      expect(container.textContent).toContain('already connected');
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      'https://alias.example.com/api/server',
+      expect.any(Object)
+    );
   });
 });

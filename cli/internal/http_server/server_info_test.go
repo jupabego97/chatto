@@ -38,7 +38,7 @@ func bannerImageBytes(t *testing.T) io.Reader {
 }
 
 // setupServerInfoServer creates a minimal HTTPServer for instance info endpoint tests.
-func setupServerInfoServer(t *testing.T, authConfig config.AuthConfig) *HTTPServer {
+func setupServerInfoServer(t *testing.T, authConfig config.AuthConfig, webserverURL ...string) *HTTPServer {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -53,10 +53,16 @@ func setupServerInfoServer(t *testing.T, authConfig config.AuthConfig) *HTTPServ
 	}
 	startCoreServices(t, chattoCore)
 
+	url := ""
+	if len(webserverURL) > 0 {
+		url = webserverURL[0]
+	}
+
 	router := gin.New()
 	s := &HTTPServer{
 		config: config.ChattoConfig{
-			Auth: authConfig,
+			Auth:      authConfig,
+			Webserver: config.WebserverConfig{URL: url},
 		},
 		nc:      nc,
 		router:  router,
@@ -171,6 +177,55 @@ func TestServerInfo(t *testing.T) {
 
 		if resp.AuthorizeURL != "/oauth/authorize" {
 			t.Errorf("expected authorizeUrl '/oauth/authorize', got %q", resp.AuthorizeURL)
+		}
+	})
+
+	t.Run("includes canonical url when webserver url is configured", func(t *testing.T) {
+		s := setupServerInfoServer(t, config.AuthConfig{}, "https://chat.example.com/some/path")
+
+		req := httptest.NewRequest("GET", "/api/server", nil)
+		w := httptest.NewRecorder()
+		s.router.ServeHTTP(w, req)
+
+		var resp serverInfoResponse
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to parse response: %v", err)
+		}
+
+		if resp.URL != "https://chat.example.com" {
+			t.Errorf("expected canonical url https://chat.example.com, got %q", resp.URL)
+		}
+	})
+
+	t.Run("omits canonical url when webserver url is unset", func(t *testing.T) {
+		s := setupServerInfoServer(t, config.AuthConfig{})
+
+		req := httptest.NewRequest("GET", "/api/server", nil)
+		w := httptest.NewRecorder()
+		s.router.ServeHTTP(w, req)
+
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(w.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to parse response: %v", err)
+		}
+		if _, present := raw["url"]; present {
+			t.Errorf("expected url absent when webserver.url is unset, got %s", string(raw["url"]))
+		}
+	})
+
+	t.Run("omits canonical url when webserver url is invalid", func(t *testing.T) {
+		s := setupServerInfoServer(t, config.AuthConfig{}, "chat.example.com")
+
+		req := httptest.NewRequest("GET", "/api/server", nil)
+		w := httptest.NewRecorder()
+		s.router.ServeHTTP(w, req)
+
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(w.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to parse response: %v", err)
+		}
+		if _, present := raw["url"]; present {
+			t.Errorf("expected url absent when webserver.url is invalid, got %s", string(raw["url"]))
 		}
 	})
 
