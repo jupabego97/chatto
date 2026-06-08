@@ -327,7 +327,6 @@ func TestCanonicalRedirect(t *testing.T) {
 			{method: "OPTIONS", path: "/api/server"},
 			{method: "GET", path: "/_app/immutable/app.hash.js"},
 			{method: "GET", path: "/assets/attachments/test"},
-			{method: "GET", path: "/healthz"},
 			{method: "GET", path: "/webhooks/livekit"},
 		}
 
@@ -370,6 +369,24 @@ func TestCanonicalRedirect(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, w.Code)
 		assert.Empty(t, w.Header().Get("Location"))
+	})
+
+	t.Run("does not redirect health probes", func(t *testing.T) {
+		router := newRouter("https://chat.example.com")
+
+		for _, path := range []string{"/healthz", "/readyz"} {
+			t.Run(path, func(t *testing.T) {
+				req := httptest.NewRequest("GET", path, nil)
+				req.Host = "alias.example.com"
+				req.Header.Set("X-Forwarded-Proto", "https")
+				w := httptest.NewRecorder()
+				router.ServeHTTP(w, req)
+
+				assert.Equal(t, http.StatusOK, w.Code)
+				assert.Equal(t, "content", w.Body.String())
+				assert.Empty(t, w.Header().Get("Location"))
+			})
+		}
 	})
 }
 

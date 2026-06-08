@@ -39,10 +39,16 @@ func incomingRequestOrigin(c *gin.Context) string {
 	return scheme + "://" + strings.ToLower(c.Request.Host)
 }
 
+func isHealthProbePath(path string) bool {
+	return path == "/healthz" || path == "/readyz"
+}
+
 func (s *HTTPServer) canonicalRedirectMiddleware() gin.HandlerFunc {
 	canonicalOrigin := canonicalServerOrigin(s.config.Webserver.URL)
 	return func(c *gin.Context) {
-		if canonicalOrigin == "" || incomingRequestOrigin(c) == canonicalOrigin {
+		if canonicalOrigin == "" ||
+			isHealthProbePath(c.Request.URL.Path) ||
+			incomingRequestOrigin(c) == canonicalOrigin {
 			c.Next()
 			return
 		}
