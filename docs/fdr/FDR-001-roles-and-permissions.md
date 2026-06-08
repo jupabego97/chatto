@@ -1,7 +1,7 @@
 # FDR-001: Roles & Permissions (RBAC)
 
 **Status:** Active
-**Last reviewed:** 2026-06-06
+**Last reviewed:** 2026-06-07
 
 ## Overview
 
@@ -18,6 +18,7 @@ Chatto controls who can do what through role-based access control. Every authent
 - Custom role display names are limited to 80 bytes; descriptions are limited to 500 bytes.
 - Owners pass every permission check because the `owner` role is seeded with every server-scope permission — not because the resolver special-cases them. Owners are not above the rules; they hold the rules.
 - Operators can designate owners via `owners.emails` in `chatto.toml`. Matching users are auto-assigned the `owner` role when their email is verified, and already-verified matching users are assigned the role on server boot.
+- Bot accounts participate in the same role hierarchy and permission resolution as human users. Bot-management permissions only govern creating/managing bot accounts; a bot's ordinary actions still depend on its own roles and overrides.
 
 ## Design Decisions
 
@@ -69,10 +70,12 @@ The full permission catalog is in `cli/internal/core/permission.go`. Key permiss
 
 - `role.manage` — create, edit, delete roles and the permissions attached to them.
 - `role.assign` — assign roles to users.
+- `bot.create` — create self-owned bot accounts and manage/delete bots owned by the caller.
+- `bot.manage` — manage/delete other users' bot accounts and tokens, subject to outranking the bot account itself.
 - `admin.access`, `admin.view-users`, `admin.view-system`, `admin.view-audit` — gate access to the admin UI and its sub-views.
 - `message.post` — post root messages in rooms and start DMs. Reading DMs is not permission-gated; it follows room membership.
 
 ## Related
 
 - **ADRs:** ADR-004 (authorization at API boundary), ADR-005 (hierarchy-wins RBAC), ADR-027 (instance/space consolidation), ADR-030 (space tier retirement), ADR-031 (room-group-centric ACL), ADR-033 (event-sourced state), ADR-035 (per-aggregate migration), ADR-037 (DM access via membership)
-- **FDRs:** Every FDR that mentions a permission depends on this one.
+- **FDRs:** Every FDR that mentions a permission depends on this one, including FDR-027 (Bot Accounts).

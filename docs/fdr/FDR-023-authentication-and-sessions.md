@@ -5,7 +5,7 @@
 
 ## Overview
 
-Chatto authenticates users via two parallel mechanisms: HTTP-only cookie sessions for the embedded SPA (same-origin) and opaque bearer tokens for cross-origin clients (multi-instance frontends, CLI tools, future mobile apps). Login flows include classic password login, OAuth providers, and a bootstrap path for first-boot operator setup.
+Chatto authenticates human users via two parallel mechanisms: HTTP-only cookie sessions for the embedded SPA (same-origin) and opaque bearer tokens for cross-origin clients (multi-instance frontends, CLI tools, future mobile apps). Login flows include classic password login, OAuth providers, and a bootstrap path for first-boot operator setup. Bot accounts use a separate named bot-token credential family covered in FDR-027.
 
 ## Behavior
 
@@ -13,6 +13,7 @@ Chatto authenticates users via two parallel mechanisms: HTTP-only cookie session
 - **OAuth login** — operators can configure OAuth providers (e.g., Google). The login page shows provider buttons; clicking takes the user through the standard authorization-code flow.
 - **Cookie session** — on successful auth from the embedded SPA, the server issues an HTTP-only, SameSite=Lax cookie with a 90-day expiry. The cookie carries an opaque session ID plus the user ID needed to derive the lookup key; the authoritative `CookieSession` protobuf record lives in `RUNTIME_STATE` under `cookie_session.{userId}.{hmac}` with a per-key TTL. The server validates the KV record and resolves the current user from projections per request.
 - **Bearer token** — every authentication endpoint also issues an opaque token (format: `cht_AT` + 14-char NanoID). Cross-origin clients store it (usually in `localStorage`) and send it as `Authorization: Bearer …` on HTTP requests and `connectionParams.token` on graphql-ws upgrades. The token record lives in `RUNTIME_STATE` as an HMAC-derived `session.{hmac}` key with a per-key TTL.
+- **Bot API token** — bot accounts cannot sign in through password, OAuth, or browser cookie flows. They authenticate to API surfaces with named bot tokens (format: `cht_BT` + NanoID) whose expiry is chosen at issuance and whose metadata lives in `RUNTIME_STATE` under HMAC-derived keys.
 - **WebSocket auth** — for the embedded SPA, the cookie is automatically attached to the WebSocket upgrade and the user is authenticated before the WS handshake completes. For cross-origin clients, the token in `connectionParams` is checked at upgrade time.
 - **Logout** — for cookie sessions: the server deletes the current cookie-session KV record, clears the cookie, and the SPA does a hard reload. For tokens: the client removes the token from `localStorage`; optionally the server revokes the token by deleting its KV key.
 - **Session refresh** — cookie-session KV TTL cannot be touched in place, so active sessions are rotated near expiry: the server creates a replacement `CookieSession` record with a fresh TTL, updates the browser cookie, and deletes the old record best-effort. Bearer tokens follow a sliding-window TTL — each successful validation rewrites the `RUNTIME_STATE` entry with a fresh per-key TTL.
@@ -85,12 +86,12 @@ Chatto authenticates users via two parallel mechanisms: HTTP-only cookie session
 
 ## Permissions
 
-Authentication itself doesn't have a permission gate (you're either authenticated or not). After authentication, downstream actions are gated by the permissions described in FDR-001.
+Authentication itself doesn't have a permission gate (you're either authenticated or not). Creating and managing bot API tokens is gated by `bot.create` / `bot.manage` (FDR-027). After authentication, downstream actions are gated by the permissions described in FDR-001.
 
 ## Related
 
 - **ADRs:** ADR-017 (cookie-session auth for WebSocket), ADR-024 (opaque bearer tokens for cross-origin auth), ADR-025 (multi-instance client architecture), ADR-036 (runtime state in `RUNTIME_STATE`)
-- **FDRs:** FDR-001 (Roles & Permissions), FDR-018 (Account Lifecycle)
+- **FDRs:** FDR-001 (Roles & Permissions), FDR-018 (Account Lifecycle), FDR-027 (Bot Accounts)
 
 ## Open Questions
 

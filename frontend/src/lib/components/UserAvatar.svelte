@@ -7,6 +7,7 @@
       id
       login
       displayName
+      isBot
       avatarUrl(width: 96, height: 96)
       presenceStatus
     }
@@ -14,7 +15,7 @@
 </script>
 
 <script lang="ts">
-  import type { UserAvatarUserFragment } from '$lib/gql/graphql';
+  import type { PresenceStatus } from '$lib/gql/graphql';
   import { getLiveAvatarUrl } from '$lib/state/userProfiles.svelte';
   import { getPresenceCache } from '$lib/state/presenceCache.svelte';
   import { getAvatarInitials } from '$lib/utils/initials';
@@ -46,13 +47,22 @@
     xl: 'h-5 w-5'
   };
 
+  type UserAvatarUser = {
+    id: string;
+    login: string;
+    displayName: string;
+    isBot?: boolean;
+    avatarUrl?: string | null;
+    presenceStatus: PresenceStatus;
+  };
+
   let {
     user,
     size = 'md',
     showPresence = true,
     class: className = ''
   }: {
-    user: UserAvatarUserFragment;
+    user: UserAvatarUser;
     size?: Size;
     showPresence?: boolean;
     class?: string;
@@ -111,6 +121,15 @@
       >
         {initials}
       </div>
+    {/if}
+    {#if user.isBot}
+      <span
+        class="absolute -top-0.5 -left-0.5 flex h-4 w-4 items-center justify-center rounded-full border border-surface bg-accent text-[10px] text-white"
+        aria-label="Bot account"
+        title="Bot account"
+      >
+        <span class="iconify mdi--robot"></span>
+      </span>
     {/if}
     {#if showPresence}
       <span

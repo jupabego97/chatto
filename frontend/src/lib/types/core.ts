@@ -24,6 +24,7 @@ export const CategoryMessage: PermissionCategory = "message";
 export const CategoryRole: PermissionCategory = "role";
 export const CategoryAdmin: PermissionCategory = "admin";
 export const CategoryUser: PermissionCategory = "user";
+export const CategoryBot: PermissionCategory = "bot";
 /**
  * Permission represents a permission in the permission model.
  */
@@ -119,6 +120,14 @@ export const PermUserDeleteAny: Permission = "user.delete-any";
  * PermUserDeleteSelf allows users to delete their own account.
  */
 export const PermUserDeleteSelf: Permission = "user.delete-self";
+/**
+ * PermBotCreate allows human users to create and manage their own bot accounts.
+ */
+export const PermBotCreate: Permission = "bot.create";
+/**
+ * PermBotManage allows human users to manage bot accounts owned by other users.
+ */
+export const PermBotManage: Permission = "bot.manage";
 /**
  * PermissionMetadata provides display information and scope constraints for a permission.
  */

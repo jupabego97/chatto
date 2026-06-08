@@ -39,7 +39,7 @@ Chatto is a real-time chat application with a GraphQL gateway and NATS/JetStream
 
 - **Server**: A deployment of Chatto, consisting of 1-n application processes connected to the same NATS system and account. ("Instance" is the older name for this concept and persists in a handful of vestigial places — the `INSTANCE*` KV bucket names and the internal `RegisteredInstance`/`isInstanceAdmin` identifiers. Treat them as a rename-in-progress.)
 - **Rooms**: Communication channels on the server. Can be named (`general`) or direct messages between users; differentiated by a `kind` field (`channel` / `dm`).
-- **Users**: Global to the deployment, with account/profile state and per-room membership projected from `EVT`.
+- **Users**: Global to the deployment, with account/profile state and per-room membership projected from `EVT`. Users have a kind (`HUMAN` or `BOT`); bot users carry an owner user ID and authenticate only with bot API tokens.
 
 ## NATS Authentication
 
@@ -81,7 +81,7 @@ Key files: [`cli/internal/core/core.go`](cli/internal/core/core.go)
 
 Key files: [`cli/internal/graph/`](cli/internal/graph/) (schemas in `*.graphqls` files, resolvers in `*.resolvers.go`)
 
-The GraphQL API is the primary client-facing interface for Chatto. It provides queries, mutations, and a single unified subscription over HTTP and WebSocket connections. Fields require authentication by default unless explicitly marked public in the schema. Authentication is cookie-session-based; user registration, login, password reset, email verification, and OAuth flows are REST endpoints (under `/auth/...`) rather than GraphQL mutations.
+The GraphQL API is the primary client-facing interface for Chatto. It provides queries, mutations, and a single unified subscription over HTTP and WebSocket connections. Fields require authentication by default unless explicitly marked public in the schema. Human browser authentication is cookie-session-based; cross-origin API clients use bearer tokens, and bot accounts use dedicated bot API tokens. User registration, login, password reset, email verification, and OAuth flows are REST endpoints (under `/auth/...`) rather than GraphQL mutations.
 
 The schema is modular: each feature area lives in its own `.graphqls` file and extends the root `Query` / `Mutation` / `Subscription` types. The operations below group by user-facing area, not by source file.
 
@@ -96,13 +96,15 @@ The schema is modular: each feature area lives in its own `.graphqls` file and e
 
 Note: there is no top-level `me` query — viewer-scoped state hangs off the `viewer` field (which is extended by several feature files, e.g. `threads.graphqls` adds `viewer.followedThreads`, `notifications.graphqls` adds `viewer.notifications` / `viewer.hasNotifications`).
 
-**Users** ([`query.graphqls`](../cli/internal/graph/query.graphqls), [`user_permissions.graphqls`](../cli/internal/graph/user_permissions.graphqls), [`permission_inspector.graphqls`](../cli/internal/graph/permission_inspector.graphqls))
+**Users and bots** ([`query.graphqls`](../cli/internal/graph/query.graphqls), [`bots.graphqls`](../cli/internal/graph/bots.graphqls), [`user_permissions.graphqls`](../cli/internal/graph/user_permissions.graphqls), [`permission_inspector.graphqls`](../cli/internal/graph/permission_inspector.graphqls))
 
 | Query                              | Description                                                                            |
 | ---------------------------------- | -------------------------------------------------------------------------------------- |
 | `user(userId)`                     | Authenticated lookup of a user by ID.                                                  |
 | `userByLogin(login)`               | Authenticated lookup of a user by login (returns null if not found).                   |
-| `server.members(search, limit, offset)` | Canonical paginated member directory (authenticated users).                       |
+| `server.members(search, limit, offset)` | Canonical paginated member directory (authenticated users, including bots).       |
+| `bots`                             | Bot accounts the caller owns or can manage.                                            |
+| `botTokens(botUserId)`             | Named API-token metadata for a bot the caller can manage.                              |
 | `userPermissionMatrix(userId)`     | Effective allow/deny matrix for a user (admin surface; `role.manage` + outrank gate).  |
 | `permissionExplanation(userId, …)` | Per-permission resolver explainer (self-inspection or admin).                          |
 
@@ -179,6 +181,15 @@ Admin queries are nested under a single `admin: AdminQueries` field that returns
 | `updateSettings`          | Update display preferences (timezone, time format).                                          |
 | `requestAccountDeletion`  | Issue a 15-minute confirmation token for account deletion (XSS-resistant two-step).          |
 | `deleteMyAccount`         | Permanently delete the authenticated user's account (GDPR crypto-shredding).                 |
+
+**Bot accounts** ([`bots.graphqls`](../cli/internal/graph/bots.graphqls))
+
+| Mutation         | Description                                                                                         |
+| ---------------- | --------------------------------------------------------------------------------------------------- |
+| `createBot`      | Create a self-owned bot account (`bot.create`, humans only).                                        |
+| `deleteBot`      | Delete a bot account and cascade through normal account deletion (`bot.create` owner or `bot.manage`). |
+| `createBotToken` | Create a named bot API token; returns the raw `cht_BT...` secret once.                              |
+| `revokeBotToken` | Mark a named bot API token revoked while retaining safe token metadata.                             |
 
 **Notifications, presence, push** ([`notifications.graphqls`](../cli/internal/graph/notifications.graphqls), [`notification_level.graphqls`](../cli/internal/graph/notification_level.graphqls), [`presence.graphqls`](../cli/internal/graph/presence.graphqls), [`push.graphqls`](../cli/internal/graph/push.graphqls))
 
@@ -259,7 +270,7 @@ Diagnostic fields (`admin.systemInfo`, `admin.eventLog`, `admin.eventLogEntry`, 
 
 | Type    | Resource                      | Purpose                                     |
 | ------- | ----------------------------- | ------------------------------------------- |
-| KV      | `RUNTIME_STATE`               | Persisted latest-value runtime/user state, including pending notifications, push subscriptions, auth/workflow tokens, and wrapped app DEK records |
+| KV      | `RUNTIME_STATE`               | Persisted latest-value runtime/user state, including pending notifications, push subscriptions, auth/workflow tokens, bot API-token metadata, and wrapped app DEK records |
 | KV      | `MEMORY_CACHE`                | Volatile memory-backed cache state, including presence and active voice calls; excluded from backups |
 | Objects | `ASSET_CACHE`                 | Cached resized images (optional, with TTL)  |
 | Objects | `SERVER_ASSETS`               | Asset binaries (avatars, server branding, link previews, message attachments) |
@@ -487,7 +498,7 @@ Pre-ES room data — channels and DMs alike — lived in the unified `SERVER_*` 
 | `space_membership.{spaceId}.{userId}`  | User-server membership tracking (vestigial slot) |
 | `user_preferences.{userId}`            | User display preferences (timezone, time format) |
 
-Notes: `INSTANCE` is legacy import-only. Current user/account/profile state is projected from `EVT`; legacy KV user records are imported into encrypted durable user events for login, display name, and verified email payloads using the user's active user-PII DEK epoch. Cookie-session records plus verification, registration, password-reset, account-deletion, bearer-session, and OAuth authorization-code token verifiers live in `RUNTIME_STATE` under HMAC-derived keys. Email verification claim facts use hashed email identifiers in `EVT` to preserve case-insensitive uniqueness without storing raw email values in audit events.
+Notes: `INSTANCE` is legacy import-only. Current user/account/profile state is projected from `EVT`; legacy KV user records are imported into encrypted durable user events for login, display name, and verified email payloads using the user's active user-PII DEK epoch. The current `User` projection includes `kind` (`HUMAN` / `BOT`) and, for bot accounts, `bot_owner_id`. Cookie-session records plus verification, registration, password-reset, account-deletion, bearer-session, bot-token, and OAuth authorization-code token verifiers live in `RUNTIME_STATE` under HMAC-derived keys. Email verification claim facts use hashed email identifiers in `EVT` to preserve case-insensitive uniqueness without storing raw email values in audit events.
 
 **RUNTIME_STATE auth/session keys:**
 
@@ -495,6 +506,7 @@ Notes: `INSTANCE` is legacy import-only. Current user/account/profile state is p
 | --------------------------------------------- | ----------- |
 | `cookie_session.{userId}.{sessionHmac}`       | Server-side embedded-SPA cookie session record (proto `CookieSession`) with per-key TTL and auth generation; generation `0` is the legacy no-field value and is upgraded on compatible validation |
 | `session.{hmac}`                              | Opaque bearer-token verifier with per-key TTL and auth generation |
+| `bot_token.{hmac}`                            | Named bot API-token metadata. Finite tokens use per-key TTL until `expires_at`; indefinite tokens have no TTL unless revoked or the bot is deleted. Raw `cht_BT...` secrets are not stored. |
 | `grant.{hmac}`                                | OAuth authorization-code verifier with 5-minute per-key TTL and auth generation |
 | `registration.{hmac}`                         | Email-first registration token verifier |
 | `email_verification.{hmac}`                   | Email verification token verifier |
@@ -595,11 +607,12 @@ survives restart but is not content/domain history. See
 | `password_reset.{hmac}` | Password reset token JSON. Uses per-key 1-hour TTL. |
 | `account_deletion_token.{hmac}` | Account deletion confirmation token JSON. Uses per-key 15-minute TTL. |
 | `session.{hmac}` | Opaque bearer auth token JSON with the user auth generation it was issued against. Uses per-key `auth.token_ttl` (default 90 days); successful validation refreshes the key with a new per-key TTL for sliding-window expiry. Password resets, password changes, and account deletion revoke all older bearer tokens by advancing the user's auth generation through durable user events; scans of `session.*` delete matching records as cleanup. Generation `0` means a legacy pre-`auth_generation` credential and is upgraded on validation when still compatible with the current password event. |
+| `bot_token.{hmac}` | Bot API-token JSON with bot user ID, token name, creator, created time, nullable expiry, last-used time, and revocation metadata. Finite tokens use per-key TTL until their fixed expiry; indefinite tokens have no TTL unless revoked or deleted. Validation rejects revoked records and updates last-used metadata without extending fixed expiry. |
 | `grant.{hmac}` | OAuth authorization code JSON with the user auth generation it was issued against. Uses per-key 5-minute TTL and is deleted on exchange attempt. |
 | `link_preview.{urlHash}` | Cached link preview metadata (protobuf `CachedLinkPreview`) keyed by SHA-256 of the normalized URL. Successful previews use per-key 24-hour TTL; failed fetches use per-key 1-hour TTL. |
 | `dek.{contentKeyRef}` | Wrapped purpose-scoped app DEK record (protobuf `UserDataEncryptionKey`). No TTL; shredded on account deletion. |
 
-Token HMAC keys are derived with `[core].secret_key` and the token family as a domain separator. Backups include `RUNTIME_STATE`, so sessions and pending links survive restore only when the same `core.secret_key` is kept; backup archives do not contain raw bearer tokens or raw link/code values. Backups also include wrapped app DEK records, but those records cannot decrypt content without the KEKs in `ENCRYPTION_KEYS` or an external KMS.
+Token HMAC keys are derived with `[core].secret_key` and the token family as a domain separator. Backups include `RUNTIME_STATE`, so sessions and pending links survive restore only when the same `core.secret_key` is kept; backup archives do not contain raw bearer tokens, raw bot API tokens, or raw link/code values. Backups also include wrapped app DEK records, but those records cannot decrypt content without the KEKs in `ENCRYPTION_KEYS` or an external KMS.
 
 **SERVER\_RUNTIME keys:**
 

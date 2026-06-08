@@ -29,6 +29,7 @@ const (
 	CategoryRole    PermissionCategory = "role"
 	CategoryAdmin   PermissionCategory = "admin"
 	CategoryUser    PermissionCategory = "user"
+	CategoryBot     PermissionCategory = "bot"
 )
 
 // Permission represents a permission in the permission model.
@@ -125,6 +126,14 @@ const (
 
 	// PermUserDeleteSelf allows users to delete their own account.
 	PermUserDeleteSelf Permission = "user.delete-self"
+
+	// ===== Bot Management Permissions =====
+
+	// PermBotCreate allows human users to create and manage their own bot accounts.
+	PermBotCreate Permission = "bot.create"
+
+	// PermBotManage allows human users to manage bot accounts owned by other users.
+	PermBotManage Permission = "bot.manage"
 )
 
 // PermissionMetadata provides display information and scope constraints for a permission.
@@ -167,6 +176,10 @@ var allPermissions = []PermissionMetadata{
 	// User management
 	{PermUserDeleteAny, "Delete Any User", "Delete any user's account. Subject to the rank check — actors can only delete users they outrank.", CategoryUser, []PermissionScope{ScopeServer}},
 	{PermUserDeleteSelf, "Delete Own Account", "Delete your own account", CategoryUser, []PermissionScope{ScopeServer}},
+
+	// Bot management
+	{PermBotCreate, "Create Bots", "Create bot accounts and manage bots you own", CategoryBot, []PermissionScope{ScopeServer}},
+	{PermBotManage, "Manage Bots", "Manage bot accounts owned by other users. Subject to the rank check against the bot account.", CategoryBot, []PermissionScope{ScopeServer}},
 }
 
 // permissionIndex provides fast lookup of permission metadata by permission value.

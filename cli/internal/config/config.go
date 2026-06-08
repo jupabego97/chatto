@@ -164,6 +164,7 @@ type CoreConfig struct {
 	ESBootVerify       bool          `toml:"es_boot_verify,commented" env:"CHATTO_CORE_ES_BOOT_VERIFY" comment:"Log event-sourcing import/projection verification during boot. Intended for local rollout dry-runs; scans EVT and legacy stores."`
 	ESBootVerifyStrict bool          `toml:"es_boot_verify_strict,commented" env:"CHATTO_CORE_ES_BOOT_VERIFY_STRICT" comment:"Fail boot when event-sourcing import/projection verification reports problems. Intended for live cutover and rollout gates."`
 	AuthTokenTTL       time.Duration `toml:"-" env:"-"` // Set by caller from AuthConfig.TokenTTLOrDefault()
+	BotTokenMaxTTL     time.Duration `toml:"-" env:"-"` // Set by caller from AuthConfig.BotTokenMaxTTLOrZero()
 	Replicas           int           `toml:"-" env:"-"` // Set by caller from NATSConfig.ReplicasOrDefault()
 	Limits             LimitsConfig  `toml:"-" env:"-"` // Set by caller from ChattoConfig.Limits
 	Owners             OwnersConfig  `toml:"-" env:"-"` // Set by caller from ChattoConfig.Owners — used by core to auto-promote on email verification
@@ -194,6 +195,7 @@ func (c *OIDCConfig) IsConfigured() bool {
 type AuthConfig struct {
 	DirectRegistration *bool      `toml:"direct_registration" env:"CHATTO_AUTH_DIRECT_REGISTRATION" comment:"Enable direct (email/password) registration. When false, users can only sign in via SSO providers. Default: true."`
 	TokenTTL           Duration   `toml:"token_ttl,commented" env:"CHATTO_AUTH_TOKEN_TTL" comment:"TTL for bearer auth tokens. Supports human-readable durations like '90d', '2160h'. Default: 90d."`
+	BotTokenMaxTTL     Duration   `toml:"bot_token_max_ttl,commented" env:"CHATTO_AUTH_BOT_TOKEN_MAX_TTL" comment:"Maximum TTL for bot API tokens. Set to 0 or leave unset to allow indefinite bot tokens."`
 	OIDC               OIDCConfig `toml:"oidc,commented" comment:"OIDC provider configuration (e.g. Chatto Hub)."`
 }
 
@@ -203,6 +205,10 @@ func (c *AuthConfig) TokenTTLOrDefault() time.Duration {
 		return 90 * 24 * time.Hour
 	}
 	return c.TokenTTL.Duration()
+}
+
+func (c *AuthConfig) BotTokenMaxTTLOrZero() time.Duration {
+	return c.BotTokenMaxTTL.Duration()
 }
 
 // DirectRegistrationOrDefault returns whether direct (email/password) registration is enabled (default: true).

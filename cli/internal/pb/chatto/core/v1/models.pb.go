@@ -76,6 +76,56 @@ func (RoomKind) EnumDescriptor() ([]byte, []int) {
 	return file_chatto_core_v1_models_proto_rawDescGZIP(), []int{0}
 }
 
+// UserKind distinguishes human accounts from bot accounts.
+type UserKind int32
+
+const (
+	UserKind_USER_KIND_UNSPECIFIED UserKind = 0
+	UserKind_USER_KIND_HUMAN       UserKind = 1
+	UserKind_USER_KIND_BOT         UserKind = 2
+)
+
+// Enum value maps for UserKind.
+var (
+	UserKind_name = map[int32]string{
+		0: "USER_KIND_UNSPECIFIED",
+		1: "USER_KIND_HUMAN",
+		2: "USER_KIND_BOT",
+	}
+	UserKind_value = map[string]int32{
+		"USER_KIND_UNSPECIFIED": 0,
+		"USER_KIND_HUMAN":       1,
+		"USER_KIND_BOT":         2,
+	}
+)
+
+func (x UserKind) Enum() *UserKind {
+	p := new(UserKind)
+	*p = x
+	return p
+}
+
+func (x UserKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (UserKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_chatto_core_v1_models_proto_enumTypes[1].Descriptor()
+}
+
+func (UserKind) Type() protoreflect.EnumType {
+	return &file_chatto_core_v1_models_proto_enumTypes[1]
+}
+
+func (x UserKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use UserKind.Descriptor instead.
+func (UserKind) EnumDescriptor() ([]byte, []int) {
+	return file_chatto_core_v1_models_proto_rawDescGZIP(), []int{1}
+}
+
 // UserPresenceStatus indicates a user's online presence status.
 // Named to avoid conflict with the GraphQL PresenceStatus enum.
 // Note: OFFLINE is not stored - absence of a key means offline.
@@ -112,11 +162,11 @@ func (x UserPresenceStatus) String() string {
 }
 
 func (UserPresenceStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_chatto_core_v1_models_proto_enumTypes[1].Descriptor()
+	return file_chatto_core_v1_models_proto_enumTypes[2].Descriptor()
 }
 
 func (UserPresenceStatus) Type() protoreflect.EnumType {
-	return &file_chatto_core_v1_models_proto_enumTypes[1]
+	return &file_chatto_core_v1_models_proto_enumTypes[2]
 }
 
 func (x UserPresenceStatus) Number() protoreflect.EnumNumber {
@@ -125,7 +175,7 @@ func (x UserPresenceStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use UserPresenceStatus.Descriptor instead.
 func (UserPresenceStatus) EnumDescriptor() ([]byte, []int) {
-	return file_chatto_core_v1_models_proto_rawDescGZIP(), []int{1}
+	return file_chatto_core_v1_models_proto_rawDescGZIP(), []int{2}
 }
 
 type VideoStatus int32
@@ -164,11 +214,11 @@ func (x VideoStatus) String() string {
 }
 
 func (VideoStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_chatto_core_v1_models_proto_enumTypes[2].Descriptor()
+	return file_chatto_core_v1_models_proto_enumTypes[3].Descriptor()
 }
 
 func (VideoStatus) Type() protoreflect.EnumType {
-	return &file_chatto_core_v1_models_proto_enumTypes[2]
+	return &file_chatto_core_v1_models_proto_enumTypes[3]
 }
 
 func (x VideoStatus) Number() protoreflect.EnumNumber {
@@ -177,7 +227,7 @@ func (x VideoStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use VideoStatus.Descriptor instead.
 func (VideoStatus) EnumDescriptor() ([]byte, []int) {
-	return file_chatto_core_v1_models_proto_rawDescGZIP(), []int{2}
+	return file_chatto_core_v1_models_proto_rawDescGZIP(), []int{3}
 }
 
 // Room represents a chat room on the server.
@@ -277,6 +327,8 @@ type User struct {
 	DisplayName string                 `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	// Avatar state is projected from AssetCreatedEvent/UserAvatarClearedEvent.
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"` // When the user was created (null for users created before this field was added)
+	Kind          UserKind               `protobuf:"varint,5,opt,name=kind,proto3,enum=chatto.core.v1.UserKind" json:"kind,omitempty"`
+	BotOwnerId    string                 `protobuf:"bytes,6,opt,name=bot_owner_id,json=botOwnerId,proto3" json:"bot_owner_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -337,6 +389,20 @@ func (x *User) GetCreatedAt() *timestamppb.Timestamp {
 		return x.CreatedAt
 	}
 	return nil
+}
+
+func (x *User) GetKind() UserKind {
+	if x != nil {
+		return x.Kind
+	}
+	return UserKind_USER_KIND_UNSPECIFIED
+}
+
+func (x *User) GetBotOwnerId() string {
+	if x != nil {
+		return x.BotOwnerId
+	}
+	return ""
 }
 
 // VerifiedEmail represents a single email address that has been verified
@@ -2025,13 +2091,16 @@ const file_chatto_core_v1_models_proto_rawDesc = "" +
 	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x1a\n" +
 	"\barchived\x18\x05 \x01(\bR\barchived\x12\x19\n" +
 	"\bgroup_id\x18\a \x01(\tR\agroupId\x12,\n" +
-	"\x04kind\x18\b \x01(\x0e2\x18.chatto.core.v1.RoomKindR\x04kindJ\x04\b\x02\x10\x03J\x04\b\x06\x10\aR\bspace_idR\tauto_join\"\x8a\x01\n" +
+	"\x04kind\x18\b \x01(\x0e2\x18.chatto.core.v1.RoomKindR\x04kindJ\x04\b\x02\x10\x03J\x04\b\x06\x10\aR\bspace_idR\tauto_join\"\xda\x01\n" +
 	"\x04User\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05login\x18\x02 \x01(\tR\x05login\x12!\n" +
 	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x129\n" +
 	"\n" +
-	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"b\n" +
+	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12,\n" +
+	"\x04kind\x18\x05 \x01(\x0e2\x18.chatto.core.v1.UserKindR\x04kind\x12 \n" +
+	"\fbot_owner_id\x18\x06 \x01(\tR\n" +
+	"botOwnerId\"b\n" +
 	"\rVerifiedEmail\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x12;\n" +
 	"\vverified_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
@@ -2167,7 +2236,11 @@ const file_chatto_core_v1_models_proto_rawDesc = "" +
 	"\bRoomKind\x12\x19\n" +
 	"\x15ROOM_KIND_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11ROOM_KIND_CHANNEL\x10\x01\x12\x10\n" +
-	"\fROOM_KIND_DM\x10\x02*}\n" +
+	"\fROOM_KIND_DM\x10\x02*M\n" +
+	"\bUserKind\x12\x19\n" +
+	"\x15USER_KIND_UNSPECIFIED\x10\x00\x12\x13\n" +
+	"\x0fUSER_KIND_HUMAN\x10\x01\x12\x11\n" +
+	"\rUSER_KIND_BOT\x10\x02*}\n" +
 	"\x12UserPresenceStatus\x12\x1f\n" +
 	"\x1bUSER_PRESENCE_STATUS_ONLINE\x10\x00\x12\x1d\n" +
 	"\x19USER_PRESENCE_STATUS_AWAY\x10\x01\x12'\n" +
@@ -2191,65 +2264,67 @@ func file_chatto_core_v1_models_proto_rawDescGZIP() []byte {
 	return file_chatto_core_v1_models_proto_rawDescData
 }
 
-var file_chatto_core_v1_models_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_chatto_core_v1_models_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
 var file_chatto_core_v1_models_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_chatto_core_v1_models_proto_goTypes = []any{
 	(RoomKind)(0),                 // 0: chatto.core.v1.RoomKind
-	(UserPresenceStatus)(0),       // 1: chatto.core.v1.UserPresenceStatus
-	(VideoStatus)(0),              // 2: chatto.core.v1.VideoStatus
-	(*Room)(nil),                  // 3: chatto.core.v1.Room
-	(*User)(nil),                  // 4: chatto.core.v1.User
-	(*VerifiedEmail)(nil),         // 5: chatto.core.v1.VerifiedEmail
-	(*AuditRequestMetadata)(nil),  // 6: chatto.core.v1.AuditRequestMetadata
-	(*CookieSession)(nil),         // 7: chatto.core.v1.CookieSession
-	(*DeprecatedAsset)(nil),       // 8: chatto.core.v1.DeprecatedAsset
-	(*S3Asset)(nil),               // 9: chatto.core.v1.S3Asset
-	(*NATSAsset)(nil),             // 10: chatto.core.v1.NATSAsset
-	(*AssetRecord)(nil),           // 11: chatto.core.v1.AssetRecord
-	(*RoomMembership)(nil),        // 12: chatto.core.v1.RoomMembership
-	(*Role)(nil),                  // 13: chatto.core.v1.Role
-	(*UserPresence)(nil),          // 14: chatto.core.v1.UserPresence
-	(*PresenceChange)(nil),        // 15: chatto.core.v1.PresenceChange
-	(*ThreadMetadata)(nil),        // 16: chatto.core.v1.ThreadMetadata
-	(*Attachment)(nil),            // 17: chatto.core.v1.Attachment
-	(*MessageBody)(nil),           // 18: chatto.core.v1.MessageBody
-	(*LinkPreview)(nil),           // 19: chatto.core.v1.LinkPreview
-	(*CachedLinkPreview)(nil),     // 20: chatto.core.v1.CachedLinkPreview
-	(*RoomLayout)(nil),            // 21: chatto.core.v1.RoomLayout
-	(*RoomGroup)(nil),             // 22: chatto.core.v1.RoomGroup
-	(*VideoProcessingState)(nil),  // 23: chatto.core.v1.VideoProcessingState
-	(*VideoVariant)(nil),          // 24: chatto.core.v1.VideoVariant
-	(*timestamppb.Timestamp)(nil), // 25: google.protobuf.Timestamp
+	(UserKind)(0),                 // 1: chatto.core.v1.UserKind
+	(UserPresenceStatus)(0),       // 2: chatto.core.v1.UserPresenceStatus
+	(VideoStatus)(0),              // 3: chatto.core.v1.VideoStatus
+	(*Room)(nil),                  // 4: chatto.core.v1.Room
+	(*User)(nil),                  // 5: chatto.core.v1.User
+	(*VerifiedEmail)(nil),         // 6: chatto.core.v1.VerifiedEmail
+	(*AuditRequestMetadata)(nil),  // 7: chatto.core.v1.AuditRequestMetadata
+	(*CookieSession)(nil),         // 8: chatto.core.v1.CookieSession
+	(*DeprecatedAsset)(nil),       // 9: chatto.core.v1.DeprecatedAsset
+	(*S3Asset)(nil),               // 10: chatto.core.v1.S3Asset
+	(*NATSAsset)(nil),             // 11: chatto.core.v1.NATSAsset
+	(*AssetRecord)(nil),           // 12: chatto.core.v1.AssetRecord
+	(*RoomMembership)(nil),        // 13: chatto.core.v1.RoomMembership
+	(*Role)(nil),                  // 14: chatto.core.v1.Role
+	(*UserPresence)(nil),          // 15: chatto.core.v1.UserPresence
+	(*PresenceChange)(nil),        // 16: chatto.core.v1.PresenceChange
+	(*ThreadMetadata)(nil),        // 17: chatto.core.v1.ThreadMetadata
+	(*Attachment)(nil),            // 18: chatto.core.v1.Attachment
+	(*MessageBody)(nil),           // 19: chatto.core.v1.MessageBody
+	(*LinkPreview)(nil),           // 20: chatto.core.v1.LinkPreview
+	(*CachedLinkPreview)(nil),     // 21: chatto.core.v1.CachedLinkPreview
+	(*RoomLayout)(nil),            // 22: chatto.core.v1.RoomLayout
+	(*RoomGroup)(nil),             // 23: chatto.core.v1.RoomGroup
+	(*VideoProcessingState)(nil),  // 24: chatto.core.v1.VideoProcessingState
+	(*VideoVariant)(nil),          // 25: chatto.core.v1.VideoVariant
+	(*timestamppb.Timestamp)(nil), // 26: google.protobuf.Timestamp
 }
 var file_chatto_core_v1_models_proto_depIdxs = []int32{
 	0,  // 0: chatto.core.v1.Room.kind:type_name -> chatto.core.v1.RoomKind
-	25, // 1: chatto.core.v1.User.created_at:type_name -> google.protobuf.Timestamp
-	25, // 2: chatto.core.v1.VerifiedEmail.verified_at:type_name -> google.protobuf.Timestamp
-	25, // 3: chatto.core.v1.CookieSession.created_at:type_name -> google.protobuf.Timestamp
-	25, // 4: chatto.core.v1.CookieSession.expires_at:type_name -> google.protobuf.Timestamp
-	6,  // 5: chatto.core.v1.CookieSession.request:type_name -> chatto.core.v1.AuditRequestMetadata
-	10, // 6: chatto.core.v1.DeprecatedAsset.nats:type_name -> chatto.core.v1.NATSAsset
-	9,  // 7: chatto.core.v1.DeprecatedAsset.s3:type_name -> chatto.core.v1.S3Asset
-	10, // 8: chatto.core.v1.AssetRecord.nats:type_name -> chatto.core.v1.NATSAsset
-	9,  // 9: chatto.core.v1.AssetRecord.s3:type_name -> chatto.core.v1.S3Asset
-	1,  // 10: chatto.core.v1.UserPresence.status:type_name -> chatto.core.v1.UserPresenceStatus
-	25, // 11: chatto.core.v1.ThreadMetadata.last_reply_at:type_name -> google.protobuf.Timestamp
-	8,  // 12: chatto.core.v1.Attachment.storage:type_name -> chatto.core.v1.DeprecatedAsset
-	25, // 13: chatto.core.v1.MessageBody.created_at:type_name -> google.protobuf.Timestamp
-	25, // 14: chatto.core.v1.MessageBody.updated_at:type_name -> google.protobuf.Timestamp
-	17, // 15: chatto.core.v1.MessageBody.attachments:type_name -> chatto.core.v1.Attachment
-	19, // 16: chatto.core.v1.MessageBody.link_preview:type_name -> chatto.core.v1.LinkPreview
-	19, // 17: chatto.core.v1.CachedLinkPreview.preview:type_name -> chatto.core.v1.LinkPreview
-	22, // 18: chatto.core.v1.RoomLayout.legacy_sections:type_name -> chatto.core.v1.RoomGroup
-	2,  // 19: chatto.core.v1.VideoProcessingState.status:type_name -> chatto.core.v1.VideoStatus
-	24, // 20: chatto.core.v1.VideoProcessingState.variants:type_name -> chatto.core.v1.VideoVariant
-	17, // 21: chatto.core.v1.VideoProcessingState.thumbnail_attachment:type_name -> chatto.core.v1.Attachment
-	17, // 22: chatto.core.v1.VideoVariant.attachment:type_name -> chatto.core.v1.Attachment
-	23, // [23:23] is the sub-list for method output_type
-	23, // [23:23] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	26, // 1: chatto.core.v1.User.created_at:type_name -> google.protobuf.Timestamp
+	1,  // 2: chatto.core.v1.User.kind:type_name -> chatto.core.v1.UserKind
+	26, // 3: chatto.core.v1.VerifiedEmail.verified_at:type_name -> google.protobuf.Timestamp
+	26, // 4: chatto.core.v1.CookieSession.created_at:type_name -> google.protobuf.Timestamp
+	26, // 5: chatto.core.v1.CookieSession.expires_at:type_name -> google.protobuf.Timestamp
+	7,  // 6: chatto.core.v1.CookieSession.request:type_name -> chatto.core.v1.AuditRequestMetadata
+	11, // 7: chatto.core.v1.DeprecatedAsset.nats:type_name -> chatto.core.v1.NATSAsset
+	10, // 8: chatto.core.v1.DeprecatedAsset.s3:type_name -> chatto.core.v1.S3Asset
+	11, // 9: chatto.core.v1.AssetRecord.nats:type_name -> chatto.core.v1.NATSAsset
+	10, // 10: chatto.core.v1.AssetRecord.s3:type_name -> chatto.core.v1.S3Asset
+	2,  // 11: chatto.core.v1.UserPresence.status:type_name -> chatto.core.v1.UserPresenceStatus
+	26, // 12: chatto.core.v1.ThreadMetadata.last_reply_at:type_name -> google.protobuf.Timestamp
+	9,  // 13: chatto.core.v1.Attachment.storage:type_name -> chatto.core.v1.DeprecatedAsset
+	26, // 14: chatto.core.v1.MessageBody.created_at:type_name -> google.protobuf.Timestamp
+	26, // 15: chatto.core.v1.MessageBody.updated_at:type_name -> google.protobuf.Timestamp
+	18, // 16: chatto.core.v1.MessageBody.attachments:type_name -> chatto.core.v1.Attachment
+	20, // 17: chatto.core.v1.MessageBody.link_preview:type_name -> chatto.core.v1.LinkPreview
+	20, // 18: chatto.core.v1.CachedLinkPreview.preview:type_name -> chatto.core.v1.LinkPreview
+	23, // 19: chatto.core.v1.RoomLayout.legacy_sections:type_name -> chatto.core.v1.RoomGroup
+	3,  // 20: chatto.core.v1.VideoProcessingState.status:type_name -> chatto.core.v1.VideoStatus
+	25, // 21: chatto.core.v1.VideoProcessingState.variants:type_name -> chatto.core.v1.VideoVariant
+	18, // 22: chatto.core.v1.VideoProcessingState.thumbnail_attachment:type_name -> chatto.core.v1.Attachment
+	18, // 23: chatto.core.v1.VideoVariant.attachment:type_name -> chatto.core.v1.Attachment
+	24, // [24:24] is the sub-list for method output_type
+	24, // [24:24] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_chatto_core_v1_models_proto_init() }
@@ -2272,7 +2347,7 @@ func file_chatto_core_v1_models_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_chatto_core_v1_models_proto_rawDesc), len(file_chatto_core_v1_models_proto_rawDesc)),
-			NumEnums:      3,
+			NumEnums:      4,
 			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   0,

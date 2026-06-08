@@ -276,6 +276,14 @@
       });
     }
 
+    if (serverPerms.current.canCreateBots || serverPerms.current.canManageBots) {
+      items.push({
+        href: resolve('/chat/[serverId]/server-admin/bots', { serverId: serverSegment }),
+        label: 'Bots',
+        icon: 'iconify mdi--robot'
+      });
+    }
+
     if (spaceData.canManageRooms) {
       items.push({
         href: resolve('/chat/[serverId]/server-admin/rooms', { serverId: serverSegment }),

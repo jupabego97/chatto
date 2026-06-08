@@ -79,6 +79,7 @@ func runResetRBAC(cmd *cobra.Command, args []string) {
 	defer cancel()
 
 	cfg.Core.AuthTokenTTL = cfg.Auth.TokenTTLOrDefault()
+	cfg.Core.BotTokenMaxTTL = cfg.Auth.BotTokenMaxTTLOrZero()
 	cfg.Core.Replicas = cfg.NATS.ReplicasOrDefault()
 	cfg.Core.Limits = cfg.Limits
 	cfg.Core.Owners = cfg.Owners

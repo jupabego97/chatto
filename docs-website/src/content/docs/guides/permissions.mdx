@@ -41,7 +41,7 @@ There is no "skip the rules" shortcut. Owners pass permission checks because the
 
 ## Permissions
 
-Permissions are named capabilities like `message.post`, `room.manage`, `admin.view-users`. They are grouped into categories (room, message, role, admin, user). Each one is either granted or denied to a role (or a specific user) at server scope, or — for room-relevant permissions — at a specific room.
+Permissions are named capabilities like `message.post`, `room.manage`, `admin.view-users`. They are grouped into categories (room, message, role, admin, user, bot). Each one is either granted or denied to a role (or a specific user) at server scope, or — for room-relevant permissions — at a specific room.
 
 A few worth knowing:
 
@@ -54,6 +54,8 @@ A few worth knowing:
 | `message.manage`   | Moderate other users' messages (rank-aware)                   |
 | `role.manage`      | Create, edit, or delete roles                                 |
 | `role.assign`      | Assign roles to users (administer them)                       |
+| `bot.create`       | Create and manage your own bot accounts                       |
+| `bot.manage`       | Manage other users' bot accounts and tokens (rank-aware)      |
 | `user.delete-any`  | Delete any user's account (rank-aware; admin power)           |
 | `user.delete-self` | Delete your own account                                       |
 
@@ -125,6 +127,19 @@ What does separate them is rank, and rank applies to two things:
 - **Self-lockout prevention.** Owners cannot revoke their own owner role through the API; if you need to remove an owner, another owner has to do it, or the operator does it via `chatto reset rbac`.
 
 If you set a user-level deny on a permission for a specific user, that deny applies to **everyone**, including owners. There's no permission grant that sidesteps user-level overrides. (This is by design — it gives you an off-switch for compromised accounts at any rank.)
+
+## Bot accounts
+
+Bot accounts are users for permission purposes. They can be assigned roles, receive user-level overrides, post messages, react, join rooms, and appear in member lists according to the same rules as humans. The UI badges them as bots and links them to their human owner.
+
+Creating and managing bots is gated separately:
+
+| Permission   | Meaning |
+| ------------ | ------- |
+| `bot.create` | Create self-owned bot accounts and manage/delete bots you own |
+| `bot.manage` | Manage/delete other users' bot accounts and tokens, as long as you outrank the bot account itself |
+
+Bots cannot create or manage bot accounts, even if they have those permissions. This keeps automation from creating more automation. When you give a bot a powerful role, you are also trusting its owner, because the owner can create and revoke that bot's API tokens.
 
 ## DM privacy
 

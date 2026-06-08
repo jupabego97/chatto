@@ -39,6 +39,7 @@ type ResolverRoot interface {
 	AssetProcessingStartedEvent() AssetProcessingStartedEventResolver
 	AssetProcessingSucceededEvent() AssetProcessingSucceededEventResolver
 	Attachment() AttachmentResolver
+	BotToken() BotTokenResolver
 	DMMessageNotificationItem() DMMessageNotificationItemResolver
 	Event() EventResolver
 	FollowedThread() FollowedThreadResolver
@@ -157,6 +158,19 @@ type ComplexityRoot struct {
 		Width             func(childComplexity int) int
 	}
 
+	BotToken struct {
+		Bot          func(childComplexity int) int
+		CreatedAt    func(childComplexity int) int
+		CreatedBy    func(childComplexity int) int
+		ExpiresAt    func(childComplexity int) int
+		ID           func(childComplexity int) int
+		LastUsedAt   func(childComplexity int) int
+		Name         func(childComplexity int) int
+		RevokeReason func(childComplexity int) int
+		RevokedAt    func(childComplexity int) int
+		RevokedBy    func(childComplexity int) int
+	}
+
 	CallParticipant struct {
 		AvatarURL   func(childComplexity int) int
 		DisplayName func(childComplexity int) int
@@ -180,6 +194,11 @@ type ComplexityRoot struct {
 		ServerID   func(childComplexity int) int
 		ServerName func(childComplexity int) int
 		Version    func(childComplexity int) int
+	}
+
+	CreatedBotToken struct {
+		Secret func(childComplexity int) int
+		Token  func(childComplexity int) int
 	}
 
 	DMMessageNotificationItem struct {
@@ -320,11 +339,14 @@ type ComplexityRoot struct {
 		ClearPermissionState       func(childComplexity int, input model.ClearPermissionStateInput) int
 		ClearRoomPermission        func(childComplexity int, input model.ClearRoomPermissionInput) int
 		ClearUserPermissionState   func(childComplexity int, input model.ClearUserPermissionStateInput) int
+		CreateBot                  func(childComplexity int, input model.CreateBotInput) int
+		CreateBotToken             func(childComplexity int, input model.CreateBotTokenInput) int
 		CreateRole                 func(childComplexity int, input model.CreateRoleInput) int
 		CreateRoom                 func(childComplexity int, input model.CreateRoomInput) int
 		CreateRoomGroup            func(childComplexity int, input model.CreateRoomGroupInput) int
 		DeleteAttachment           func(childComplexity int, input model.DeleteAttachmentInput) int
 		DeleteAvatar               func(childComplexity int, input model.DeleteAvatarInput) int
+		DeleteBot                  func(childComplexity int, botUserID string) int
 		DeleteLinkPreview          func(childComplexity int, input model.DeleteLinkPreviewInput) int
 		DeleteMessage              func(childComplexity int, input model.DeleteMessageInput) int
 		DeleteMyAccount            func(childComplexity int, input model.DeleteMyAccountInput) int
@@ -355,6 +377,7 @@ type ComplexityRoot struct {
 		ReorderRoomGroups          func(childComplexity int, input model.ReorderRoomGroupsInput) int
 		ReorderRoomsInGroup        func(childComplexity int, input model.ReorderRoomsInGroupInput) int
 		RequestAccountDeletion     func(childComplexity int) int
+		RevokeBotToken             func(childComplexity int, input model.RevokeBotTokenInput) int
 		RevokePermission           func(childComplexity int, input model.RevokePermissionInput) int
 		RevokeRole                 func(childComplexity int, input model.RevokeRoleInput) int
 		SendTypingIndicator        func(childComplexity int, input model.SendTypingIndicatorInput) int
@@ -491,6 +514,8 @@ type ComplexityRoot struct {
 	Query struct {
 		ActiveCallRoomIds     func(childComplexity int) int
 		Admin                 func(childComplexity int) int
+		BotTokens             func(childComplexity int, botUserID string) int
+		Bots                  func(childComplexity int) int
 		LinkPreview           func(childComplexity int, url string) int
 		PermissionExplanation func(childComplexity int, userID string, roomID *string) int
 		RolePermissionMatrix  func(childComplexity int, roleName string) int
@@ -819,10 +844,13 @@ type ComplexityRoot struct {
 
 	User struct {
 		AvatarURL                   func(childComplexity int, width *int32, height *int32, fit *model.FitMode) int
+		BotOwner                    func(childComplexity int) int
 		CreatedAt                   func(childComplexity int) int
 		DisplayName                 func(childComplexity int) int
 		HasVerifiedEmail            func(childComplexity int) int
 		Id                          func(childComplexity int) int
+		IsBot                       func(childComplexity int) int
+		Kind                        func(childComplexity int) int
 		LastLoginChange             func(childComplexity int) int
 		Login                       func(childComplexity int) int
 		PresenceStatus              func(childComplexity int) int
@@ -924,6 +952,8 @@ type ComplexityRoot struct {
 		CanAdminViewRoles        func(childComplexity int) int
 		CanAdminViewSystem       func(childComplexity int) int
 		CanAdminViewUsers        func(childComplexity int) int
+		CanCreateBots            func(childComplexity int) int
+		CanManageBots            func(childComplexity int) int
 		CanStartDMs              func(childComplexity int) int
 		CanViewAdmin             func(childComplexity int) int
 		FollowedThreads          func(childComplexity int, limit *int32, offset *int32) int
@@ -983,6 +1013,12 @@ type AttachmentResolver interface {
 	ThumbnailURL(ctx context.Context, obj *corev1.Attachment, width *int32, height *int32, fit *model.FitMode) (*string, error)
 	ThumbnailAssetURL(ctx context.Context, obj *corev1.Attachment, width *int32, height *int32, fit *model.FitMode) (*model.AssetURL, error)
 	VideoProcessing(ctx context.Context, obj *corev1.Attachment) (*model.VideoProcessing, error)
+}
+type BotTokenResolver interface {
+	Bot(ctx context.Context, obj *model.BotToken) (*corev1.User, error)
+	CreatedBy(ctx context.Context, obj *model.BotToken) (*corev1.User, error)
+
+	RevokedBy(ctx context.Context, obj *model.BotToken) (*corev1.User, error)
 }
 type DMMessageNotificationItemResolver interface {
 	Actor(ctx context.Context, obj *model.DMMessageNotificationItem) (*corev1.User, error)
@@ -1075,6 +1111,10 @@ type MutationResolver interface {
 	DeleteMyAccount(ctx context.Context, input model.DeleteMyAccountInput) (bool, error)
 	UpdateServerConfig(ctx context.Context, input model.UpdateServerConfigInput) (*model.ServerProfile, error)
 	Admin(ctx context.Context) (*model.AdminMutations, error)
+	CreateBot(ctx context.Context, input model.CreateBotInput) (*corev1.User, error)
+	DeleteBot(ctx context.Context, botUserID string) (bool, error)
+	CreateBotToken(ctx context.Context, input model.CreateBotTokenInput) (*model.CreatedBotToken, error)
+	RevokeBotToken(ctx context.Context, input model.RevokeBotTokenInput) (bool, error)
 	StartDm(ctx context.Context, input model.StartDMInput) (*corev1.Room, error)
 	SetServerNotificationLevel(ctx context.Context, input model.SetServerNotificationLevelInput) (*model.ViewerNotificationPreference, error)
 	SetRoomNotificationLevel(ctx context.Context, input model.SetRoomNotificationLevelInput) (*model.ViewerNotificationPreference, error)
@@ -1127,6 +1167,8 @@ type QueryResolver interface {
 	User(ctx context.Context, userID string) (*corev1.User, error)
 	UserByLogin(ctx context.Context, login string) (*corev1.User, error)
 	Admin(ctx context.Context) (*model.AdminQueries, error)
+	Bots(ctx context.Context) ([]*corev1.User, error)
+	BotTokens(ctx context.Context, botUserID string) ([]*model.BotToken, error)
 	LinkPreview(ctx context.Context, url string) (*corev1.LinkPreview, error)
 	PermissionExplanation(ctx context.Context, userID string, roomID *string) ([]*model.PermissionExplanation, error)
 	RolePermissionMatrix(ctx context.Context, roleName string) (*model.RolePermissionMatrix, error)
@@ -1236,6 +1278,9 @@ type UserResolver interface {
 	Roles(ctx context.Context, obj *corev1.User) ([]string, error)
 	ViewerCanDeleteAccount(ctx context.Context, obj *corev1.User) (bool, error)
 	LastLoginChange(ctx context.Context, obj *corev1.User) (*timestamppb.Timestamp, error)
+	Kind(ctx context.Context, obj *corev1.User) (model.UserKind, error)
+	IsBot(ctx context.Context, obj *corev1.User) (bool, error)
+	BotOwner(ctx context.Context, obj *corev1.User) (*corev1.User, error)
 	RoomNotificationPreferences(ctx context.Context, obj *corev1.User) ([]*model.RoomNotificationPreferenceItem, error)
 	PresenceStatus(ctx context.Context, obj *corev1.User) (model.PresenceStatus, error)
 	Settings(ctx context.Context, obj *corev1.User) (*model.UserSettings, error)
@@ -1261,6 +1306,8 @@ type ViewerResolver interface {
 	CanAdminManageRoles(ctx context.Context, obj *model.Viewer) (bool, error)
 	CanAdminViewSystem(ctx context.Context, obj *model.Viewer) (bool, error)
 	CanAdminViewAudit(ctx context.Context, obj *model.Viewer) (bool, error)
+	CanCreateBots(ctx context.Context, obj *model.Viewer) (bool, error)
+	CanManageBots(ctx context.Context, obj *model.Viewer) (bool, error)
 	Notifications(ctx context.Context, obj *model.Viewer, limit *int32, offset *int32) (*model.NotificationsConnection, error)
 	HasNotifications(ctx context.Context, obj *model.Viewer) (bool, error)
 	FollowedThreads(ctx context.Context, obj *model.Viewer, limit *int32, offset *int32) (*model.FollowedThreadsConnection, error)
@@ -1646,6 +1693,67 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Attachment.Width(childComplexity), true
 
+	case "BotToken.bot":
+		if e.ComplexityRoot.BotToken.Bot == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BotToken.Bot(childComplexity), true
+	case "BotToken.createdAt":
+		if e.ComplexityRoot.BotToken.CreatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BotToken.CreatedAt(childComplexity), true
+	case "BotToken.createdBy":
+		if e.ComplexityRoot.BotToken.CreatedBy == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BotToken.CreatedBy(childComplexity), true
+	case "BotToken.expiresAt":
+		if e.ComplexityRoot.BotToken.ExpiresAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BotToken.ExpiresAt(childComplexity), true
+	case "BotToken.id":
+		if e.ComplexityRoot.BotToken.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BotToken.ID(childComplexity), true
+	case "BotToken.lastUsedAt":
+		if e.ComplexityRoot.BotToken.LastUsedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BotToken.LastUsedAt(childComplexity), true
+	case "BotToken.name":
+		if e.ComplexityRoot.BotToken.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BotToken.Name(childComplexity), true
+	case "BotToken.revokeReason":
+		if e.ComplexityRoot.BotToken.RevokeReason == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BotToken.RevokeReason(childComplexity), true
+	case "BotToken.revokedAt":
+		if e.ComplexityRoot.BotToken.RevokedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BotToken.RevokedAt(childComplexity), true
+	case "BotToken.revokedBy":
+		if e.ComplexityRoot.BotToken.RevokedBy == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BotToken.RevokedBy(childComplexity), true
+
 	case "CallParticipant.avatarUrl":
 		if e.ComplexityRoot.CallParticipant.AvatarURL == nil {
 			break
@@ -1727,6 +1835,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ConnectionInfo.Version(childComplexity), true
+
+	case "CreatedBotToken.secret":
+		if e.ComplexityRoot.CreatedBotToken.Secret == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CreatedBotToken.Secret(childComplexity), true
+	case "CreatedBotToken.token":
+		if e.ComplexityRoot.CreatedBotToken.Token == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CreatedBotToken.Token(childComplexity), true
 
 	case "DMMessageNotificationItem.actor":
 		if e.ComplexityRoot.DMMessageNotificationItem.Actor == nil {
@@ -2328,6 +2449,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ClearUserPermissionState(childComplexity, args["input"].(model.ClearUserPermissionStateInput)), true
+	case "Mutation.createBot":
+		if e.ComplexityRoot.Mutation.CreateBot == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_createBot_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CreateBot(childComplexity, args["input"].(model.CreateBotInput)), true
+	case "Mutation.createBotToken":
+		if e.ComplexityRoot.Mutation.CreateBotToken == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_createBotToken_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CreateBotToken(childComplexity, args["input"].(model.CreateBotTokenInput)), true
 	case "Mutation.createRole":
 		if e.ComplexityRoot.Mutation.CreateRole == nil {
 			break
@@ -2383,6 +2526,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.DeleteAvatar(childComplexity, args["input"].(model.DeleteAvatarInput)), true
+	case "Mutation.deleteBot":
+		if e.ComplexityRoot.Mutation.DeleteBot == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_deleteBot_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.DeleteBot(childComplexity, args["botUserId"].(string)), true
 	case "Mutation.deleteLinkPreview":
 		if e.ComplexityRoot.Mutation.DeleteLinkPreview == nil {
 			break
@@ -2693,6 +2847,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.RequestAccountDeletion(childComplexity), true
+	case "Mutation.revokeBotToken":
+		if e.ComplexityRoot.Mutation.RevokeBotToken == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_revokeBotToken_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.RevokeBotToken(childComplexity, args["input"].(model.RevokeBotTokenInput)), true
 	case "Mutation.revokePermission":
 		if e.ComplexityRoot.Mutation.RevokePermission == nil {
 			break
@@ -3376,6 +3541,23 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Admin(childComplexity), true
+	case "Query.botTokens":
+		if e.ComplexityRoot.Query.BotTokens == nil {
+			break
+		}
+
+		args, err := ec.field_Query_botTokens_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.BotTokens(childComplexity, args["botUserId"].(string)), true
+	case "Query.bots":
+		if e.ComplexityRoot.Query.Bots == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.Bots(childComplexity), true
 
 	case "Query.linkPreview":
 		if e.ComplexityRoot.Query.LinkPreview == nil {
@@ -4758,6 +4940,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.User.AvatarURL(childComplexity, args["width"].(*int32), args["height"].(*int32), args["fit"].(*model.FitMode)), true
+	case "User.botOwner":
+		if e.ComplexityRoot.User.BotOwner == nil {
+			break
+		}
+
+		return e.ComplexityRoot.User.BotOwner(childComplexity), true
 	case "User.createdAt":
 		if e.ComplexityRoot.User.CreatedAt == nil {
 			break
@@ -4782,6 +4970,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.User.Id(childComplexity), true
+	case "User.isBot":
+		if e.ComplexityRoot.User.IsBot == nil {
+			break
+		}
+
+		return e.ComplexityRoot.User.IsBot(childComplexity), true
+	case "User.kind":
+		if e.ComplexityRoot.User.Kind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.User.Kind(childComplexity), true
 	case "User.lastLoginChange":
 		if e.ComplexityRoot.User.LastLoginChange == nil {
 			break
@@ -5155,6 +5355,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Viewer.CanAdminViewUsers(childComplexity), true
+	case "Viewer.canCreateBots":
+		if e.ComplexityRoot.Viewer.CanCreateBots == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Viewer.CanCreateBots(childComplexity), true
+	case "Viewer.canManageBots":
+		if e.ComplexityRoot.Viewer.CanManageBots == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Viewer.CanManageBots(childComplexity), true
 	case "Viewer.canStartDMs":
 		if e.ComplexityRoot.Viewer.CanStartDMs == nil {
 			break
@@ -5244,6 +5456,8 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputClearRoomPermissionInput,
 		ec.unmarshalInputClearUserPermissionStateInput,
 		ec.unmarshalInputClearUsernameCooldownInput,
+		ec.unmarshalInputCreateBotInput,
+		ec.unmarshalInputCreateBotTokenInput,
 		ec.unmarshalInputCreateRoleInput,
 		ec.unmarshalInputCreateRoomGroupInput,
 		ec.unmarshalInputCreateRoomInput,
@@ -5276,6 +5490,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputReorderRolesInput,
 		ec.unmarshalInputReorderRoomGroupsInput,
 		ec.unmarshalInputReorderRoomsInGroupInput,
+		ec.unmarshalInputRevokeBotTokenInput,
 		ec.unmarshalInputRevokePermissionInput,
 		ec.unmarshalInputRevokeRoleInput,
 		ec.unmarshalInputSendTypingIndicatorInput,
@@ -5388,7 +5603,7 @@ func newExecutionContext(
 	}
 }
 
-//go:embed "admin.graphqls" "directives.graphqls" "dm.graphqls" "events.graphqls" "linkpreview.graphqls" "mutation.graphqls" "notification_level.graphqls" "notifications.graphqls" "permission_inspector.graphqls" "presence.graphqls" "push.graphqls" "query.graphqls" "role_permission_matrix.graphqls" "role_permissions.graphqls" "room.graphqls" "room_groups.graphqls" "room_layout.graphqls" "server.graphqls" "server_members.graphqls" "server_rbac.graphqls" "server_rbac_extra.graphqls" "subscription.graphqls" "threads.graphqls" "user.graphqls" "user_permissions.graphqls" "user_preferences.graphqls" "voice.graphqls"
+//go:embed "admin.graphqls" "bots.graphqls" "directives.graphqls" "dm.graphqls" "events.graphqls" "linkpreview.graphqls" "mutation.graphqls" "notification_level.graphqls" "notifications.graphqls" "permission_inspector.graphqls" "presence.graphqls" "push.graphqls" "query.graphqls" "role_permission_matrix.graphqls" "role_permissions.graphqls" "room.graphqls" "room_groups.graphqls" "room_layout.graphqls" "server.graphqls" "server_members.graphqls" "server_rbac.graphqls" "server_rbac_extra.graphqls" "subscription.graphqls" "threads.graphqls" "user.graphqls" "user_permissions.graphqls" "user_preferences.graphqls" "voice.graphqls"
 var sourcesFS embed.FS
 
 func sourceData(filename string) string {
@@ -5401,6 +5616,7 @@ func sourceData(filename string) string {
 
 var sources = []*ast.Source{
 	{Name: "admin.graphqls", Input: sourceData("admin.graphqls"), BuiltIn: false},
+	{Name: "bots.graphqls", Input: sourceData("bots.graphqls"), BuiltIn: false},
 	{Name: "directives.graphqls", Input: sourceData("directives.graphqls"), BuiltIn: false},
 	{Name: "dm.graphqls", Input: sourceData("dm.graphqls"), BuiltIn: false},
 	{Name: "events.graphqls", Input: sourceData("events.graphqls"), BuiltIn: false},
@@ -5546,6 +5762,32 @@ func (ec *executionContext) childFields_Attachment(ctx context.Context, field gr
 	return nil, fmt.Errorf("no field named %q was found under type Attachment", field.Name)
 }
 
+func (ec *executionContext) childFields_BotToken(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_BotToken_id(ctx, field)
+	case "name":
+		return ec.fieldContext_BotToken_name(ctx, field)
+	case "bot":
+		return ec.fieldContext_BotToken_bot(ctx, field)
+	case "createdBy":
+		return ec.fieldContext_BotToken_createdBy(ctx, field)
+	case "createdAt":
+		return ec.fieldContext_BotToken_createdAt(ctx, field)
+	case "expiresAt":
+		return ec.fieldContext_BotToken_expiresAt(ctx, field)
+	case "lastUsedAt":
+		return ec.fieldContext_BotToken_lastUsedAt(ctx, field)
+	case "revokedAt":
+		return ec.fieldContext_BotToken_revokedAt(ctx, field)
+	case "revokedBy":
+		return ec.fieldContext_BotToken_revokedBy(ctx, field)
+	case "revokeReason":
+		return ec.fieldContext_BotToken_revokeReason(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type BotToken", field.Name)
+}
+
 func (ec *executionContext) childFields_CallParticipant(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "userId":
@@ -5578,6 +5820,16 @@ func (ec *executionContext) childFields_ConnectionInfo(ctx context.Context, fiel
 		return ec.fieldContext_ConnectionInfo_rtt(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type ConnectionInfo", field.Name)
+}
+
+func (ec *executionContext) childFields_CreatedBotToken(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "token":
+		return ec.fieldContext_CreatedBotToken_token(ctx, field)
+	case "secret":
+		return ec.fieldContext_CreatedBotToken_secret(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type CreatedBotToken", field.Name)
 }
 
 func (ec *executionContext) childFields_Event(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -6312,6 +6564,12 @@ func (ec *executionContext) childFields_User(ctx context.Context, field graphql.
 		return ec.fieldContext_User_viewerCanDeleteAccount(ctx, field)
 	case "lastLoginChange":
 		return ec.fieldContext_User_lastLoginChange(ctx, field)
+	case "kind":
+		return ec.fieldContext_User_kind(ctx, field)
+	case "isBot":
+		return ec.fieldContext_User_isBot(ctx, field)
+	case "botOwner":
+		return ec.fieldContext_User_botOwner(ctx, field)
 	case "roomNotificationPreferences":
 		return ec.fieldContext_User_roomNotificationPreferences(ctx, field)
 	case "presenceStatus":
@@ -6436,6 +6694,10 @@ func (ec *executionContext) childFields_Viewer(ctx context.Context, field graphq
 		return ec.fieldContext_Viewer_canAdminViewSystem(ctx, field)
 	case "canAdminViewAudit":
 		return ec.fieldContext_Viewer_canAdminViewAudit(ctx, field)
+	case "canCreateBots":
+		return ec.fieldContext_Viewer_canCreateBots(ctx, field)
+	case "canManageBots":
+		return ec.fieldContext_Viewer_canManageBots(ctx, field)
 	case "notifications":
 		return ec.fieldContext_Viewer_notifications(ctx, field)
 	case "hasNotifications":
@@ -7010,6 +7272,34 @@ func (ec *executionContext) field_Mutation_clearUserPermissionState_args(ctx con
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_createBotToken_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.CreateBotTokenInput, error) {
+			return ec.unmarshalNCreateBotTokenInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐCreateBotTokenInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_createBot_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.CreateBotInput, error) {
+			return ec.unmarshalNCreateBotInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐCreateBotInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_createRole_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -7077,6 +7367,20 @@ func (ec *executionContext) field_Mutation_deleteAvatar_args(ctx context.Context
 		return nil, err
 	}
 	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_deleteBot_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "botUserId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["botUserId"] = arg0
 	return args, nil
 }
 
@@ -7444,6 +7748,20 @@ func (ec *executionContext) field_Mutation_reorderRoomsInGroup_args(ctx context.
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_revokeBotToken_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.RevokeBotTokenInput, error) {
+			return ec.unmarshalNRevokeBotTokenInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRevokeBotTokenInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_revokePermission_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -7749,6 +8067,20 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 		return nil, err
 	}
 	args["name"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_botTokens_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "botUserId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["botUserId"] = arg0
 	return args, nil
 }
 
@@ -9725,6 +10057,263 @@ func (ec *executionContext) fieldContext_Attachment_videoProcessing(_ context.Co
 	return fc, nil
 }
 
+func (ec *executionContext) _BotToken_id(ctx context.Context, field graphql.CollectedField, obj *model.BotToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BotToken_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BotToken_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BotToken", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _BotToken_name(ctx context.Context, field graphql.CollectedField, obj *model.BotToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BotToken_name(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BotToken_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BotToken", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _BotToken_bot(ctx context.Context, field graphql.CollectedField, obj *model.BotToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BotToken_bot(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.BotToken().Bot(ctx, obj)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *corev1.User) graphql.Marshaler {
+			return ec.marshalNUser2ᚖhmansᚗdeᚋchattoᚋinternalᚋpbᚋchattoᚋcoreᚋv1ᚐUser(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BotToken_bot(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BotToken",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_User(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _BotToken_createdBy(ctx context.Context, field graphql.CollectedField, obj *model.BotToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BotToken_createdBy(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.BotToken().CreatedBy(ctx, obj)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *corev1.User) graphql.Marshaler {
+			return ec.marshalOUser2ᚖhmansᚗdeᚋchattoᚋinternalᚋpbᚋchattoᚋcoreᚋv1ᚐUser(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_BotToken_createdBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BotToken",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_User(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _BotToken_createdAt(ctx context.Context, field graphql.CollectedField, obj *model.BotToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BotToken_createdAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *timestamppb.Timestamp) graphql.Marshaler {
+			return ec.marshalNTime2ᚖgoogleᚗgolangᚗorgᚋprotobufᚋtypesᚋknownᚋtimestamppbᚐTimestamp(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BotToken_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BotToken", field, false, false, errors.New("field of type Time does not have child fields"))
+}
+
+func (ec *executionContext) _BotToken_expiresAt(ctx context.Context, field graphql.CollectedField, obj *model.BotToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BotToken_expiresAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ExpiresAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *timestamppb.Timestamp) graphql.Marshaler {
+			return ec.marshalOTime2ᚖgoogleᚗgolangᚗorgᚋprotobufᚋtypesᚋknownᚋtimestamppbᚐTimestamp(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_BotToken_expiresAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BotToken", field, false, false, errors.New("field of type Time does not have child fields"))
+}
+
+func (ec *executionContext) _BotToken_lastUsedAt(ctx context.Context, field graphql.CollectedField, obj *model.BotToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BotToken_lastUsedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.LastUsedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *timestamppb.Timestamp) graphql.Marshaler {
+			return ec.marshalOTime2ᚖgoogleᚗgolangᚗorgᚋprotobufᚋtypesᚋknownᚋtimestamppbᚐTimestamp(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_BotToken_lastUsedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BotToken", field, false, false, errors.New("field of type Time does not have child fields"))
+}
+
+func (ec *executionContext) _BotToken_revokedAt(ctx context.Context, field graphql.CollectedField, obj *model.BotToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BotToken_revokedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RevokedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *timestamppb.Timestamp) graphql.Marshaler {
+			return ec.marshalOTime2ᚖgoogleᚗgolangᚗorgᚋprotobufᚋtypesᚋknownᚋtimestamppbᚐTimestamp(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_BotToken_revokedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BotToken", field, false, false, errors.New("field of type Time does not have child fields"))
+}
+
+func (ec *executionContext) _BotToken_revokedBy(ctx context.Context, field graphql.CollectedField, obj *model.BotToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BotToken_revokedBy(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.BotToken().RevokedBy(ctx, obj)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *corev1.User) graphql.Marshaler {
+			return ec.marshalOUser2ᚖhmansᚗdeᚋchattoᚋinternalᚋpbᚋchattoᚋcoreᚋv1ᚐUser(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_BotToken_revokedBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BotToken",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_User(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _BotToken_revokeReason(ctx context.Context, field graphql.CollectedField, obj *model.BotToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BotToken_revokeReason(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RevokeReason, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_BotToken_revokeReason(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BotToken", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
 func (ec *executionContext) _CallParticipant_userId(ctx context.Context, field graphql.CollectedField, obj *model.CallParticipant) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -10022,6 +10611,61 @@ func (ec *executionContext) _ConnectionInfo_rtt(ctx context.Context, field graph
 }
 func (ec *executionContext) fieldContext_ConnectionInfo_rtt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("ConnectionInfo", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _CreatedBotToken_token(ctx context.Context, field graphql.CollectedField, obj *model.CreatedBotToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CreatedBotToken_token(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Token, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.BotToken) graphql.Marshaler {
+			return ec.marshalNBotToken2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐBotToken(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CreatedBotToken_token(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CreatedBotToken",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_BotToken(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CreatedBotToken_secret(ctx context.Context, field graphql.CollectedField, obj *model.CreatedBotToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CreatedBotToken_secret(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Secret, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CreatedBotToken_secret(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CreatedBotToken", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
 func (ec *executionContext) _DMMessageNotificationItem_id(ctx context.Context, field graphql.CollectedField, obj *model.DMMessageNotificationItem) (ret graphql.Marshaler) {
@@ -13366,6 +14010,182 @@ func (ec *executionContext) fieldContext_Mutation_admin(_ context.Context, field
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_createBot(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_createBot(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CreateBot(ctx, fc.Args["input"].(model.CreateBotInput))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *corev1.User) graphql.Marshaler {
+			return ec.marshalNUser2ᚖhmansᚗdeᚋchattoᚋinternalᚋpbᚋchattoᚋcoreᚋv1ᚐUser(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_createBot(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_User(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_createBot_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_deleteBot(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_deleteBot(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().DeleteBot(ctx, fc.Args["botUserId"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_deleteBot(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_deleteBot_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_createBotToken(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_createBotToken(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CreateBotToken(ctx, fc.Args["input"].(model.CreateBotTokenInput))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.CreatedBotToken) graphql.Marshaler {
+			return ec.marshalNCreatedBotToken2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐCreatedBotToken(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_createBotToken(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_CreatedBotToken(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_createBotToken_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_revokeBotToken(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_revokeBotToken(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().RevokeBotToken(ctx, fc.Args["input"].(model.RevokeBotTokenInput))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_revokeBotToken(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_revokeBotToken_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_startDM(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -16679,6 +17499,82 @@ func (ec *executionContext) fieldContext_Query_admin(_ context.Context, field gr
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_AdminQueries(ctx, field)
 		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_bots(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_bots(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().Bots(ctx)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*corev1.User) graphql.Marshaler {
+			return ec.marshalNUser2ᚕᚖhmansᚗdeᚋchattoᚋinternalᚋpbᚋchattoᚋcoreᚋv1ᚐUserᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_bots(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_User(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_botTokens(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_botTokens(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().BotTokens(ctx, fc.Args["botUserId"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*model.BotToken) graphql.Marshaler {
+			return ec.marshalNBotToken2ᚕᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐBotTokenᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_botTokens(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_BotToken(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_botTokens_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -22487,6 +23383,84 @@ func (ec *executionContext) fieldContext_User_lastLoginChange(_ context.Context,
 	return graphql.NewScalarFieldContext("User", field, true, true, errors.New("field of type Time does not have child fields"))
 }
 
+func (ec *executionContext) _User_kind(ctx context.Context, field graphql.CollectedField, obj *corev1.User) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_User_kind(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.User().Kind(ctx, obj)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.UserKind) graphql.Marshaler {
+			return ec.marshalNUserKind2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐUserKind(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_User_kind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("User", field, true, true, errors.New("field of type UserKind does not have child fields"))
+}
+
+func (ec *executionContext) _User_isBot(ctx context.Context, field graphql.CollectedField, obj *corev1.User) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_User_isBot(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.User().IsBot(ctx, obj)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_User_isBot(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("User", field, true, true, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _User_botOwner(ctx context.Context, field graphql.CollectedField, obj *corev1.User) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_User_botOwner(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.User().BotOwner(ctx, obj)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *corev1.User) graphql.Marshaler {
+			return ec.marshalOUser2ᚖhmansᚗdeᚋchattoᚋinternalᚋpbᚋchattoᚋcoreᚋv1ᚐUser(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_User_botOwner(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "User",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_User(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _User_roomNotificationPreferences(ctx context.Context, field graphql.CollectedField, obj *corev1.User) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -23844,6 +24818,52 @@ func (ec *executionContext) _Viewer_canAdminViewAudit(ctx context.Context, field
 	)
 }
 func (ec *executionContext) fieldContext_Viewer_canAdminViewAudit(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Viewer", field, true, true, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _Viewer_canCreateBots(ctx context.Context, field graphql.CollectedField, obj *model.Viewer) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Viewer_canCreateBots(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Viewer().CanCreateBots(ctx, obj)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Viewer_canCreateBots(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Viewer", field, true, true, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _Viewer_canManageBots(ctx context.Context, field graphql.CollectedField, obj *model.Viewer) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Viewer_canManageBots(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Viewer().CanManageBots(ctx, obj)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Viewer_canManageBots(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("Viewer", field, true, true, errors.New("field of type Boolean does not have child fields"))
 }
 
@@ -25421,6 +26441,94 @@ func (ec *executionContext) unmarshalInputClearUsernameCooldownInput(ctx context
 				return it, err
 			}
 			it.UserID = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputCreateBotInput(ctx context.Context, obj any) (model.CreateBotInput, error) {
+	var it model.CreateBotInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"login", "displayName"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "login":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("login"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Login = data
+		case "displayName":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("displayName"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DisplayName = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputCreateBotTokenInput(ctx context.Context, obj any) (model.CreateBotTokenInput, error) {
+	var it model.CreateBotTokenInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"botUserId", "name", "expiry", "customExpiresAt"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "botUserId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("botUserId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.BotUserID = data
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "expiry":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("expiry"))
+			data, err := ec.unmarshalNBotTokenExpiryPreset2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐBotTokenExpiryPreset(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Expiry = data
+		case "customExpiresAt":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("customExpiresAt"))
+			data, err := ec.unmarshalOTime2ᚖgoogleᚗgolangᚗorgᚋprotobufᚋtypesᚋknownᚋtimestamppbᚐTimestamp(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CustomExpiresAt = data
 		}
 	}
 	return it, nil
@@ -27048,6 +28156,43 @@ func (ec *executionContext) unmarshalInputReorderRoomsInGroupInput(ctx context.C
 				return it, err
 			}
 			it.OrderedRoomIds = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputRevokeBotTokenInput(ctx context.Context, obj any) (model.RevokeBotTokenInput, error) {
+	var it model.RevokeBotTokenInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"botUserId", "tokenId"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "botUserId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("botUserId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.BotUserID = data
+		case "tokenId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("tokenId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TokenID = data
 		}
 	}
 	return it, nil
@@ -29578,6 +30723,165 @@ func (ec *executionContext) _Attachment(ctx context.Context, sel ast.SelectionSe
 	return out
 }
 
+var botTokenImplementors = []string{"BotToken"}
+
+func (ec *executionContext) _BotToken(ctx context.Context, sel ast.SelectionSet, obj *model.BotToken) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, botTokenImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("BotToken")
+		case "id":
+			out.Values[i] = ec._BotToken_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "name":
+			out.Values[i] = ec._BotToken_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "bot":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._BotToken_bot(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "createdBy":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._BotToken_createdBy(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "createdAt":
+			out.Values[i] = ec._BotToken_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "expiresAt":
+			out.Values[i] = ec._BotToken_expiresAt(ctx, field, obj)
+		case "lastUsedAt":
+			out.Values[i] = ec._BotToken_lastUsedAt(ctx, field, obj)
+		case "revokedAt":
+			out.Values[i] = ec._BotToken_revokedAt(ctx, field, obj)
+		case "revokedBy":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._BotToken_revokedBy(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "revokeReason":
+			out.Values[i] = ec._BotToken_revokeReason(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var callParticipantImplementors = []string{"CallParticipant"}
 
 func (ec *executionContext) _CallParticipant(ctx context.Context, sel ast.SelectionSet, obj *model.CallParticipant) graphql.Marshaler {
@@ -29750,6 +31054,50 @@ func (ec *executionContext) _ConnectionInfo(ctx context.Context, sel ast.Selecti
 			}
 		case "rtt":
 			out.Values[i] = ec._ConnectionInfo_rtt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var createdBotTokenImplementors = []string{"CreatedBotToken"}
+
+func (ec *executionContext) _CreatedBotToken(ctx context.Context, sel ast.SelectionSet, obj *model.CreatedBotToken) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, createdBotTokenImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CreatedBotToken")
+		case "token":
+			out.Values[i] = ec._CreatedBotToken_token(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "secret":
+			out.Values[i] = ec._CreatedBotToken_secret(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -32036,6 +33384,34 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_admin(ctx, field)
 			})
+		case "createBot":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createBot(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deleteBot":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_deleteBot(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createBotToken":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createBotToken(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "revokeBotToken":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_revokeBotToken(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "startDM":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_startDM(ctx, field)
@@ -33348,6 +34724,50 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_admin(ctx, field)
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "bots":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_bots(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "botTokens":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_botTokens(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
 				return res
 			}
 
@@ -38181,6 +39601,111 @@ func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "kind":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._User_kind(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "isBot":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._User_isBot(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "botOwner":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._User_botOwner(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "roomNotificationPreferences":
 			field := field
 
@@ -39437,6 +40962,78 @@ func (ec *executionContext) _Viewer(ctx context.Context, sel ast.SelectionSet, o
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "canCreateBots":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Viewer_canCreateBots(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "canManageBots":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Viewer_canManageBots(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "notifications":
 			field := field
 
@@ -40122,6 +41719,42 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 	return res
 }
 
+func (ec *executionContext) marshalNBotToken2ᚕᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐBotTokenᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.BotToken) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNBotToken2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐBotToken(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNBotToken2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐBotToken(ctx context.Context, sel ast.SelectionSet, v *model.BotToken) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._BotToken(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNBotTokenExpiryPreset2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐBotTokenExpiryPreset(ctx context.Context, v any) (model.BotTokenExpiryPreset, error) {
+	var res model.BotTokenExpiryPreset
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNBotTokenExpiryPreset2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐBotTokenExpiryPreset(ctx context.Context, sel ast.SelectionSet, v model.BotTokenExpiryPreset) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) marshalNCallParticipant2ᚕᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐCallParticipantᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.CallParticipant) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
@@ -40178,6 +41811,16 @@ func (ec *executionContext) marshalNConnectionInfo2ᚖhmansᚗdeᚋchattoᚋinte
 	return ec._ConnectionInfo(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNCreateBotInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐCreateBotInput(ctx context.Context, v any) (model.CreateBotInput, error) {
+	res, err := ec.unmarshalInputCreateBotInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNCreateBotTokenInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐCreateBotTokenInput(ctx context.Context, v any) (model.CreateBotTokenInput, error) {
+	res, err := ec.unmarshalInputCreateBotTokenInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNCreateRoleInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐCreateRoleInput(ctx context.Context, v any) (model.CreateRoleInput, error) {
 	res, err := ec.unmarshalInputCreateRoleInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -40191,6 +41834,20 @@ func (ec *executionContext) unmarshalNCreateRoomGroupInput2hmansᚗdeᚋchatto�
 func (ec *executionContext) unmarshalNCreateRoomInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐCreateRoomInput(ctx context.Context, v any) (model.CreateRoomInput, error) {
 	res, err := ec.unmarshalInputCreateRoomInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNCreatedBotToken2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐCreatedBotToken(ctx context.Context, sel ast.SelectionSet, v model.CreatedBotToken) graphql.Marshaler {
+	return ec._CreatedBotToken(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNCreatedBotToken2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐCreatedBotToken(ctx context.Context, sel ast.SelectionSet, v *model.CreatedBotToken) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._CreatedBotToken(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNDeleteAttachmentInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐDeleteAttachmentInput(ctx context.Context, v any) (model.DeleteAttachmentInput, error) {
@@ -40853,6 +42510,11 @@ func (ec *executionContext) unmarshalNReorderRoomsInGroupInput2hmansᚗdeᚋchat
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNRevokeBotTokenInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRevokeBotTokenInput(ctx context.Context, v any) (model.RevokeBotTokenInput, error) {
+	res, err := ec.unmarshalInputRevokeBotTokenInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNRevokePermissionInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRevokePermissionInput(ctx context.Context, v any) (model.RevokePermissionInput, error) {
 	res, err := ec.unmarshalInputRevokePermissionInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -41422,6 +43084,16 @@ func (ec *executionContext) marshalNUser2ᚖhmansᚗdeᚋchattoᚋinternalᚋpb�
 		return graphql.Null
 	}
 	return ec._User(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNUserKind2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐUserKind(ctx context.Context, v any) (model.UserKind, error) {
+	var res model.UserKind
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNUserKind2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐUserKind(ctx context.Context, sel ast.SelectionSet, v model.UserKind) graphql.Marshaler {
+	return v
 }
 
 func (ec *executionContext) marshalNUserPermissionCell2ᚕᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐUserPermissionCellᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.UserPermissionCell) graphql.Marshaler {

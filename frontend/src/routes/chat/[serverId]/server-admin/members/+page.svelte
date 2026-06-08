@@ -27,6 +27,7 @@
             id
             login
             displayName
+            isBot
             avatarUrl
             roles
             createdAt
@@ -134,6 +135,9 @@
                   </div>
                 {/if}
                 <span>{user.displayName}</span>
+                {#if user.isBot}
+                  <Pill>Bot</Pill>
+                {/if}
               </div>
             </td>
             <td class="px-4 py-3 text-muted">@{user.login}</td>
