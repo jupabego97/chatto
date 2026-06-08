@@ -54,11 +54,16 @@ export default defineConfig({
         ws: true,
         changeOrigin: true,
         xfwd: true,
+        configure: (proxy) => {
+          proxy.on('proxyReqWs', (proxyReq, req) => {
+            const forwardedHost = req.headers.host;
+            if (forwardedHost) {
+              proxyReq.setHeader('X-Forwarded-Host', forwardedHost);
+            }
+          });
+        },
         secure: false,
-        cookieDomainRewrite: { '*': '' },
-        // Rewrite the Origin header on WebSocket upgrades so the
-        // backend's CheckOrigin accepts the connection.
-        rewriteWsOrigin: true
+        cookieDomainRewrite: { '*': '' }
       },
       '/auth': {
         target: backendTarget,

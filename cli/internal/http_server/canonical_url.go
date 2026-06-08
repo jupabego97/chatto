@@ -31,7 +31,7 @@ func canonicalServerOrigin(webserverURL string) string {
 func incomingRequestOrigin(c *gin.Context) string {
 	scheme := "http"
 	if proto := c.GetHeader("X-Forwarded-Proto"); proto != "" {
-		scheme = firstForwardedHeaderValue(proto)
+		scheme = forwardedProtoToHTTPScheme(firstForwardedHeaderValue(proto))
 	} else if c.Request.TLS != nil {
 		scheme = "https"
 	}
@@ -46,6 +46,17 @@ func incomingRequestOrigin(c *gin.Context) string {
 
 func firstForwardedHeaderValue(value string) string {
 	return strings.ToLower(strings.TrimSpace(strings.Split(value, ",")[0]))
+}
+
+func forwardedProtoToHTTPScheme(proto string) string {
+	switch proto {
+	case "ws":
+		return "http"
+	case "wss":
+		return "https"
+	default:
+		return proto
+	}
 }
 
 func isHealthProbePath(path string) bool {
