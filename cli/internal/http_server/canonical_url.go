@@ -31,12 +31,21 @@ func canonicalServerOrigin(webserverURL string) string {
 func incomingRequestOrigin(c *gin.Context) string {
 	scheme := "http"
 	if proto := c.GetHeader("X-Forwarded-Proto"); proto != "" {
-		scheme = strings.ToLower(strings.TrimSpace(strings.Split(proto, ",")[0]))
+		scheme = firstForwardedHeaderValue(proto)
 	} else if c.Request.TLS != nil {
 		scheme = "https"
 	}
 
-	return scheme + "://" + strings.ToLower(c.Request.Host)
+	host := c.Request.Host
+	if forwardedHost := c.GetHeader("X-Forwarded-Host"); forwardedHost != "" {
+		host = firstForwardedHeaderValue(forwardedHost)
+	}
+
+	return scheme + "://" + strings.ToLower(strings.TrimSpace(host))
+}
+
+func firstForwardedHeaderValue(value string) string {
+	return strings.ToLower(strings.TrimSpace(strings.Split(value, ",")[0]))
 }
 
 func isHealthProbePath(path string) bool {

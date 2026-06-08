@@ -46,12 +46,14 @@ export default defineConfig({
     proxy: {
       '/playground': {
         target: backendTarget,
-        changeOrigin: true
+        changeOrigin: true,
+        xfwd: true
       },
       '/api': {
         target: backendTarget,
         ws: true,
         changeOrigin: true,
+        xfwd: true,
         secure: false,
         cookieDomainRewrite: { '*': '' },
         // Rewrite the Origin header on WebSocket upgrades so the
@@ -61,15 +63,18 @@ export default defineConfig({
       '/auth': {
         target: backendTarget,
         changeOrigin: true,
+        xfwd: true,
         cookieDomainRewrite: { '*': '' }
       },
       '/assets': {
         target: backendTarget,
-        changeOrigin: true
+        changeOrigin: true,
+        xfwd: true
       },
       '/webhooks': {
         target: backendTarget,
-        changeOrigin: true
+        changeOrigin: true,
+        xfwd: true
       }
     }
   },

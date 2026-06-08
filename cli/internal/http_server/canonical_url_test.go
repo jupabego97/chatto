@@ -36,6 +36,21 @@ func TestCanonicalRedirectMiddlewareRedirectsAliasRequests(t *testing.T) {
 	assert.Equal(t, "https://chat.example.com/api/graphql?operation=Ping", w.Header().Get("Location"))
 }
 
+func TestCanonicalRedirectMiddlewareHonorsForwardedHost(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := newCanonicalRedirectTestRouter("http://localhost:55080")
+
+	req := httptest.NewRequest("POST", "/api/graphql", nil)
+	req.Host = "localhost:55081"
+	req.Header.Set("X-Forwarded-Proto", "http")
+	req.Header.Set("X-Forwarded-Host", "localhost:55080")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Empty(t, w.Header().Get("Location"))
+}
+
 func TestCanonicalRedirectMiddlewareExemptsHealthProbes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := newCanonicalRedirectTestRouter("https://chat.example.com")
