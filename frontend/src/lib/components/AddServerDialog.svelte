@@ -144,8 +144,7 @@ ADR-027 — only user-facing copy says "server".
     if (url.origin !== serverUrl) {
       throw new Error('This server returned an invalid sign-in URL.');
     }
-    url.search = params.toString();
-    return url.toString();
+    return `${url.origin}${url.pathname}?${params}`;
   }
 
   async function handleProbe() {
