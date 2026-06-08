@@ -51,6 +51,10 @@ func unwrapEVTEvent(event *corev1.Event) any {
 		return e.UserJoinedRoom
 	case *corev1.Event_UserLeftRoom:
 		return e.UserLeftRoom
+	case *corev1.Event_RoomMemberBanned:
+		return e.RoomMemberBanned
+	case *corev1.Event_RoomMemberUnbanned:
+		return e.RoomMemberUnbanned
 	case *corev1.Event_SpaceMemberDeleted:
 		return e.SpaceMemberDeleted
 
@@ -196,6 +200,13 @@ func assetCreatedRoomID(event *corev1.AssetCreatedEvent) string {
 		return ""
 	}
 	return event.GetRoomId()
+}
+
+func nilIfEmpty(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 func assetDimensions(asset *corev1.AssetRecord) (int32, int32) {

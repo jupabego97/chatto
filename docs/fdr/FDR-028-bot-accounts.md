@@ -1,4 +1,4 @@
-# FDR-027: Bot Accounts
+# FDR-028: Bot Accounts
 
 **Status:** Active
 **Last reviewed:** 2026-06-07

@@ -28,7 +28,7 @@ See [`.claude/skills/fdr/SKILL.md`](../../.claude/skills/fdr/SKILL.md) for the F
 | [FDR-016](FDR-016-voice-calls.md) | Voice Calls | Active | 2026-05-19 |
 | [FDR-017](FDR-017-room-groups-and-sidebar-layout.md) | Room Groups & Sidebar Layout | Active | 2026-06-06 |
 | [FDR-018](FDR-018-account-lifecycle.md) | Account Lifecycle | Active | 2026-06-03 |
-| [FDR-019](FDR-019-room-lifecycle.md) | Room Lifecycle | Active | 2026-05-19 |
+| [FDR-019](FDR-019-room-lifecycle.md) | Room Lifecycle | Active | 2026-06-08 |
 | [FDR-020](FDR-020-server-branding-and-configuration.md) | Server Branding & Configuration | Active | 2026-06-06 |
 | [FDR-021](FDR-021-admin-dashboard.md) | Admin Dashboard & System Monitoring | Active | 2026-06-05 |
 | [FDR-022](FDR-022-user-profile.md) | User Profile | Active | 2026-06-02 |
@@ -36,4 +36,5 @@ See [`.claude/skills/fdr/SKILL.md`](../../.claude/skills/fdr/SKILL.md) for the F
 | [FDR-024](FDR-024-permission-inspection-tool.md) | Permission Inspection Tool | Active | 2026-05-19 |
 | [FDR-025](FDR-025-user-search-and-member-directory.md) | User Search & Member Directory | Active | 2026-05-19 |
 | [FDR-026](FDR-026-last-room-memory.md) | Last-Room Memory | Active | 2026-05-19 |
-| [FDR-027](FDR-027-bot-accounts.md) | Bot Accounts | Active | 2026-06-07 |
+| [FDR-027](FDR-027-pwa-shell-and-service-worker.md) | PWA Shell & Service Worker | Active | 2026-06-08 |
+| [FDR-028](FDR-028-bot-accounts.md) | Bot Accounts | Active | 2026-06-08 |

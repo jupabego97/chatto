@@ -54,8 +54,8 @@ Chatto controls who can do what through role-based access control. Every authent
 
 ### 6. Rank gates target-user mutations, in addition to permissions
 
-**Decision:** Mutations that target another user (rename, role assignment, profile edits) require both the relevant permission **and** that the actor outrank the target.
-**Why:** Otherwise a rogue moderator with `role.assign` could rename the owner. Permission asks "can this role do X at all?"; rank asks "does the actor outrank this specific target?". Both are needed.
+**Decision:** Mutations that target another user (rename, role assignment, profile edits, room member bans) require both the relevant permission **and** that the actor outrank the target.
+**Why:** Otherwise a rogue moderator with `role.assign` could rename the owner, or one with `room.ban-member` could ban a peer from a channel. Permission asks "can this role do X at all?"; rank asks "does the actor outrank this specific target?". Both are needed.
 **Tradeoff:** Two-step checks are more code than a single permission lookup, and easy to forget when adding new mutations. Helpers (`requireUserAdminTarget`, `requireUserPermissionTarget`) exist to keep call sites uniform.
 
 ### 7. RBAC state is event-sourced
@@ -74,8 +74,10 @@ The full permission catalog is in `cli/internal/core/permission.go`. Key permiss
 - `bot.manage` — manage/delete other users' bot accounts and tokens, subject to outranking the bot account itself.
 - `admin.access`, `admin.view-users`, `admin.view-system`, `admin.view-audit` — gate access to the admin UI and its sub-views.
 - `message.post` — post root messages in rooms and start DMs. Reading DMs is not permission-gated; it follows room membership.
+- `room.manage` — edit/configure/delete channel rooms.
+- `room.ban-member` — ban lower-ranked members from channel rooms. DM membership is not managed through this permission.
 
 ## Related
 
 - **ADRs:** ADR-004 (authorization at API boundary), ADR-005 (hierarchy-wins RBAC), ADR-027 (instance/space consolidation), ADR-030 (space tier retirement), ADR-031 (room-group-centric ACL), ADR-033 (event-sourced state), ADR-035 (per-aggregate migration), ADR-037 (DM access via membership)
-- **FDRs:** Every FDR that mentions a permission depends on this one, including FDR-027 (Bot Accounts).
+- **FDRs:** Every FDR that mentions a permission depends on this one, including FDR-028 (Bot Accounts).

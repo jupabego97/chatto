@@ -59,8 +59,11 @@ const (
 	// non-members.
 	PermRoomList Permission = "room.list"
 
-	// PermRoomManage allows updating or deleting any room.
+	// PermRoomManage allows updating or deleting channel rooms.
 	PermRoomManage Permission = "room.manage"
+
+	// PermRoomMemberBan allows banning lower-ranked users from channel rooms.
+	PermRoomMemberBan Permission = "room.ban-member"
 
 	// ===== Message Permissions =====
 
@@ -155,6 +158,7 @@ var allPermissions = []PermissionMetadata{
 	{PermRoomJoin, "Join Rooms", "Join existing rooms", CategoryRoom, []PermissionScope{ScopeServer, ScopeGroup, ScopeRoom}},
 	{PermRoomList, "Discover Rooms", "See rooms in the directory and group 'Join all' affordances", CategoryRoom, []PermissionScope{ScopeServer, ScopeGroup, ScopeRoom}},
 	{PermRoomManage, "Manage Rooms", "Edit, configure permissions on, and delete rooms", CategoryRoom, []PermissionScope{ScopeServer, ScopeGroup, ScopeRoom}},
+	{PermRoomMemberBan, "Ban Room Members", "Ban lower-ranked members from rooms", CategoryRoom, []PermissionScope{ScopeServer, ScopeGroup, ScopeRoom}},
 
 	// Message
 	{PermMessagePost, "Post Messages", "Post new messages in rooms and start DMs", CategoryMessage, []PermissionScope{ScopeServer, ScopeGroup, ScopeRoom}},
@@ -276,6 +280,7 @@ func DefaultModeratorPermissions() []Permission {
 		PermAdminUsersView,
 		// Moderation powers
 		PermMessageManage,
+		PermRoomMemberBan,
 	)
 }
 

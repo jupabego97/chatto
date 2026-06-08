@@ -153,6 +153,7 @@ Admin queries are nested under a single `admin: AdminQueries` field that returns
 | `updateRoom`                   | Update a room's name / description (`room.manage`).                              |
 | `archiveRoom` / `unarchiveRoom`| Archive or restore a room (`room.manage`).                                       |
 | `joinRoom` / `leaveRoom`       | Join / leave a room.                                                             |
+| `banRoomMember` / `unbanRoomMember` | Create or remove a room ban (`room.ban-member`; DMs rejected; reasons required for moderation audit). Bans emit a normal leave event, maintain active ban state, and deny rejoin through ordinary join authorization. |
 | `joinGroup`                    | Join every room in a group the caller has `room.join` for. Powers "Join all".    |
 | `markRoomAsRead`               | Mark a room as read; records the last-seen root event ID for unread tracking.    |
 | `startDM`                      | Start a DM with a participant set (returns existing room if the set matches).    |
@@ -212,7 +213,7 @@ Admin queries are nested under a single `admin: AdminQueries` field that returns
 | `deleteRoomGroup`                 | Delete a room group (must be empty).                                                         |
 | `reorderRoomGroups`               | Reorder all room groups (full list, exactly once each).                                      |
 | `reorderRoomsInGroup`             | Reorder rooms within a single group.                                                         |
-| `moveRoomToSet`                   | Move a room into a different group (`room.manage` in both source and target — see ADR-031). |
+| `moveRoomToGroup`                 | Move a room into a different group (`room.manage` in both source and target — see ADR-031). |
 | `grantGroupPermission`            | Grant a permission to a role at group scope (overrides server defaults).                     |
 | `denyGroupPermission`             | Deny a permission to a role at group scope.                                                  |
 | `clearGroupPermissionState`       | Remove both grant and denial at group scope.                                                 |
@@ -508,8 +509,9 @@ Notes: `INSTANCE` is legacy import-only. Current user/account/profile state is p
 | `session.{hmac}`                              | Opaque bearer-token verifier with per-key TTL and auth generation |
 | `bot_token.{hmac}`                            | Named bot API-token metadata. Finite tokens use per-key TTL until `expires_at`; indefinite tokens have no TTL unless revoked or the bot is deleted. Raw `cht_BT...` secrets are not stored. |
 | `grant.{hmac}`                                | OAuth authorization-code verifier with 5-minute per-key TTL and auth generation |
-| `registration.{hmac}`                         | Email-first registration token verifier |
-| `email_verification.{hmac}`                   | Email verification token verifier |
+| `email_otp.{hmac(subject)}.{hmac(code)}`      | Shared registration and email-verification OTP code records with per-key TTL |
+| `email_otp.{hmac(subject)}.challenge`         | Shared OTP challenge state with failed-attempt and issued-code counters |
+| `registration_completion.{hmac}`              | Post-code registration completion token verifier |
 | `password_reset.{hmac}`                       | Password reset token verifier |
 | `account_deletion_token.{hmac}`               | Account deletion confirmation token verifier |
 
@@ -517,9 +519,9 @@ Notes: `INSTANCE` is legacy import-only. Current user/account/profile state is p
 
 | Subject                                                                  | Description |
 | ------------------------------------------------------------------------ | ----------- |
-| `evt.auth.server.registration_link_issued`                               | Registration link issued before a user exists. |
+| `evt.auth.server.registration_verification_code_issued`                  | Registration verification code issued before a user exists. |
 | `evt.auth.server.login_failed`                                           | Failed password login attempt, with hashed identifier only. |
-| `evt.user.{userId}.email_verification_link_issued`                       | Email verification link issued. |
+| `evt.user.{userId}.email_verification_code_issued`                       | Email verification code issued. |
 | `evt.user.{userId}.password_reset_link_issued`                           | Password reset link issued. |
 | `evt.user.{userId}.account_deletion_confirmation_issued`                 | Account deletion confirmation token issued. |
 | `evt.user.{userId}.password_reset_completed`                             | Password reset completed. |
@@ -602,8 +604,9 @@ survives restart but is not content/domain history. See
 | `read.thread.{userId}.{roomId}.{threadRootEventId}` | Latest thread message event ID the user has seen. Values copied from legacy `thread_last_opened.*` may be 8-byte UnixNano timestamps until rewritten by a new read action. |
 | `notification.{userId}.{notificationId}` | Pending notification record (protobuf `Notification`) for DM messages, @mentions, replies, and all-message subscriptions. Uses per-key 90-day TTL. Live sync uses `NotificationCreatedEvent` / `NotificationDismissedEvent` on `live.sync.user.{userId}.*`. |
 | `push_subscription.{userId}.{endpointHash}` | Web Push subscription record (protobuf `PushSubscription`) for a user's browser/device. Legacy `INSTANCE` keys are copied here at boot; the endpoint hash keeps multiple devices per user while deduplicating the same browser subscription. |
-| `registration.{hmac}` | Email-first registration token JSON. Uses per-key 24-hour TTL. |
-| `email_verification.{hmac}` | Email verification token JSON with user ID and email. Uses per-key 24-hour TTL. |
+| `email_otp.{hmac(subject)}.{hmac(code)}` | Shared registration and email-verification OTP code JSON. Registration values carry normalized email; authenticated email-verification values carry user ID and email. The subject hash scopes registration by email and authenticated verification by user/email, the code hash verifies the submitted six-digit code, and the raw code is never stored. Uses per-key 15-minute TTL. |
+| `email_otp.{hmac(subject)}.challenge` | Shared OTP challenge JSON with failed-attempt and issued-code counters. Wrong-code attempts update this record revision-safely, five wrong guesses exhaust the challenge until TTL, and at most ten codes can be issued for one challenge window. Uses per-key 15-minute TTL. |
+| `registration_completion.{hmac}` | Registration completion token JSON created after code verification. Uses per-key 15-minute TTL. |
 | `password_reset.{hmac}` | Password reset token JSON. Uses per-key 1-hour TTL. |
 | `account_deletion_token.{hmac}` | Account deletion confirmation token JSON. Uses per-key 15-minute TTL. |
 | `session.{hmac}` | Opaque bearer auth token JSON with the user auth generation it was issued against. Uses per-key `auth.token_ttl` (default 90 days); successful validation refreshes the key with a new per-key TTL for sliding-window expiry. Password resets, password changes, and account deletion revoke all older bearer tokens by advancing the user's auth generation through durable user events; scans of `session.*` delete matching records as cleanup. Generation `0` means a legacy pre-`auth_generation` credential and is upgraded on validation when still compatible with the current password event. |
@@ -689,32 +692,42 @@ Chatto supports on-the-fly image transformation for attachments and user avatars
 
 **URL Structure:**
 
-Attachment URLs encode everything the HTTP handler needs (roomId for
-authz; bodyKey or videoOriginId for source-of-truth lookup;
-attachmentId) into a signed locator path segment. Originals:
+GraphQL attachment fields primarily return stable asset paths with a
+per-user `access` ticket query parameter. Originals:
 
 ```
-/assets/attachments/{base64payload}.{hexHMAC}
+/assets/files/{assetId}?access={base64payload}.{hexHMAC}
 ```
 
-Transforms append the standard signed-transform-path component:
+Image transforms use stable dimensions in the path and bind those same
+parameters into the access ticket:
 
 ```
-/assets/attachments/{base64payload}.{hexHMAC}/t/{base64params}.{signature}
+/assets/files/{assetId}/image/{width}x{height}/{fit}?access={base64payload}.{hexHMAC}
 ```
 
 Where:
 
-- `{base64payload}` — base64url-encoded JSON `{r, b?, v?, a}` (room id; exactly one of bodyKey or videoOriginId; attachment id)
+- `{assetId}` — the declared `AssetCreatedEvent.asset.id`
+- `{base64payload}` — base64url-encoded JSON `{a, u, e, w?, h?, f?}` (asset id, signed user id, Unix-second expiry, optional transform)
 - `{hexHMAC}` — first 16 bytes of HMAC-SHA256 of `{base64payload}` (32 hex chars)
-- `{base64params}` — base64url-encoded JSON `{"w":640,"h":512,"f":"contain"}`
-- `{signature}` — first 16 bytes of HMAC-SHA256 of `attachment/{locator}/{base64params}` (32 hex chars)
 
-Both HMACs use the same `[core.assets].signing_secret`. The HTTP handler
-verifies the locator signature, then resolves the source proto by
-fetching `MessageBody` / `AssetCreatedEvent` state (for body attachments) or the projected
-`AssetProcessingSucceededEvent.video` manifest (for variants/thumbnails) — no
-separate index bucket lookup is needed.
+The HMAC uses `[core.assets].signing_secret`. The HTTP handler verifies the
+ticket signature, expiry, asset ID, and transform parameters, then resolves the
+asset and room scope from the `RoomTimelineProjection`'s asset indexes. Every
+request checks that the signed user is still a member of the asset's room
+before serving the binary.
+
+Legacy locator URLs remain supported for compatibility/internal fallback:
+
+```
+/assets/attachments/{base64payload}.{hexHMAC}
+/assets/attachments/{base64payload}.{hexHMAC}/t/{base64params}.{signature}
+```
+
+Those locator payloads carry room/source/attachment/user/expiry claims and use
+the shorter `AttachmentURLTTL`. New GraphQL attachment fields should use the
+stable `/assets/files/...` URL plus `AssetURL.expiresAt` shape.
 
 **Transform Parameters:**
 
@@ -736,7 +749,14 @@ The `Attachment` and `User` image fields expose transform parameters as field ar
 ```graphql
 type Attachment {
   url(width: Int, height: Int, fit: FitMode): String!
+  assetUrl(width: Int, height: Int, fit: FitMode): AssetURL!
   thumbnailUrl(width: Int, height: Int, fit: FitMode): String
+  thumbnailAssetUrl(width: Int, height: Int, fit: FitMode): AssetURL
+}
+
+type AssetURL {
+  url: String!
+  expiresAt: Time!
 }
 
 type User {
@@ -755,15 +775,23 @@ enum FitMode {
 }
 ```
 
-For `Attachment` and `User` images, arguments return a signed transform URL. Without arguments, the original/default thumbnail URL is returned for backward compatibility. Public `ServerProfile` image fields intentionally return canonical asset URLs without transform arguments so anonymous server discovery cannot mint unbounded resize variants.
+For `Attachment` images, `assetUrl` and `thumbnailAssetUrl` return the URL plus
+the embedded access-ticket expiry so clients can refresh before lazy loads or
+media startup hit an expired ticket. The legacy string fields return the same
+URL without the expiry for backward compatibility. Public `ServerProfile` image
+fields intentionally return canonical asset URLs without transform arguments so
+anonymous server discovery cannot mint unbounded resize variants.
 
 **Caching:**
 
-Transformed images are generated on-demand with aggressive HTTP caching:
+Transformed images are generated on-demand. Public server assets can be cached
+aggressively; authenticated attachment URLs are cacheable only as private
+browser responses because their access ticket is per-user:
 
-- `Cache-Control: public, max-age=31536000, immutable` (1 year)
-- `ETag` based on attachment ID and transform parameters
-- No server-side caching; relies on CDN/proxy caching
+- Stable attachment originals and derivatives: `Cache-Control: private, max-age=3600`
+- Server-scoped public assets and signed server transforms: public immutable/cacheable responses
+- `ETag` based on asset ID and transform parameters
+- Optional `ASSET_CACHE` object-store entries can cache resized bytes server-side
 
 **Output Format:**
 
@@ -791,14 +819,14 @@ Messages are persisted as durable `EVT` facts. Public timeline facts (`MessagePo
 - `in_reply_to` field stores the event ID of the parent message (empty for top-level messages)
 - `in_thread` field stores the event ID of the thread root (empty for top-level messages)
 - Thread replies are ordinary `MessagePostedEvent` facts on `evt.room.{roomId}.message_posted` with `in_thread` set to the root event ID.
-- Thread reply lists, reply counts, participants, followed-thread pages, and last-reply timestamps are derived from the `ThreadProjection`.
+- Cursor-paginated thread reply lists, reply counts, participants, followed-thread pages, and last-reply timestamps are derived from the `ThreadProjection`.
 
 **Read Path:**
 
 - Room-level message history is served from `RoomTimelineProjection`, which keeps the raw room event log plus derived indexes for latest body state, hidden echoes, assets, and room-visible timeline entries.
 - Initial loads and cursor pagination walk the derived visible-room index so thread replies, edits, retractions, reactions, asset-processing facts, and directly hidden echoes do not count as separate room timeline rows.
 - `eventsAround` uses the same visible-room index to center jump-to-message windows on the target's visible position.
-- Thread panes read the root message from `RoomTimelineProjection` and replies from `ThreadProjection`.
+- Thread panes read the root message from `RoomTimelineProjection` and cursor-paginated replies from `ThreadProjection`.
 
 **@Mentions:**
 

@@ -40,7 +40,7 @@ User-facing concepts. If a user might say the word, it goes here.
 
 **User** — Account identity visible in Chatto: member directory entries, message authors, mentions, profiles, and permission subjects. Users can be human-operated or bot accounts.
 
-**Bot Account** — Automation user with `kind: BOT`. It appears anywhere a normal user appears, uses normal roles and permissions, has a human owner, and authenticates only through bot API tokens. See [FDR-027](fdr/FDR-027-bot-accounts.md).
+**Bot Account** — Automation user with `kind: BOT`. It appears anywhere a normal user appears, uses normal roles and permissions, has a human owner, and authenticates only through bot API tokens. See [FDR-028](fdr/FDR-028-bot-accounts.md).
 
 **Bot Owner** — Human user responsible for a bot account. The owner can manage the bot's tokens and owned bots are deleted before the owner account is deleted.
 
