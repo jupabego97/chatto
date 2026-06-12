@@ -1,0 +1,45 @@
+name: build e2e runner
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile.e2e-runner
+      - .github/workflows/build-e2e-runner.yml
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/chattocorp/chatto-e2e-runner
+  IMAGE_TAG: playwright-1.60.0-go-1.26.2-node-24
+
+jobs:
+  build-e2e-runner:
+    runs-on: ubicloud-standard-4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push E2E runner image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.e2e-runner
+          push: true
+          platforms: linux/amd64
+          tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=chatto-e2e-runner
+          cache-to: type=gha,scope=chatto-e2e-runner,mode=max

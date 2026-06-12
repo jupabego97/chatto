@@ -12,8 +12,74 @@ concurrency:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
+  prepare-e2e-runner:
+    runs-on: ubicloud-standard-4
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE_NAME: ghcr.io/chattocorp/chatto-e2e-runner
+      IMAGE_TAG: playwright-1.60.0-go-1.26.2-node-24
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check whether E2E runner image changed
+        id: runner-image
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+          else
+            base="${{ github.event.before }}"
+            head="${{ github.sha }}"
+
+            if [[ "$base" == "0000000000000000000000000000000000000000" ]]; then
+              base="HEAD^"
+            fi
+          fi
+
+          changed_files="$(git diff --name-only "$base" "$head")"
+          printf '%s\n' "$changed_files"
+
+          if grep -Eq '^(Dockerfile\.e2e-runner|\.github/workflows/(ci|build-e2e-runner)\.yml)$' <<<"$changed_files"; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.runner-image.outputs.changed == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        if: steps.runner-image.outputs.changed == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push E2E runner image
+        if: steps.runner-image.outputs.changed == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.e2e-runner
+          push: true
+          platforms: linux/amd64
+          tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=chatto-e2e-runner
+          cache-to: type=gha,scope=chatto-e2e-runner,mode=max
+
   test-frontend-unit:
     runs-on: ubicloud-standard-4
     steps:
@@ -64,31 +130,27 @@ jobs:
   test-e2e:
     runs-on: ubicloud-standard-4
     name: test-e2e (${{ matrix.shard }}/4)
+    needs: prepare-e2e-runner
+    container:
+      image: ghcr.io/chattocorp/chatto-e2e-runner:playwright-1.60.0-go-1.26.2-node-24
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
         shard: [1, 2, 3, 4]
+    env:
+      CHATTO_E2E_SKIP_GLOBAL_BUILD: "1"
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Setup environment
-        uses: ./.github/actions/setup
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
-          restore-keys: |
-            playwright-${{ runner.os }}-${{ runner.arch }}-
-
-      - name: Install Playwright dependencies
-        run: cd frontend && pnpm exec playwright install chromium --with-deps
-        timeout-minutes: 5
+      - name: Setup E2E environment
+        uses: ./.github/actions/setup-e2e
 
       - name: Build E2E server
-        run: mise build-e2e-server
+        run: tools/build-e2e-server.sh
 
       - name: Run E2E tests
         run: cd frontend && pnpm exec playwright test --grep-invert @ffmpeg --shard=${{ matrix.shard }}/4
@@ -103,29 +165,23 @@ jobs:
 
   test-e2e-media:
     runs-on: ubicloud-standard-4
+    needs: prepare-e2e-runner
+    container:
+      image: ghcr.io/chattocorp/chatto-e2e-runner:playwright-1.60.0-go-1.26.2-node-24
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      CHATTO_E2E_SKIP_GLOBAL_BUILD: "1"
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Setup environment
-        uses: ./.github/actions/setup
-        with:
-          install-ffmpeg: "true"
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
-          restore-keys: |
-            playwright-${{ runner.os }}-${{ runner.arch }}-
-
-      - name: Install Playwright dependencies
-        run: cd frontend && pnpm exec playwright install chromium --with-deps
-        timeout-minutes: 5
+      - name: Setup E2E environment
+        uses: ./.github/actions/setup-e2e
 
       - name: Build E2E server
-        run: mise build-e2e-server
+        run: tools/build-e2e-server.sh
 
       - name: Run media E2E tests
         run: cd frontend && pnpm exec playwright test --grep @ffmpeg

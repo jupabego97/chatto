@@ -1,0 +1,38 @@
+FROM node:24-bookworm-slim
+
+ARG GO_VERSION=1.26.2
+ARG PLAYWRIGHT_VERSION=1.60.0
+ARG PNPM_VERSION=10.19.0
+ARG TARGETARCH
+
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ca-certificates curl ffmpeg git xz-utils; \
+    rm -rf /var/lib/apt/lists/*; \
+    npm install -g "pnpm@${PNPM_VERSION}" "playwright@${PLAYWRIGHT_VERSION}"; \
+    playwright install chromium --with-deps; \
+    rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \
+    case "${TARGETARCH}" in \
+      amd64) go_arch=amd64 ;; \
+      arm64) go_arch=arm64 ;; \
+      *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${go_arch}.tar.gz" -o /tmp/go.tgz; \
+    tar -C /usr/local -xzf /tmp/go.tgz; \
+    rm /tmp/go.tgz; \
+    ln -s /usr/local/go/bin/go /usr/local/bin/go; \
+    ln -s /usr/local/go/bin/gofmt /usr/local/bin/gofmt
+
+ENV PATH="/usr/local/go/bin:${PATH}"
+
+WORKDIR /workspace
+
+RUN set -eux; \
+    node --version; \
+    pnpm --version; \
+    go version; \
+    playwright --version
