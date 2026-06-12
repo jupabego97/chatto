@@ -33,6 +33,7 @@ runs:
     # with source changes. A go.sum-only build-cache key restores quickly, then
     # refuses to save fresher local package artifacts on every exact cache hit.
     - name: Cache Go modules
+      if: inputs.install-cli-deps == 'true'
       uses: actions/cache@v5
       with:
         path: ~/go/pkg/mod
@@ -41,6 +42,7 @@ runs:
           go-mod-${{ runner.os }}-${{ runner.arch }}-
 
     - name: Cache Go build artifacts
+      if: inputs.install-cli-deps == 'true'
       uses: actions/cache@v5
       with:
         path: ~/.cache/go-build
