@@ -99,6 +99,7 @@ export async function startServer(
         ...process.env,
         CHATTO_VIDEO_ENABLED: 'false',
         ...options.env,
+        CHATTO_FRONTEND_DIR: path.join(__dirname, '..', '..', 'build'),
         CHATTO_WEBSERVER_PORT: String(ports.webserver),
         CHATTO_WEBSERVER_URL: `http://localhost:${ports.webserver}`,
         CHATTO_NATS_EMBEDDED_PORT: '0',

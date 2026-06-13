@@ -2,7 +2,6 @@ package http_server
 
 import (
 	"context"
-	"embed"
 	"io/fs"
 	"mime"
 	"net/http"
@@ -14,9 +13,6 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/gin-gonic/gin"
 )
-
-//go:embed all:.client
-var embeddedWebUIFS embed.FS
 
 // Cache control headers for different file types
 const (
@@ -145,8 +141,7 @@ func servePrecompressedFile(c *gin.Context, clientFS fs.FS, filePath string) boo
 }
 
 func (s *HTTPServer) setupFrontendRoutes() error {
-	// Get a sub-filesystem rooted at .client
-	clientFS, err := fs.Sub(embeddedWebUIFS, ".client")
+	clientFS, err := frontendAssetFS()
 	if err != nil {
 		return err
 	}
