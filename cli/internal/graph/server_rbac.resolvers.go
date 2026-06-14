@@ -388,6 +388,11 @@ func (r *viewerResolver) CanAdminManageUsers(ctx context.Context, obj *model.Vie
 	return r.core.CanAssignRoles(ctx, obj.UserID)
 }
 
+// CanAdminSuspendUsers is the resolver for the canAdminSuspendUsers field.
+func (r *viewerResolver) CanAdminSuspendUsers(ctx context.Context, obj *model.Viewer) (bool, error) {
+	return r.core.HasServerPermission(ctx, obj.UserID, core.PermUserSuspend)
+}
+
 // CanAdminViewRoles is the resolver for the canAdminViewRoles field.
 func (r *viewerResolver) CanAdminViewRoles(ctx context.Context, obj *model.Viewer) (bool, error) {
 	return r.core.CanManageRoles(ctx, obj.UserID)

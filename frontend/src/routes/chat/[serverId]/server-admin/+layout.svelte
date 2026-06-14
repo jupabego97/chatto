@@ -16,7 +16,9 @@
   // Check if user can access ANY admin section — space-side (server roles,
   // rooms, members) OR instance-side (runtime config, system info).
   const canAccessAnyAdmin = $derived(
-    spacePermissions.current.hasAnyAdminPermission || serverPerms.current.canViewAdmin
+    spacePermissions.current.hasAnyAdminPermission ||
+      serverPerms.current.canViewAdmin ||
+      serverPerms.current.canAdminSuspendUsers
   );
 
   // Map routes to required permissions
@@ -53,9 +55,11 @@
       return () => spacePermissions.current.canManageRooms;
     }
 
-    // Moderation pages: the resolver enforces server-scope room.ban-member.
+    // Moderation pages: room bans are space-scoped; user suspensions use server-scope user.suspend.
     if (pathname.startsWith(moderationBase)) {
-      return () => spacePermissions.current.hasAnyAdminPermission;
+      return () =>
+        spacePermissions.current.hasAnyAdminPermission ||
+        serverPerms.current.canAdminSuspendUsers;
     }
 
     // Permissions pages: space.roles.manage OR instance.admin.view-roles

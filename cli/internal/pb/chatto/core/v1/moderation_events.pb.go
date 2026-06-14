@@ -156,6 +156,124 @@ func (x *RoomMemberUnbannedEvent) GetReason() string {
 	return ""
 }
 
+// UserSuspendedEvent records a moderator suspending a user at the server level.
+// The Event envelope actor_id is the moderator. The payload user_id is the
+// target. Absence of expires_at means the suspension is indefinite.
+type UserSuspendedEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expires_at,json=expiresAt,proto3,oneof" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UserSuspendedEvent) Reset() {
+	*x = UserSuspendedEvent{}
+	mi := &file_chatto_core_v1_moderation_events_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UserSuspendedEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UserSuspendedEvent) ProtoMessage() {}
+
+func (x *UserSuspendedEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_chatto_core_v1_moderation_events_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UserSuspendedEvent.ProtoReflect.Descriptor instead.
+func (*UserSuspendedEvent) Descriptor() ([]byte, []int) {
+	return file_chatto_core_v1_moderation_events_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *UserSuspendedEvent) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *UserSuspendedEvent) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *UserSuspendedEvent) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+// UserUnsuspendedEvent records a moderator removing an active server-level
+// suspension. The Event envelope actor_id is the moderator. The payload user_id
+// is the target.
+type UserUnsuspendedEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UserUnsuspendedEvent) Reset() {
+	*x = UserUnsuspendedEvent{}
+	mi := &file_chatto_core_v1_moderation_events_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UserUnsuspendedEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UserUnsuspendedEvent) ProtoMessage() {}
+
+func (x *UserUnsuspendedEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_chatto_core_v1_moderation_events_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UserUnsuspendedEvent.ProtoReflect.Descriptor instead.
+func (*UserUnsuspendedEvent) Descriptor() ([]byte, []int) {
+	return file_chatto_core_v1_moderation_events_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *UserUnsuspendedEvent) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *UserUnsuspendedEvent) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
 var File_chatto_core_v1_moderation_events_proto protoreflect.FileDescriptor
 
 const file_chatto_core_v1_moderation_events_proto_rawDesc = "" +
@@ -171,7 +289,16 @@ const file_chatto_core_v1_moderation_events_proto_rawDesc = "" +
 	"\x17RoomMemberUnbannedEvent\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reasonB\xb8\x01\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"\x94\x01\n" +
+	"\x12UserSuspendedEvent\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\x12>\n" +
+	"\n" +
+	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampH\x00R\texpiresAt\x88\x01\x01B\r\n" +
+	"\v_expires_at\"G\n" +
+	"\x14UserUnsuspendedEvent\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reasonB\xb8\x01\n" +
 	"\x12com.chatto.core.v1B\x15ModerationEventsProtoP\x01Z1hmans.de/chatto/internal/pb/chatto/core/v1;corev1\xa2\x02\x03CCX\xaa\x02\x0eChatto.Core.V1\xca\x02\x0eChatto\\Core\\V1\xe2\x02\x1aChatto\\Core\\V1\\GPBMetadata\xea\x02\x10Chatto::Core::V1b\x06proto3"
 
 var (
@@ -186,19 +313,22 @@ func file_chatto_core_v1_moderation_events_proto_rawDescGZIP() []byte {
 	return file_chatto_core_v1_moderation_events_proto_rawDescData
 }
 
-var file_chatto_core_v1_moderation_events_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_chatto_core_v1_moderation_events_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_chatto_core_v1_moderation_events_proto_goTypes = []any{
 	(*RoomMemberBannedEvent)(nil),   // 0: chatto.core.v1.RoomMemberBannedEvent
 	(*RoomMemberUnbannedEvent)(nil), // 1: chatto.core.v1.RoomMemberUnbannedEvent
-	(*timestamppb.Timestamp)(nil),   // 2: google.protobuf.Timestamp
+	(*UserSuspendedEvent)(nil),      // 2: chatto.core.v1.UserSuspendedEvent
+	(*UserUnsuspendedEvent)(nil),    // 3: chatto.core.v1.UserUnsuspendedEvent
+	(*timestamppb.Timestamp)(nil),   // 4: google.protobuf.Timestamp
 }
 var file_chatto_core_v1_moderation_events_proto_depIdxs = []int32{
-	2, // 0: chatto.core.v1.RoomMemberBannedEvent.expires_at:type_name -> google.protobuf.Timestamp
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	4, // 0: chatto.core.v1.RoomMemberBannedEvent.expires_at:type_name -> google.protobuf.Timestamp
+	4, // 1: chatto.core.v1.UserSuspendedEvent.expires_at:type_name -> google.protobuf.Timestamp
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_chatto_core_v1_moderation_events_proto_init() }
@@ -207,13 +337,14 @@ func file_chatto_core_v1_moderation_events_proto_init() {
 		return
 	}
 	file_chatto_core_v1_moderation_events_proto_msgTypes[0].OneofWrappers = []any{}
+	file_chatto_core_v1_moderation_events_proto_msgTypes[2].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_chatto_core_v1_moderation_events_proto_rawDesc), len(file_chatto_core_v1_moderation_events_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

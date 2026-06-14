@@ -1454,26 +1454,27 @@ func TestChattoCore_ListRoles(t *testing.T) {
 	core, _ := setupTestCore(t)
 	ctx := testContext(t)
 
-	// Initially should have 4 default roles (owner, admin, moderator, everyone) created by CreateSpace
+	// Initially should have 5 default roles (owner, admin, moderator, everyone,
+	// and the virtual suspended policy role) created by CreateSpace.
 	roles, err := core.ListServerRoles(ctx)
 	if err != nil {
 		t.Fatalf("Failed to list roles: %v", err)
 	}
-	if len(roles) != 4 {
-		t.Errorf("Expected 4 default roles, got %d", len(roles))
+	if len(roles) != 5 {
+		t.Errorf("Expected 5 default roles, got %d", len(roles))
 	}
 
 	// Create some additional roles
 	core.CreateServerRole(ctx, "testmod", "Test Mod", "Test mod role")
 	core.CreateServerRole(ctx, "vip", "VIP", "VIP role")
 
-	// List again - should have 6 total (4 default + 2 custom)
+	// List again - should have 7 total (5 default + 2 custom)
 	roles, err = core.ListServerRoles(ctx)
 	if err != nil {
 		t.Fatalf("Failed to list roles: %v", err)
 	}
-	if len(roles) != 6 {
-		t.Errorf("Expected 6 roles, got %d", len(roles))
+	if len(roles) != 7 {
+		t.Errorf("Expected 7 roles, got %d", len(roles))
 	}
 }
 

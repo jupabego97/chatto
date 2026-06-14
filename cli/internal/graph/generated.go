@@ -72,6 +72,7 @@ type ResolverRoot interface {
 	Subscription() SubscriptionResolver
 	User() UserResolver
 	UserProfileUpdatedEvent() UserProfileUpdatedEventResolver
+	UserSuspension() UserSuspensionResolver
 	VideoProcessing() VideoProcessingResolver
 	VideoProcessingCompletedEvent() VideoProcessingCompletedEventResolver
 	VideoVariant() VideoVariantResolver
@@ -97,6 +98,8 @@ type ComplexityRoot struct {
 
 	AdminMutations struct {
 		ClearUsernameCooldown  func(childComplexity int, input model.ClearUsernameCooldownInput) int
+		SuspendUser            func(childComplexity int, input model.SuspendUserInput) int
+		UnsuspendUser          func(childComplexity int, input model.UnsuspendUserInput) int
 		UpdateBlockedUsernames func(childComplexity int, input model.UpdateBlockedUsernamesInput) int
 		UpdateUser             func(childComplexity int, input model.AdminUpdateUserInput) int
 	}
@@ -111,6 +114,7 @@ type ComplexityRoot struct {
 		ServerConfig         func(childComplexity int) int
 		ServerPermissions    func(childComplexity int) int
 		SystemInfo           func(childComplexity int) int
+		UserSuspensions      func(childComplexity int) int
 	}
 
 	AdminServerConfig struct {
@@ -915,6 +919,22 @@ type ComplexityRoot struct {
 		Timezone   func(childComplexity int) int
 	}
 
+	UserSuspension struct {
+		CreatedAt   func(childComplexity int) int
+		ExpiresAt   func(childComplexity int) int
+		ID          func(childComplexity int) int
+		Moderator   func(childComplexity int) int
+		ModeratorID func(childComplexity int) int
+		Reason      func(childComplexity int) int
+		User        func(childComplexity int) int
+		UserID      func(childComplexity int) int
+	}
+
+	UserSuspensionChangedEvent struct {
+		ExpiresAt func(childComplexity int) int
+		Suspended func(childComplexity int) int
+	}
+
 	UserTypingEvent struct {
 		RoomId            func(childComplexity int) int
 		ThreadRootEventId func(childComplexity int) int
@@ -950,6 +970,7 @@ type ComplexityRoot struct {
 	Viewer struct {
 		CanAdminManageRoles      func(childComplexity int) int
 		CanAdminManageUsers      func(childComplexity int) int
+		CanAdminSuspendUsers     func(childComplexity int) int
 		CanAdminViewAudit        func(childComplexity int) int
 		CanAdminViewRoles        func(childComplexity int) int
 		CanAdminViewSystem       func(childComplexity int) int
@@ -960,12 +981,18 @@ type ComplexityRoot struct {
 		HasNotifications         func(childComplexity int) int
 		HasUnreadFollowedThreads func(childComplexity int) int
 		Notifications            func(childComplexity int, limit *int32, offset *int32) int
+		Suspension               func(childComplexity int) int
 		User                     func(childComplexity int) int
 	}
 
 	ViewerNotificationPreference struct {
 		EffectiveLevel func(childComplexity int) int
 		Level          func(childComplexity int) int
+	}
+
+	ViewerSuspension struct {
+		ExpiresAt   func(childComplexity int) int
+		IsSuspended func(childComplexity int) int
 	}
 
 	VoiceCallToken struct {
@@ -977,6 +1004,8 @@ type AdminMutationsResolver interface {
 	UpdateBlockedUsernames(ctx context.Context, obj *model.AdminMutations, input model.UpdateBlockedUsernamesInput) (string, error)
 	UpdateUser(ctx context.Context, obj *model.AdminMutations, input model.AdminUpdateUserInput) (*corev1.User, error)
 	ClearUsernameCooldown(ctx context.Context, obj *model.AdminMutations, input model.ClearUsernameCooldownInput) (bool, error)
+	SuspendUser(ctx context.Context, obj *model.AdminMutations, input model.SuspendUserInput) (bool, error)
+	UnsuspendUser(ctx context.Context, obj *model.AdminMutations, input model.UnsuspendUserInput) (bool, error)
 }
 type AdminQueriesResolver interface {
 	ServerConfig(ctx context.Context, obj *model.AdminQueries) (*model.AdminServerConfig, error)
@@ -984,6 +1013,7 @@ type AdminQueriesResolver interface {
 	EventLogEntry(ctx context.Context, obj *model.AdminQueries, sequence string) (*model.EventLogEntry, error)
 	Projections(ctx context.Context, obj *model.AdminQueries) ([]*model.ProjectionState, error)
 	RoomBans(ctx context.Context, obj *model.AdminQueries, roomID *string) ([]*model.RoomBan, error)
+	UserSuspensions(ctx context.Context, obj *model.AdminQueries) ([]*model.UserSuspension, error)
 	GroupRolePermissions(ctx context.Context, obj *model.AdminQueries, groupID string, roleName string) (*model.RoomGroupRolePermissions, error)
 	GroupUserPermissions(ctx context.Context, obj *model.AdminQueries, groupID string, userID string) (*model.RoomGroupUserPermissions, error)
 }
@@ -1306,6 +1336,11 @@ type UserResolver interface {
 type UserProfileUpdatedEventResolver interface {
 	AvatarURL(ctx context.Context, obj *corev1.UserProfileUpdatedEvent) (*string, error)
 }
+type UserSuspensionResolver interface {
+	User(ctx context.Context, obj *model.UserSuspension) (*corev1.User, error)
+
+	Moderator(ctx context.Context, obj *model.UserSuspension) (*corev1.User, error)
+}
 type VideoProcessingResolver interface {
 	ThumbnailURL(ctx context.Context, obj *model.VideoProcessing) (*string, error)
 	ThumbnailAssetURL(ctx context.Context, obj *model.VideoProcessing) (*model.AssetURL, error)
@@ -1325,10 +1360,12 @@ type ViewerResolver interface {
 	CanStartDMs(ctx context.Context, obj *model.Viewer) (bool, error)
 	CanAdminViewUsers(ctx context.Context, obj *model.Viewer) (bool, error)
 	CanAdminManageUsers(ctx context.Context, obj *model.Viewer) (bool, error)
+	CanAdminSuspendUsers(ctx context.Context, obj *model.Viewer) (bool, error)
 	CanAdminViewRoles(ctx context.Context, obj *model.Viewer) (bool, error)
 	CanAdminManageRoles(ctx context.Context, obj *model.Viewer) (bool, error)
 	CanAdminViewSystem(ctx context.Context, obj *model.Viewer) (bool, error)
 	CanAdminViewAudit(ctx context.Context, obj *model.Viewer) (bool, error)
+	Suspension(ctx context.Context, obj *model.Viewer) (*model.ViewerSuspension, error)
 	Notifications(ctx context.Context, obj *model.Viewer, limit *int32, offset *int32) (*model.NotificationsConnection, error)
 	HasNotifications(ctx context.Context, obj *model.Viewer) (bool, error)
 	FollowedThreads(ctx context.Context, obj *model.Viewer, limit *int32, offset *int32) (*model.FollowedThreadsConnection, error)
@@ -1409,6 +1446,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.AdminMutations.ClearUsernameCooldown(childComplexity, args["input"].(model.ClearUsernameCooldownInput)), true
+	case "AdminMutations.suspendUser":
+		if e.ComplexityRoot.AdminMutations.SuspendUser == nil {
+			break
+		}
+
+		args, err := ec.field_AdminMutations_suspendUser_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.AdminMutations.SuspendUser(childComplexity, args["input"].(model.SuspendUserInput)), true
+	case "AdminMutations.unsuspendUser":
+		if e.ComplexityRoot.AdminMutations.UnsuspendUser == nil {
+			break
+		}
+
+		args, err := ec.field_AdminMutations_unsuspendUser_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.AdminMutations.UnsuspendUser(childComplexity, args["input"].(model.UnsuspendUserInput)), true
 	case "AdminMutations.updateBlockedUsernames":
 		if e.ComplexityRoot.AdminMutations.UpdateBlockedUsernames == nil {
 			break
@@ -1511,6 +1570,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.AdminQueries.SystemInfo(childComplexity), true
+	case "AdminQueries.userSuspensions":
+		if e.ComplexityRoot.AdminQueries.UserSuspensions == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AdminQueries.UserSuspensions(childComplexity), true
 
 	case "AdminServerConfig.blockedUsernames":
 		if e.ComplexityRoot.AdminServerConfig.BlockedUsernames == nil {
@@ -5175,6 +5240,68 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.UserSettings.Timezone(childComplexity), true
 
+	case "UserSuspension.createdAt":
+		if e.ComplexityRoot.UserSuspension.CreatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UserSuspension.CreatedAt(childComplexity), true
+	case "UserSuspension.expiresAt":
+		if e.ComplexityRoot.UserSuspension.ExpiresAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UserSuspension.ExpiresAt(childComplexity), true
+	case "UserSuspension.id":
+		if e.ComplexityRoot.UserSuspension.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UserSuspension.ID(childComplexity), true
+	case "UserSuspension.moderator":
+		if e.ComplexityRoot.UserSuspension.Moderator == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UserSuspension.Moderator(childComplexity), true
+	case "UserSuspension.moderatorId":
+		if e.ComplexityRoot.UserSuspension.ModeratorID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UserSuspension.ModeratorID(childComplexity), true
+	case "UserSuspension.reason":
+		if e.ComplexityRoot.UserSuspension.Reason == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UserSuspension.Reason(childComplexity), true
+	case "UserSuspension.user":
+		if e.ComplexityRoot.UserSuspension.User == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UserSuspension.User(childComplexity), true
+	case "UserSuspension.userId":
+		if e.ComplexityRoot.UserSuspension.UserID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UserSuspension.UserID(childComplexity), true
+
+	case "UserSuspensionChangedEvent.expiresAt":
+		if e.ComplexityRoot.UserSuspensionChangedEvent.ExpiresAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UserSuspensionChangedEvent.ExpiresAt(childComplexity), true
+	case "UserSuspensionChangedEvent.suspended":
+		if e.ComplexityRoot.UserSuspensionChangedEvent.Suspended == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UserSuspensionChangedEvent.Suspended(childComplexity), true
+
 	case "UserTypingEvent.roomId":
 		if e.ComplexityRoot.UserTypingEvent.RoomId == nil {
 			break
@@ -5311,6 +5438,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Viewer.CanAdminManageUsers(childComplexity), true
+	case "Viewer.canAdminSuspendUsers":
+		if e.ComplexityRoot.Viewer.CanAdminSuspendUsers == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Viewer.CanAdminSuspendUsers(childComplexity), true
 	case "Viewer.canAdminViewAudit":
 		if e.ComplexityRoot.Viewer.CanAdminViewAudit == nil {
 			break
@@ -5381,6 +5514,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Viewer.Notifications(childComplexity, args["limit"].(*int32), args["offset"].(*int32)), true
+	case "Viewer.suspension":
+		if e.ComplexityRoot.Viewer.Suspension == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Viewer.Suspension(childComplexity), true
 	case "Viewer.user":
 		if e.ComplexityRoot.Viewer.User == nil {
 			break
@@ -5400,6 +5539,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ViewerNotificationPreference.Level(childComplexity), true
+
+	case "ViewerSuspension.expiresAt":
+		if e.ComplexityRoot.ViewerSuspension.ExpiresAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ViewerSuspension.ExpiresAt(childComplexity), true
+	case "ViewerSuspension.isSuspended":
+		if e.ComplexityRoot.ViewerSuspension.IsSuspended == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ViewerSuspension.IsSuspended(childComplexity), true
 
 	case "VoiceCallToken.token":
 		if e.ComplexityRoot.VoiceCallToken.Token == nil {
@@ -5463,10 +5615,12 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputSetRoomNotificationLevelInput,
 		ec.unmarshalInputSetServerNotificationLevelInput,
 		ec.unmarshalInputStartDMInput,
+		ec.unmarshalInputSuspendUserInput,
 		ec.unmarshalInputUnarchiveRoomInput,
 		ec.unmarshalInputUnbanRoomMemberInput,
 		ec.unmarshalInputUnfollowThreadInput,
 		ec.unmarshalInputUnsubscribeFromPushInput,
+		ec.unmarshalInputUnsuspendUserInput,
 		ec.unmarshalInputUpdateBlockedUsernamesInput,
 		ec.unmarshalInputUpdateMessageInput,
 		ec.unmarshalInputUpdateMyPresenceInput,
@@ -5646,6 +5800,10 @@ func (ec *executionContext) childFields_AdminMutations(ctx context.Context, fiel
 		return ec.fieldContext_AdminMutations_updateUser(ctx, field)
 	case "clearUsernameCooldown":
 		return ec.fieldContext_AdminMutations_clearUsernameCooldown(ctx, field)
+	case "suspendUser":
+		return ec.fieldContext_AdminMutations_suspendUser(ctx, field)
+	case "unsuspendUser":
+		return ec.fieldContext_AdminMutations_unsuspendUser(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type AdminMutations", field.Name)
 }
@@ -5664,6 +5822,8 @@ func (ec *executionContext) childFields_AdminQueries(ctx context.Context, field 
 		return ec.fieldContext_AdminQueries_projections(ctx, field)
 	case "roomBans":
 		return ec.fieldContext_AdminQueries_roomBans(ctx, field)
+	case "userSuspensions":
+		return ec.fieldContext_AdminQueries_userSuspensions(ctx, field)
 	case "groupRolePermissions":
 		return ec.fieldContext_AdminQueries_groupRolePermissions(ctx, field)
 	case "groupUserPermissions":
@@ -6580,6 +6740,28 @@ func (ec *executionContext) childFields_UserSettings(ctx context.Context, field 
 	return nil, fmt.Errorf("no field named %q was found under type UserSettings", field.Name)
 }
 
+func (ec *executionContext) childFields_UserSuspension(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_UserSuspension_id(ctx, field)
+	case "userId":
+		return ec.fieldContext_UserSuspension_userId(ctx, field)
+	case "user":
+		return ec.fieldContext_UserSuspension_user(ctx, field)
+	case "moderatorId":
+		return ec.fieldContext_UserSuspension_moderatorId(ctx, field)
+	case "moderator":
+		return ec.fieldContext_UserSuspension_moderator(ctx, field)
+	case "reason":
+		return ec.fieldContext_UserSuspension_reason(ctx, field)
+	case "createdAt":
+		return ec.fieldContext_UserSuspension_createdAt(ctx, field)
+	case "expiresAt":
+		return ec.fieldContext_UserSuspension_expiresAt(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type UserSuspension", field.Name)
+}
+
 func (ec *executionContext) childFields_VideoProcessing(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "status":
@@ -6634,6 +6816,8 @@ func (ec *executionContext) childFields_Viewer(ctx context.Context, field graphq
 		return ec.fieldContext_Viewer_canAdminViewUsers(ctx, field)
 	case "canAdminManageUsers":
 		return ec.fieldContext_Viewer_canAdminManageUsers(ctx, field)
+	case "canAdminSuspendUsers":
+		return ec.fieldContext_Viewer_canAdminSuspendUsers(ctx, field)
 	case "canAdminViewRoles":
 		return ec.fieldContext_Viewer_canAdminViewRoles(ctx, field)
 	case "canAdminManageRoles":
@@ -6642,6 +6826,8 @@ func (ec *executionContext) childFields_Viewer(ctx context.Context, field graphq
 		return ec.fieldContext_Viewer_canAdminViewSystem(ctx, field)
 	case "canAdminViewAudit":
 		return ec.fieldContext_Viewer_canAdminViewAudit(ctx, field)
+	case "suspension":
+		return ec.fieldContext_Viewer_suspension(ctx, field)
 	case "notifications":
 		return ec.fieldContext_Viewer_notifications(ctx, field)
 	case "hasNotifications":
@@ -6662,6 +6848,16 @@ func (ec *executionContext) childFields_ViewerNotificationPreference(ctx context
 		return ec.fieldContext_ViewerNotificationPreference_effectiveLevel(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type ViewerNotificationPreference", field.Name)
+}
+
+func (ec *executionContext) childFields_ViewerSuspension(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "isSuspended":
+		return ec.fieldContext_ViewerSuspension_isSuspended(ctx, field)
+	case "expiresAt":
+		return ec.fieldContext_ViewerSuspension_expiresAt(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type ViewerSuspension", field.Name)
 }
 
 func (ec *executionContext) childFields_VoiceCallToken(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -6824,6 +7020,34 @@ func (ec *executionContext) field_AdminMutations_clearUsernameCooldown_args(ctx 
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
 		func(ctx context.Context, v any) (model.ClearUsernameCooldownInput, error) {
 			return ec.unmarshalNClearUsernameCooldownInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐClearUsernameCooldownInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_AdminMutations_suspendUser_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.SuspendUserInput, error) {
+			return ec.unmarshalNSuspendUserInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐSuspendUserInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_AdminMutations_unsuspendUser_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.UnsuspendUserInput, error) {
+			return ec.unmarshalNUnsuspendUserInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐUnsuspendUserInput(ctx, v)
 		})
 	if err != nil {
 		return nil, err
@@ -8916,6 +9140,94 @@ func (ec *executionContext) fieldContext_AdminMutations_clearUsernameCooldown(ct
 	return fc, nil
 }
 
+func (ec *executionContext) _AdminMutations_suspendUser(ctx context.Context, field graphql.CollectedField, obj *model.AdminMutations) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AdminMutations_suspendUser(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.AdminMutations().SuspendUser(ctx, obj, fc.Args["input"].(model.SuspendUserInput))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AdminMutations_suspendUser(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AdminMutations",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_AdminMutations_suspendUser_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AdminMutations_unsuspendUser(ctx context.Context, field graphql.CollectedField, obj *model.AdminMutations) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AdminMutations_unsuspendUser(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.AdminMutations().UnsuspendUser(ctx, obj, fc.Args["input"].(model.UnsuspendUserInput))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AdminMutations_unsuspendUser(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AdminMutations",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_AdminMutations_unsuspendUser_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _AdminQueries_systemInfo(ctx context.Context, field graphql.CollectedField, obj *model.AdminQueries) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -9140,6 +9452,38 @@ func (ec *executionContext) fieldContext_AdminQueries_roomBans(ctx context.Conte
 	if fc.Args, err = ec.field_AdminQueries_roomBans_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AdminQueries_userSuspensions(ctx context.Context, field graphql.CollectedField, obj *model.AdminQueries) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AdminQueries_userSuspensions(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.AdminQueries().UserSuspensions(ctx, obj)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*model.UserSuspension) graphql.Marshaler {
+			return ec.marshalNUserSuspension2ᚕᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐUserSuspensionᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AdminQueries_userSuspensions(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AdminQueries",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_UserSuspension(ctx, field)
+		},
 	}
 	return fc, nil
 }
@@ -23881,6 +24225,254 @@ func (ec *executionContext) fieldContext_UserSettings_timeFormat(_ context.Conte
 	return graphql.NewScalarFieldContext("UserSettings", field, false, false, errors.New("field of type TimeFormat does not have child fields"))
 }
 
+func (ec *executionContext) _UserSuspension_id(ctx context.Context, field graphql.CollectedField, obj *model.UserSuspension) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UserSuspension_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_UserSuspension_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UserSuspension", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _UserSuspension_userId(ctx context.Context, field graphql.CollectedField, obj *model.UserSuspension) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UserSuspension_userId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.UserID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_UserSuspension_userId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UserSuspension", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _UserSuspension_user(ctx context.Context, field graphql.CollectedField, obj *model.UserSuspension) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UserSuspension_user(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.UserSuspension().User(ctx, obj)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *corev1.User) graphql.Marshaler {
+			return ec.marshalOUser2ᚖhmansᚗdeᚋchattoᚋinternalᚋpbᚋchattoᚋcoreᚋv1ᚐUser(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_UserSuspension_user(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UserSuspension",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_User(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UserSuspension_moderatorId(ctx context.Context, field graphql.CollectedField, obj *model.UserSuspension) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UserSuspension_moderatorId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ModeratorID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_UserSuspension_moderatorId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UserSuspension", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _UserSuspension_moderator(ctx context.Context, field graphql.CollectedField, obj *model.UserSuspension) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UserSuspension_moderator(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.UserSuspension().Moderator(ctx, obj)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *corev1.User) graphql.Marshaler {
+			return ec.marshalOUser2ᚖhmansᚗdeᚋchattoᚋinternalᚋpbᚋchattoᚋcoreᚋv1ᚐUser(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_UserSuspension_moderator(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UserSuspension",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_User(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UserSuspension_reason(ctx context.Context, field graphql.CollectedField, obj *model.UserSuspension) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UserSuspension_reason(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Reason, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_UserSuspension_reason(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UserSuspension", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _UserSuspension_createdAt(ctx context.Context, field graphql.CollectedField, obj *model.UserSuspension) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UserSuspension_createdAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *timestamppb.Timestamp) graphql.Marshaler {
+			return ec.marshalNTime2ᚖgoogleᚗgolangᚗorgᚋprotobufᚋtypesᚋknownᚋtimestamppbᚐTimestamp(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_UserSuspension_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UserSuspension", field, false, false, errors.New("field of type Time does not have child fields"))
+}
+
+func (ec *executionContext) _UserSuspension_expiresAt(ctx context.Context, field graphql.CollectedField, obj *model.UserSuspension) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UserSuspension_expiresAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ExpiresAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *timestamppb.Timestamp) graphql.Marshaler {
+			return ec.marshalOTime2ᚖgoogleᚗgolangᚗorgᚋprotobufᚋtypesᚋknownᚋtimestamppbᚐTimestamp(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_UserSuspension_expiresAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UserSuspension", field, false, false, errors.New("field of type Time does not have child fields"))
+}
+
+func (ec *executionContext) _UserSuspensionChangedEvent_suspended(ctx context.Context, field graphql.CollectedField, obj *corev1.UserSuspensionChangedEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UserSuspensionChangedEvent_suspended(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Suspended, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_UserSuspensionChangedEvent_suspended(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UserSuspensionChangedEvent", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _UserSuspensionChangedEvent_expiresAt(ctx context.Context, field graphql.CollectedField, obj *corev1.UserSuspensionChangedEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UserSuspensionChangedEvent_expiresAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ExpiresAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *timestamppb.Timestamp) graphql.Marshaler {
+			return ec.marshalOTime2ᚖgoogleᚗgolangᚗorgᚋprotobufᚋtypesᚋknownᚋtimestamppbᚐTimestamp(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_UserSuspensionChangedEvent_expiresAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UserSuspensionChangedEvent", field, false, false, errors.New("field of type Time does not have child fields"))
+}
+
 func (ec *executionContext) _UserTypingEvent_roomId(ctx context.Context, field graphql.CollectedField, obj *corev1.UserTypingEvent) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -24492,6 +25084,29 @@ func (ec *executionContext) fieldContext_Viewer_canAdminManageUsers(_ context.Co
 	return graphql.NewScalarFieldContext("Viewer", field, true, true, errors.New("field of type Boolean does not have child fields"))
 }
 
+func (ec *executionContext) _Viewer_canAdminSuspendUsers(ctx context.Context, field graphql.CollectedField, obj *model.Viewer) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Viewer_canAdminSuspendUsers(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Viewer().CanAdminSuspendUsers(ctx, obj)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Viewer_canAdminSuspendUsers(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Viewer", field, true, true, errors.New("field of type Boolean does not have child fields"))
+}
+
 func (ec *executionContext) _Viewer_canAdminViewRoles(ctx context.Context, field graphql.CollectedField, obj *model.Viewer) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -24582,6 +25197,38 @@ func (ec *executionContext) _Viewer_canAdminViewAudit(ctx context.Context, field
 }
 func (ec *executionContext) fieldContext_Viewer_canAdminViewAudit(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("Viewer", field, true, true, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _Viewer_suspension(ctx context.Context, field graphql.CollectedField, obj *model.Viewer) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Viewer_suspension(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Viewer().Suspension(ctx, obj)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.ViewerSuspension) graphql.Marshaler {
+			return ec.marshalNViewerSuspension2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐViewerSuspension(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Viewer_suspension(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Viewer",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_ViewerSuspension(ctx, field)
+		},
+	}
+	return fc, nil
 }
 
 func (ec *executionContext) _Viewer_notifications(ctx context.Context, field graphql.CollectedField, obj *model.Viewer) (ret graphql.Marshaler) {
@@ -24762,6 +25409,52 @@ func (ec *executionContext) _ViewerNotificationPreference_effectiveLevel(ctx con
 }
 func (ec *executionContext) fieldContext_ViewerNotificationPreference_effectiveLevel(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("ViewerNotificationPreference", field, false, false, errors.New("field of type NotificationLevel does not have child fields"))
+}
+
+func (ec *executionContext) _ViewerSuspension_isSuspended(ctx context.Context, field graphql.CollectedField, obj *model.ViewerSuspension) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ViewerSuspension_isSuspended(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.IsSuspended, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ViewerSuspension_isSuspended(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ViewerSuspension", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _ViewerSuspension_expiresAt(ctx context.Context, field graphql.CollectedField, obj *model.ViewerSuspension) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ViewerSuspension_expiresAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ExpiresAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *timestamppb.Timestamp) graphql.Marshaler {
+			return ec.marshalOTime2ᚖgoogleᚗgolangᚗorgᚋprotobufᚋtypesᚋknownᚋtimestamppbᚐTimestamp(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ViewerSuspension_expiresAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ViewerSuspension", field, false, false, errors.New("field of type Time does not have child fields"))
 }
 
 func (ec *executionContext) _VoiceCallToken_token(ctx context.Context, field graphql.CollectedField, obj *core.VoiceCallToken) (ret graphql.Marshaler) {
@@ -28074,6 +28767,50 @@ func (ec *executionContext) unmarshalInputStartDMInput(ctx context.Context, obj 
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputSuspendUserInput(ctx context.Context, obj any) (model.SuspendUserInput, error) {
+	var it model.SuspendUserInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"userId", "reason", "expiresAt"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "userId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("userId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.UserID = data
+		case "reason":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("reason"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Reason = data
+		case "expiresAt":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("expiresAt"))
+			data, err := ec.unmarshalOTime2ᚖgoogleᚗgolangᚗorgᚋprotobufᚋtypesᚋknownᚋtimestamppbᚐTimestamp(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ExpiresAt = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputUnarchiveRoomInput(ctx context.Context, obj any) (model.UnarchiveRoomInput, error) {
 	var it model.UnarchiveRoomInput
 	if obj == nil {
@@ -28235,6 +28972,43 @@ func (ec *executionContext) unmarshalInputUnsubscribeFromPushInput(ctx context.C
 				return it, err
 			}
 			it.Endpoint = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputUnsuspendUserInput(ctx context.Context, obj any) (model.UnsuspendUserInput, error) {
+	var it model.UnsuspendUserInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"userId", "reason"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "userId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("userId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.UserID = data
+		case "reason":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("reason"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Reason = data
 		}
 	}
 	return it, nil
@@ -28940,6 +29714,11 @@ func (ec *executionContext) _EventType(ctx context.Context, sel ast.SelectionSet
 			return graphql.Null
 		}
 		return ec._UserTypingEvent(ctx, sel, obj)
+	case *corev1.UserSuspensionChangedEvent:
+		if obj == nil {
+			return graphql.Null
+		}
+		return ec._UserSuspensionChangedEvent(ctx, sel, obj)
 	case *corev1.UserProfileUpdatedEvent:
 		if obj == nil {
 			return graphql.Null
@@ -29387,6 +30166,78 @@ func (ec *executionContext) _AdminMutations(ctx context.Context, sel ast.Selecti
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "suspendUser":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._AdminMutations_suspendUser(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "unsuspendUser":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._AdminMutations_unsuspendUser(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -29577,6 +30428,42 @@ func (ec *executionContext) _AdminQueries(ctx context.Context, sel ast.Selection
 					}
 				}()
 				res = ec._AdminQueries_roomBans(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "userSuspensions":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._AdminQueries_userSuspensions(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -40307,6 +41194,174 @@ func (ec *executionContext) _UserSettings(ctx context.Context, sel ast.Selection
 	return out
 }
 
+var userSuspensionImplementors = []string{"UserSuspension"}
+
+func (ec *executionContext) _UserSuspension(ctx context.Context, sel ast.SelectionSet, obj *model.UserSuspension) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, userSuspensionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("UserSuspension")
+		case "id":
+			out.Values[i] = ec._UserSuspension_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "userId":
+			out.Values[i] = ec._UserSuspension_userId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "user":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._UserSuspension_user(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "moderatorId":
+			out.Values[i] = ec._UserSuspension_moderatorId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "moderator":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._UserSuspension_moderator(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "reason":
+			out.Values[i] = ec._UserSuspension_reason(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "createdAt":
+			out.Values[i] = ec._UserSuspension_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "expiresAt":
+			out.Values[i] = ec._UserSuspension_expiresAt(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var userSuspensionChangedEventImplementors = []string{"UserSuspensionChangedEvent", "EventType"}
+
+func (ec *executionContext) _UserSuspensionChangedEvent(ctx context.Context, sel ast.SelectionSet, obj *corev1.UserSuspensionChangedEvent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, userSuspensionChangedEventImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("UserSuspensionChangedEvent")
+		case "suspended":
+			out.Values[i] = ec._UserSuspensionChangedEvent_suspended(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "expiresAt":
+			out.Values[i] = ec._UserSuspensionChangedEvent_expiresAt(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var userTypingEventImplementors = []string{"UserTypingEvent", "EventType"}
 
 func (ec *executionContext) _UserTypingEvent(ctx context.Context, sel ast.SelectionSet, obj *corev1.UserTypingEvent) graphql.Marshaler {
@@ -40893,6 +41948,42 @@ func (ec *executionContext) _Viewer(ctx context.Context, sel ast.SelectionSet, o
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "canAdminSuspendUsers":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Viewer_canAdminSuspendUsers(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "canAdminViewRoles":
 			field := field
 
@@ -41011,6 +42102,42 @@ func (ec *executionContext) _Viewer(ctx context.Context, sel ast.SelectionSet, o
 					}
 				}()
 				res = ec._Viewer_canAdminViewAudit(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "suspension":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Viewer_suspension(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -41225,6 +42352,47 @@ func (ec *executionContext) _ViewerNotificationPreference(ctx context.Context, s
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var viewerSuspensionImplementors = []string{"ViewerSuspension"}
+
+func (ec *executionContext) _ViewerSuspension(ctx context.Context, sel ast.SelectionSet, obj *model.ViewerSuspension) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, viewerSuspensionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ViewerSuspension")
+		case "isSuspended":
+			out.Values[i] = ec._ViewerSuspension_isSuspended(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "expiresAt":
+			out.Values[i] = ec._ViewerSuspension_expiresAt(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -42834,6 +44002,11 @@ func (ec *executionContext) marshalNString2ᚕstringᚄ(ctx context.Context, sel
 	return ret
 }
 
+func (ec *executionContext) unmarshalNSuspendUserInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐSuspendUserInput(ctx context.Context, v any) (model.SuspendUserInput, error) {
+	res, err := ec.unmarshalInputSuspendUserInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) marshalNSystemInfo2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐSystemInfo(ctx context.Context, sel ast.SelectionSet, v *model.SystemInfo) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -42929,6 +44102,11 @@ func (ec *executionContext) unmarshalNUnfollowThreadInput2hmansᚗdeᚋchattoᚋ
 
 func (ec *executionContext) unmarshalNUnsubscribeFromPushInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐUnsubscribeFromPushInput(ctx context.Context, v any) (model.UnsubscribeFromPushInput, error) {
 	res, err := ec.unmarshalInputUnsubscribeFromPushInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNUnsuspendUserInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐUnsuspendUserInput(ctx context.Context, v any) (model.UnsuspendUserInput, error) {
+	res, err := ec.unmarshalInputUnsuspendUserInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
@@ -43146,6 +44324,32 @@ func (ec *executionContext) marshalNUserSettings2ᚖhmansᚗdeᚋchattoᚋintern
 	return ec._UserSettings(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNUserSuspension2ᚕᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐUserSuspensionᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.UserSuspension) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNUserSuspension2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐUserSuspension(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNUserSuspension2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐUserSuspension(ctx context.Context, sel ast.SelectionSet, v *model.UserSuspension) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._UserSuspension(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNVideoProcessingStatus2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐVideoProcessingStatus(ctx context.Context, v any) (model.VideoProcessingStatus, error) {
 	var res model.VideoProcessingStatus
 	err := res.UnmarshalGQL(v)
@@ -43194,6 +44398,20 @@ func (ec *executionContext) marshalNViewerNotificationPreference2ᚖhmansᚗde�
 		return graphql.Null
 	}
 	return ec._ViewerNotificationPreference(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNViewerSuspension2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐViewerSuspension(ctx context.Context, sel ast.SelectionSet, v model.ViewerSuspension) graphql.Marshaler {
+	return ec._ViewerSuspension(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNViewerSuspension2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐViewerSuspension(ctx context.Context, sel ast.SelectionSet, v *model.ViewerSuspension) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ViewerSuspension(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalN__Directive2githubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐDirective(ctx context.Context, sel ast.SelectionSet, v introspection.Directive) graphql.Marshaler {

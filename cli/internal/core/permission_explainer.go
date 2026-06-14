@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
 // PermissionExplanation captures the full resolution trace for a single
@@ -89,6 +90,36 @@ func (r *PermissionResolver) collectFullTrace(ctx context.Context, userID string
 	}
 
 	visit := exp.collect()
+	if r.core.UserSuspensions != nil && r.core.UserSuspensions.IsActive(userID, time.Now()) {
+		suspended := roleWithPosition{name: RoleSuspended, position: PositionSuspended}
+		if useChannelRoomPath {
+			if decided, _, err := r.probeRoom(ctx, suspended, parts, roomID, visit); err != nil {
+				return err
+			} else if decided && r.decisionFor(ScopeRoom, roomID, RoleSuspended, parts) == DecisionDeny {
+				return nil
+			}
+			if groupID != "" {
+				if decided, _, err := r.probeSet(ctx, suspended, parts, groupID, visit); err != nil {
+					return err
+				} else if decided && r.decisionFor(ScopeGroup, groupID, RoleSuspended, parts) == DecisionDeny {
+					return nil
+				}
+			}
+			if PermissionAppliesAtScope(perm, ScopeServer) {
+				if decided, _, err := r.probeServer(ctx, suspended, parts, visit); err != nil {
+					return err
+				} else if decided && r.decisionFor(ScopeServer, "", RoleSuspended, parts) == DecisionDeny {
+					return nil
+				}
+			}
+		} else if PermissionAppliesAtScope(perm, ScopeServer) {
+			if decided, _, err := r.probeServer(ctx, suspended, parts, visit); err != nil {
+				return err
+			} else if decided && r.decisionFor(ScopeServer, "", RoleSuspended, parts) == DecisionDeny {
+				return nil
+			}
+		}
+	}
 	userSubj := roleWithPosition{name: userID, position: 0}
 
 	// User-level probes.

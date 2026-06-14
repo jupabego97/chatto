@@ -37,7 +37,12 @@ const EMPTY_PERMISSIONS: ServerPermissions = {
 	canAdminViewRoles: false,
 	canAdminManageRoles: false,
 	canAdminViewSystem: false,
-	canAdminViewAudit: false
+	canAdminViewAudit: false,
+	canAdminSuspendUsers: false,
+	suspension: {
+		isSuspended: false,
+		expiresAt: null
+	}
 };
 
 export class ServerStateStore {

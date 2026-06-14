@@ -92,7 +92,7 @@ The schema is modular: each feature area lives in its own `.graphqls` file and e
 | Query                                | Description                                                                    |
 | ------------------------------------ | ------------------------------------------------------------------------------ |
 | `server`                             | Information about this Chatto server (name, branding, member counts). Public. |
-| `viewer`                             | Current authenticated user's identity, permissions, follows, notifications.    |
+| `viewer`                             | Current authenticated user's identity, permissions, follows, notifications, and suspension status. |
 
 Note: there is no top-level `me` query — viewer-scoped state hangs off the `viewer` field (which is extended by several feature files, e.g. `threads.graphqls` adds `viewer.followedThreads`, `notifications.graphqls` adds `viewer.notifications` / `viewer.hasNotifications`).
 
@@ -129,7 +129,7 @@ Note: there is no top-level `me` query — viewer-scoped state hangs off the `vi
 
 **Admin** ([`admin.graphqls`](../cli/internal/graph/admin.graphqls))
 
-Admin queries are nested under a single `admin: AdminQueries` field that returns `null` for non-admins — so one auth gate covers the whole sub-surface. See [Admin sub-API](#admin-sub-api) below for the contents.
+Admin queries are nested under a single `admin: AdminQueries` field that returns `null` for callers without admin-shaped permissions (`admin.access` or `user.suspend`). See [Admin sub-API](#admin-sub-api) below for the contents.
 
 ### Mutations
 
@@ -224,19 +224,19 @@ Admin queries are nested under a single `admin: AdminQueries` field that returns
 
 **Admin** ([`admin.graphqls`](../cli/internal/graph/admin.graphqls))
 
-Like `Query.admin`, the `admin: AdminMutations` field returns `null` for non-admins. See [Admin sub-API](#admin-sub-api) below.
+Like `Query.admin`, the `admin: AdminMutations` field returns `null` for callers without admin-shaped permissions. See [Admin sub-API](#admin-sub-api) below.
 
 ### Subscriptions
 
 | Subscription          | Description                                                                                                                                                                                                                                                                                                                                                                                                          |
 | --------------------- | ---- |
-| `myEvents`            | The single subscription. Multiplexes durable room events from `live.evt.>` (messages, reactions, edits, retractions, room lifecycle, asset processing) and transient sync signals from `live.sync.>` (typing, mention notifications, video-complete pings, voice call lifecycle, server config/profile/preference invalidation, notifications, thread-follow sync, presence, server membership lifecycle, session termination, heartbeats) into one GraphQL `Event` envelope. The membership set is tracked in real time — joining or leaving a room updates filtering immediately without reconnecting. DM-room events use the same membership gate as channel-room events; there is no separate DM read permission. Subscribing sets the caller's presence to `ONLINE`. Only new events stream; no historical replay. |
+| `myEvents`            | The single subscription. Multiplexes durable room events from `live.evt.>` (messages, reactions, edits, retractions, room lifecycle, asset processing) and transient sync signals from `live.sync.>` (typing, mention notifications, video-complete pings, voice call lifecycle, server config/profile/preference invalidation, notifications, thread-follow sync, presence, server membership lifecycle, session termination, user-suspension changes, heartbeats) into one GraphQL `Event` envelope. The membership set is tracked in real time — joining or leaving a room updates filtering immediately without reconnecting. DM-room events use the same membership gate as channel-room events; there is no separate DM read permission. Subscribing sets the caller's presence to `ONLINE`. Only new events stream; no historical replay. |
 
 There is no `adminAuditLogEvents` subscription — audit events arrive through `myEvents` for users with the relevant admin scope.
 
 ### Admin sub-API
 
-`Query.admin` returns `AdminQueries`; `Mutation.admin` returns `AdminMutations`. Both return `null` when the caller lacks admin access; individual nested fields can still apply narrower permissions such as `admin.view-system` or `admin.view-audit` (see [FDR-021](fdr/FDR-021-admin-dashboard.md)). Admin operations are spread across multiple schema files but all hang off these two types.
+`Query.admin` returns `AdminQueries`; `Mutation.admin` returns `AdminMutations`. Both return `null` when the caller lacks admin-shaped access (`admin.access` or `user.suspend`); individual nested fields can still apply narrower permissions such as `admin.view-system`, `admin.view-audit`, or `user.suspend` (see [FDR-021](fdr/FDR-021-admin-dashboard.md)). Admin operations are spread across multiple schema files but all hang off these two types.
 
 Diagnostic fields (`admin.systemInfo`, `admin.eventLog`, `admin.eventLogEntry`, and `admin.projections`) are operator-facing inspection tools. Their field names are part of the GraphQL API, but raw broker/storage strings, payload JSON, metric names, and point-in-time counts are diagnostic values rather than product-domain contracts.
 
@@ -250,9 +250,11 @@ Diagnostic fields (`admin.systemInfo`, `admin.eventLog`, `admin.eventLogEntry`, 
 | `admin.eventLog(limit, before)`                  | Query     | Diagnostic event-log browser, newest first (`limit` default 50, max 200).                    |
 | `admin.eventLogEntry(sequence)`                  | Query     | Diagnostic event-log entry lookup by sequence.                                               |
 | `admin.projections`                              | Query     | Projection lag, rough memory estimates, and diagnostic metric buckets.                       |
+| `admin.userSuspensions`                          | Query     | Active server-level user suspensions (`user.suspend`).                                      |
 | `admin.updateBlockedUsernames(input)`            | Mutation  | Update the newline-separated blocked-username list.                                          |
 | `admin.updateUser(input)`                        | Mutation  | Update a user's login / display name (bypasses the 30-day cooldown).                         |
 | `admin.clearUsernameCooldown(userId)`            | Mutation  | Manually clear a user's login change cooldown.                                               |
+| `admin.suspendUser(input)` / `admin.unsuspendUser(input)` | Mutation | Create or clear a server-level user suspension (`user.suspend` + strict outrank target). |
 
 ## Architecture Pattern: CRUD + Audit Log Moving to Event Sourcing
 
@@ -371,7 +373,7 @@ The `myEvents` GraphQL subscription is backed by one core stream (`StreamMyEvent
 | Stream                       | Wrapper          | Scope      | Description                                      |
 | ---------------------------- | ---------------- | ---------- | ------------------------------------------------ |
 | `SERVER_EVENTS`              | `corev1.Event`   | Server     | Pre-ES room/member event log retained for boot imports and inspection; no new runtime writes and no live delivery. |
-| `EVT`                        | `corev1.Event`   | Server     | Event-sourcing log ([ADR-033](adr/ADR-033-event-sourced-state-with-projections.md) / [ADR-034](adr/ADR-034-single-event-stream.md)). Subjects `evt.{aggregateType}.{aggregateId}.{eventType}`; republishes onto `live.evt.>` as the raw committed-event feed. Currently fed by per-aggregate boot imports ([ADR-035](adr/ADR-035-per-aggregate-phased-migration.md)); migrated aggregates include room membership/metadata, groups/layout, server config, users, messages/threads, reactions, RBAC, and auth workflow audit facts. |
+| `EVT`                        | `corev1.Event`   | Server     | Event-sourcing log ([ADR-033](adr/ADR-033-event-sourced-state-with-projections.md) / [ADR-034](adr/ADR-034-single-event-stream.md)). Subjects `evt.{aggregateType}.{aggregateId}.{eventType}`; republishes onto `live.evt.>` as the raw committed-event feed. Currently fed by per-aggregate boot imports ([ADR-035](adr/ADR-035-per-aggregate-phased-migration.md)); migrated aggregates include room membership/metadata, groups/layout, server config, users, messages/threads, reactions, RBAC, user suspensions, and auth workflow audit facts. |
 | Live Sync                    | `corev1.LiveEvent` | Transient  | Direct NATS Core pubsub on `live.sync.>` for transient UI sync signals. `myEvents` authorizes and adapts these messages into GraphQL events; they are never projection input. |
 
 **SERVER\_EVENTS subjects (legacy import source):**
@@ -438,6 +440,7 @@ Patterns: `live.sync.>` for transient `LiveEvent` pubsub and `live.evt.>` for ra
 | `live.sync.user.{userId}.settings_updated`               | User preferences changed     |
 | `live.sync.user.{userId}.room_read`                      | Room marked as read          |
 | `live.sync.user.{userId}.session_terminated`             | Active session revoked (logout-other-devices, account deletion) |
+| `live.sync.user.{userId}.suspension_changed`             | User suspension state changed |
 | `live.sync.member.deleted`                                | Server-level membership invalidation after account deletion |
 | `live.sync.room.{kind}.{roomId}.user_typing`             | User typing in a room        |
 | `live.sync.room.{kind}.{roomId}.call_joined`             | Participant joined the LiveKit voice call |

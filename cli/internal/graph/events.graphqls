@@ -81,6 +81,8 @@ union EventType =
   | RoomGroupsUpdatedEvent
   # Session termination
   | SessionTerminatedEvent
+  # User moderation sync
+  | UserSuspensionChangedEvent
   # Subscription liveness
   | HeartbeatEvent
 
@@ -613,6 +615,17 @@ Published on logout or admin boot. The subscription closes after this event.
 type SessionTerminatedEvent {
   "Why the session was terminated (logout, admin_boot, account_deleted)."
   reason: String!
+}
+
+"""
+Event: The viewer's server-level suspension state changed.
+Clients should refetch viewer permissions and suspension status.
+"""
+type UserSuspensionChangedEvent {
+  "Whether the viewer is currently suspended after this change."
+  suspended: Boolean!
+  "When the suspension expires. Null means indefinite or not suspended."
+  expiresAt: Time
 }
 
 # ==============================================================================

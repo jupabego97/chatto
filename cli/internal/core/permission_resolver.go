@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"time"
 )
 
 // PermissionResolver handles permission resolution using a single
@@ -138,7 +139,16 @@ func (r *PermissionResolver) resolveWithGroup(ctx context.Context, userID string
 	}
 
 	// Phase 1: user-level overrides.
-	decision, err := r.probeUserLevel(ctx, userID, kind, roomID, groupID, perm)
+	decision, err := r.probeActiveSuspensionRole(ctx, userID, kind, roomID, groupID, perm)
+	if err != nil {
+		return DecisionNone, err
+	}
+	if decision == DecisionDeny {
+		return DecisionDeny, nil
+	}
+
+	// Phase 2: user-level overrides.
+	decision, err = r.probeUserLevel(ctx, userID, kind, roomID, groupID, perm)
 	if err != nil {
 		return DecisionNone, err
 	}
@@ -146,13 +156,62 @@ func (r *PermissionResolver) resolveWithGroup(ctx context.Context, userID string
 		return decision, nil
 	}
 
-	// Phase 2: role hierarchy walk.
+	// Phase 3: role hierarchy walk.
 	result := DecisionNone
 	err = r.walkRoles(ctx, userID, kind, roomID, groupID, perm, func(entry TraceEntry) visitOutcome {
 		result = entry.Decision
 		return visitStop
 	})
 	return result, err
+}
+
+func (r *PermissionResolver) probeActiveSuspensionRole(ctx context.Context, userID string, kind RoomKind, roomID, groupID string, perm Permission) (DecisionKind, error) {
+	if r.core.UserSuspensions == nil || !r.core.UserSuspensions.IsActive(userID, time.Now()) {
+		return DecisionNone, nil
+	}
+	parts := perm.KeyParts()
+	if parts.Verb == "" || parts.ObjectType == "" {
+		return DecisionNone, nil
+	}
+	role := roleWithPosition{name: RoleSuspended, position: PositionSuspended}
+	visit := func(entry TraceEntry) visitOutcome {
+		return visitStop
+	}
+	if kind == KindChannel && roomID != "" && PermissionAppliesAtScope(perm, ScopeRoom) {
+		decided, _, err := r.probeRoom(ctx, role, parts, roomID, visit)
+		if err != nil {
+			return DecisionNone, err
+		}
+		if decided && r.decisionFor(ScopeRoom, roomID, RoleSuspended, parts) == DecisionDeny {
+			return DecisionDeny, nil
+		}
+		if groupID != "" {
+			decided, _, err := r.probeSet(ctx, role, parts, groupID, visit)
+			if err != nil {
+				return DecisionNone, err
+			}
+			if decided && r.decisionFor(ScopeGroup, groupID, RoleSuspended, parts) == DecisionDeny {
+				return DecisionDeny, nil
+			}
+		}
+		if PermissionAppliesAtScope(perm, ScopeServer) && r.decisionFor(ScopeServer, "", RoleSuspended, parts) == DecisionDeny {
+			return DecisionDeny, nil
+		}
+		return DecisionNone, nil
+	}
+	if kind == KindChannel && groupID != "" && PermissionAppliesAtScope(perm, ScopeGroup) {
+		decided, _, err := r.probeSet(ctx, role, parts, groupID, visit)
+		if err != nil {
+			return DecisionNone, err
+		}
+		if decided && r.decisionFor(ScopeGroup, groupID, RoleSuspended, parts) == DecisionDeny {
+			return DecisionDeny, nil
+		}
+	}
+	if PermissionAppliesAtScope(perm, ScopeServer) && r.decisionFor(ScopeServer, "", RoleSuspended, parts) == DecisionDeny {
+		return DecisionDeny, nil
+	}
+	return DecisionNone, nil
 }
 
 // probeUserLevel checks for an explicit user-level grant/deny.
@@ -459,10 +518,10 @@ func (r *PermissionResolver) probeSet(
 // DM rooms refuse to answer for channel-style operations.
 var dmBoundaryDeniedPermissions = map[Permission]bool{
 	// Privacy boundary.
-	PermRoomManage:       true,
+	PermRoomManage:    true,
 	PermRoomMemberBan: true,
-	PermMessageManage:    true,
-	PermMessageEcho:      true,
+	PermMessageManage: true,
+	PermMessageEcho:   true,
 	// DMs have their own creation / membership APIs.
 	PermRoomCreate: true,
 }

@@ -83,6 +83,9 @@ message LiveEvent {
 
     // ----- Session termination -----
     SessionTerminatedEvent session_terminated = 100;
+
+    // ----- User moderation sync -----
+    UserSuspensionChangedEvent user_suspension_changed = 110;
   }
 }
 
@@ -284,6 +287,17 @@ message RoomGroupsUpdatedEvent {
 message SessionTerminatedEvent {
   // Reason for termination: "logout", "admin_boot", "account_deleted"
   string reason = 1;
+}
+
+// Notifies a user that their server-level suspension state changed. The
+// frontend refetches viewer state and permissions when this arrives.
+message UserSuspensionChangedEvent {
+  // Whether the user is currently suspended after the change.
+  bool suspended = 1;
+
+  // When the suspension expires. Null when suspended indefinitely or not
+  // currently suspended.
+  optional google.protobuf.Timestamp expires_at = 2;
 }
 
 // ============================================================================

@@ -53,6 +53,8 @@ type Viewer {
   canAdminViewUsers: Boolean! @goField(forceResolver: true)
   "Whether the viewer can manage user role assignments."
   canAdminManageUsers: Boolean! @goField(forceResolver: true)
+  "Whether the viewer can suspend or unsuspend lower-ranked users."
+  canAdminSuspendUsers: Boolean! @goField(forceResolver: true)
   "Whether the viewer can view the admin roles page."
   canAdminViewRoles: Boolean! @goField(forceResolver: true)
   "Whether the viewer can create and edit server roles."

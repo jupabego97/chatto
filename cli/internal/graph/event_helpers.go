@@ -144,6 +144,8 @@ func unwrapLiveEvent(event *corev1.LiveEvent) any {
 		return e.RoomGroupsUpdated
 	case *corev1.LiveEvent_SessionTerminated:
 		return e.SessionTerminated
+	case *corev1.LiveEvent_UserSuspensionChanged:
+		return e.UserSuspensionChanged
 	default:
 		return nil
 	}

@@ -10,8 +10,10 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"hmans.de/chatto/internal/core"
 	"hmans.de/chatto/internal/graph/auth"
 	"hmans.de/chatto/internal/graph/model"
@@ -108,6 +110,42 @@ func (r *adminMutationsResolver) ClearUsernameCooldown(ctx context.Context, obj 
 	}
 
 	if err := r.core.ClearLoginChangeCooldown(ctx, input.UserID); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// SuspendUser is the resolver for the suspendUser field.
+func (r *adminMutationsResolver) SuspendUser(ctx context.Context, obj *model.AdminMutations, input model.SuspendUserInput) (bool, error) {
+	user := auth.ForContext(ctx)
+	if user == nil {
+		return false, core.ErrNotAuthenticated
+	}
+	if err := r.Resolver.requireUserSuspendTarget(ctx, user.Id, input.UserID); err != nil {
+		return false, err
+	}
+
+	var expiresAt *time.Time
+	if input.ExpiresAt != nil {
+		t := input.ExpiresAt.AsTime()
+		expiresAt = &t
+	}
+	if _, err := r.core.SuspendUser(ctx, user.Id, input.UserID, input.Reason, expiresAt); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// UnsuspendUser is the resolver for the unsuspendUser field.
+func (r *adminMutationsResolver) UnsuspendUser(ctx context.Context, obj *model.AdminMutations, input model.UnsuspendUserInput) (bool, error) {
+	user := auth.ForContext(ctx)
+	if user == nil {
+		return false, core.ErrNotAuthenticated
+	}
+	if err := r.Resolver.requireUserSuspendTarget(ctx, user.Id, input.UserID); err != nil {
+		return false, err
+	}
+	if err := r.core.UnsuspendUser(ctx, user.Id, input.UserID, input.Reason); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -293,6 +331,30 @@ func (r *adminQueriesResolver) RoomBans(ctx context.Context, obj *model.AdminQue
 	return out, nil
 }
 
+// UserSuspensions is the resolver for the userSuspensions field.
+func (r *adminQueriesResolver) UserSuspensions(ctx context.Context, obj *model.AdminQueries) ([]*model.UserSuspension, error) {
+	user := auth.ForContext(ctx)
+	if user == nil {
+		return nil, core.ErrNotAuthenticated
+	}
+	canSuspend, err := r.core.HasServerPermission(ctx, user.Id, core.PermUserSuspend)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check user.suspend: %w", err)
+	}
+	if !canSuspend {
+		return nil, core.ErrPermissionDenied
+	}
+	suspensions, err := r.core.ListActiveUserSuspensions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*model.UserSuspension, 0, len(suspensions))
+	for _, suspension := range suspensions {
+		out = append(out, userSuspensionToModel(suspension))
+	}
+	return out, nil
+}
+
 // UpdateServerConfig is the resolver for the updateServerConfig field.
 func (r *mutationResolver) UpdateServerConfig(ctx context.Context, input model.UpdateServerConfigInput) (*model.ServerProfile, error) {
 	user, err := requireAuth(ctx)
@@ -343,6 +405,21 @@ func (r *mutationResolver) UpdateServerConfig(ctx context.Context, input model.U
 	return publicServerConfigToModel(cfg), nil
 }
 
+func (r *Resolver) canAccessAdminNamespace(ctx context.Context, userID string) (bool, error) {
+	canView, err := r.core.CanAdminAccess(ctx, userID)
+	if err != nil {
+		return false, fmt.Errorf("failed to check admin permission: %w", err)
+	}
+	if canView {
+		return true, nil
+	}
+	canSuspend, err := r.core.HasServerPermission(ctx, userID, core.PermUserSuspend)
+	if err != nil {
+		return false, fmt.Errorf("failed to check user.suspend permission: %w", err)
+	}
+	return canSuspend, nil
+}
+
 // Admin is the resolver for the admin field.
 func (r *mutationResolver) Admin(ctx context.Context) (*model.AdminMutations, error) {
 	user := auth.ForContext(ctx)
@@ -350,14 +427,11 @@ func (r *mutationResolver) Admin(ctx context.Context) (*model.AdminMutations, er
 		return nil, nil // Not authenticated, return null
 	}
 
-	// Single gate on `admin.access`. Owner / admin pass via their
-	// enumerated permission set; moderators pass via the default
-	// moderator grant; everyone else gets a null result. Per-mutation
-	// gates underneath enforce their own capability (e.g.
-	// UpdateServerConfig requires `server.manage`).
-	canView, err := r.core.CanAdminAccess(ctx, user.Id)
+	// Namespace-level gate for admin-shaped tools. Per-field resolvers still
+	// enforce their own exact capability.
+	canView, err := r.Resolver.canAccessAdminNamespace(ctx, user.Id)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check admin permission: %w", err)
+		return nil, err
 	}
 	if !canView {
 		return nil, nil
@@ -372,9 +446,9 @@ func (r *queryResolver) Admin(ctx context.Context) (*model.AdminQueries, error) 
 		return nil, nil // Not authenticated, return null
 	}
 
-	canView, err := r.core.CanAdminAccess(ctx, user.Id)
+	canView, err := r.Resolver.canAccessAdminNamespace(ctx, user.Id)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check admin permission: %w", err)
+		return nil, err
 	}
 	if !canView {
 		return nil, nil
@@ -478,6 +552,46 @@ func (r *roomBanResolver) Moderator(ctx context.Context, obj *model.RoomBan) (*c
 	return user, nil
 }
 
+// User is the resolver for the user field.
+func (r *userSuspensionResolver) User(ctx context.Context, obj *model.UserSuspension) (*corev1.User, error) {
+	user, err := r.core.GetUser(ctx, obj.UserID)
+	if err != nil {
+		if errors.Is(err, jetstream.ErrKeyNotFound) || errors.Is(err, core.ErrNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return user, nil
+}
+
+// Moderator is the resolver for the moderator field.
+func (r *userSuspensionResolver) Moderator(ctx context.Context, obj *model.UserSuspension) (*corev1.User, error) {
+	user, err := r.core.GetUser(ctx, obj.ModeratorID)
+	if err != nil {
+		if errors.Is(err, jetstream.ErrKeyNotFound) || errors.Is(err, core.ErrNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return user, nil
+}
+
+// Suspension is the resolver for the suspension field.
+func (r *viewerResolver) Suspension(ctx context.Context, obj *model.Viewer) (*model.ViewerSuspension, error) {
+	suspension, ok := r.core.ActiveUserSuspension(ctx, obj.UserID)
+	if !ok {
+		return &model.ViewerSuspension{IsSuspended: false}, nil
+	}
+	var expiresAt *timestamppb.Timestamp
+	if suspension.ExpiresAt != nil {
+		expiresAt = timestamppb.New(*suspension.ExpiresAt)
+	}
+	return &model.ViewerSuspension{
+		IsSuspended: true,
+		ExpiresAt:   expiresAt,
+	}, nil
+}
+
 // AdminMutations returns AdminMutationsResolver implementation.
 func (r *Resolver) AdminMutations() AdminMutationsResolver { return &adminMutationsResolver{r} }
 
@@ -487,6 +601,10 @@ func (r *Resolver) AdminQueries() AdminQueriesResolver { return &adminQueriesRes
 // RoomBan returns RoomBanResolver implementation.
 func (r *Resolver) RoomBan() RoomBanResolver { return &roomBanResolver{r} }
 
+// UserSuspension returns UserSuspensionResolver implementation.
+func (r *Resolver) UserSuspension() UserSuspensionResolver { return &userSuspensionResolver{r} }
+
 type adminMutationsResolver struct{ *Resolver }
 type adminQueriesResolver struct{ *Resolver }
 type roomBanResolver struct{ *Resolver }
+type userSuspensionResolver struct{ *Resolver }

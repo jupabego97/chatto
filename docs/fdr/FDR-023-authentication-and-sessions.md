@@ -1,7 +1,7 @@
 # FDR-023: Authentication & Sessions
 
 **Status:** Active
-**Last reviewed:** 2026-06-07
+**Last reviewed:** 2026-06-08
 
 ## Overview
 
@@ -20,6 +20,7 @@ Chatto authenticates users via two parallel mechanisms: HTTP-only cookie session
 - **Password reset tokens** — reset links are backed by `RUNTIME_STATE` HMAC-derived `password_reset.{hmac}` records with a 1-hour per-key TTL. Raw reset tokens and links are never written to `EVT` or backup archives.
 - **Server version handshake** — the WebSocket `connection_ack` payload includes the server's version. The frontend uses this to detect deployed-version drift and prompt the user to refresh.
 - **Auth audit facts** — successful cookie logins, failed password login attempts, logout completion, bearer-token issuance/revocation, OAuth authorization-code issuance/exchange, registration-code issuance, email-verification-code issuance, password-reset link issuance, and password-reset completion are appended to `EVT` for admin audit-log inspection. Payloads carry safe request metadata only: capped user agent, HMAC-hashed IP, and hashed identifiers where needed.
+- **Suspension does not revoke auth** — server-level user suspension does not terminate existing sessions or block login. It changes downstream authorization and live-clients refetch viewer permissions; see FDR-028.
 
 ## Design Decisions
 
@@ -87,12 +88,12 @@ Chatto authenticates users via two parallel mechanisms: HTTP-only cookie session
 
 ## Permissions
 
-Authentication itself doesn't have a permission gate (you're either authenticated or not). After authentication, downstream actions are gated by the permissions described in FDR-001.
+Authentication itself doesn't have a permission gate (you're either authenticated or not). After authentication, downstream actions are gated by the permissions described in FDR-001. Suspended users remain authenticated, but their interaction permissions are denied by FDR-028's virtual `@suspended` role.
 
 ## Related
 
 - **ADRs:** ADR-017 (cookie-session auth for WebSocket), ADR-024 (opaque bearer tokens for cross-origin auth), ADR-025 (multi-instance client architecture), ADR-036 (runtime state in `RUNTIME_STATE`)
-- **FDRs:** FDR-001 (Roles & Permissions), FDR-018 (Account Lifecycle)
+- **FDRs:** FDR-001 (Roles & Permissions), FDR-018 (Account Lifecycle), FDR-028 (User Suspension)
 
 ## Open Questions
 

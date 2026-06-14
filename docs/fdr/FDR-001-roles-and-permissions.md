@@ -1,7 +1,7 @@
 # FDR-001: Roles & Permissions (RBAC)
 
 **Status:** Active
-**Last reviewed:** 2026-06-07
+**Last reviewed:** 2026-06-08
 
 ## Overview
 
@@ -10,7 +10,8 @@ Chatto controls who can do what through role-based access control. Every authent
 ## Behavior
 
 - Every authenticated user belongs to the implicit `everyone` role and may additionally hold one or more named server roles.
-- The system roles, highest rank first, are `owner`, `admin`, `moderator`, `everyone`. Custom roles can be created and positioned anywhere between `moderator` and `everyone`.
+- The system roles, highest rank first, are `owner`, `admin`, `moderator`, `everyone`, plus the protected virtual `suspended` role rendered as `@suspended`. Custom roles can be created and positioned anywhere between `moderator` and `everyone`.
+- `@suspended` is not manually assignable. It is applied virtually while the active user-suspension projection says the user is suspended.
 - A role grants or denies named permissions like `message.post`, `room.create`, `admin.view-users`.
 - Permission grants/denies can be configured at three scopes: per-server (the role default), per room-group, and per room. The most specific scope wins.
 - Permissions gate capabilities, not every form of visibility. For example, DM read access comes from room membership, while `message.post` gates starting DMs and sending root DM messages.
@@ -18,6 +19,7 @@ Chatto controls who can do what through role-based access control. Every authent
 - Custom role display names are limited to 80 bytes; descriptions are limited to 500 bytes.
 - Owners pass every permission check because the `owner` role is seeded with every server-scope permission — not because the resolver special-cases them. Owners are not above the rules; they hold the rules.
 - Operators can designate owners via `owners.emails` in `chatto.toml`. Matching users are auto-assigned the `owner` role when their email is verified, and already-verified matching users are assigned the role on server boot.
+- Suspension uses RBAC-shaped enforcement: explicit denies from active `@suspended` are checked before ordinary user-level grants and role grants, so stale ad-hoc grants cannot bypass suspension.
 
 ## Design Decisions
 
@@ -63,6 +65,12 @@ Chatto controls who can do what through role-based access control. Every authent
 **Why:** This aligns RBAC with the rest of Chatto's event-sourced migration and makes authorization reads rebuildable from the deployment event log. See ADR-033 and ADR-035.
 **Tradeoff:** Writes must append events and wait for local projection catch-up before returning, so mutation paths need optimistic concurrency handling instead of direct state writes.
 
+### 8. Server-level suspension is a virtual protected role
+
+**Decision:** Suspended users receive a virtual `@suspended` role whose explicit denies preflight normal permission resolution.
+**Why:** Suspension needs to feel like RBAC to operators while still being stronger than user-level grants and high-ranked role grants. The virtual-role shape keeps permission explanations and role UIs coherent without storing a manual assignment.
+**Tradeoff:** `@suspended` has special resolver behavior and cannot be edited like a normal custom role assignment. See FDR-028.
+
 ## Permissions
 
 The full permission catalog is in `cli/internal/core/permission.go`. Key permissions that gate RBAC management itself:
@@ -70,6 +78,7 @@ The full permission catalog is in `cli/internal/core/permission.go`. Key permiss
 - `role.manage` — create, edit, delete roles and the permissions attached to them.
 - `role.assign` — assign roles to users.
 - `admin.access`, `admin.view-users`, `admin.view-system`, `admin.view-audit` — gate access to the admin UI and its sub-views.
+- `user.suspend` — suspend or unsuspend lower-ranked users.
 - `message.post` — post root messages in rooms and start DMs. Reading DMs is not permission-gated; it follows room membership.
 - `room.manage` — edit/configure/delete channel rooms.
 - `room.ban-member` — ban lower-ranked members from channel rooms. DM membership is not managed through this permission.
@@ -77,4 +86,4 @@ The full permission catalog is in `cli/internal/core/permission.go`. Key permiss
 ## Related
 
 - **ADRs:** ADR-004 (authorization at API boundary), ADR-005 (hierarchy-wins RBAC), ADR-027 (instance/space consolidation), ADR-030 (space tier retirement), ADR-031 (room-group-centric ACL), ADR-033 (event-sourced state), ADR-035 (per-aggregate migration), ADR-037 (DM access via membership)
-- **FDRs:** Every FDR that mentions a permission depends on this one.
+- **FDRs:** FDR-028 (User Suspension), and every FDR that mentions a permission depends on this one.

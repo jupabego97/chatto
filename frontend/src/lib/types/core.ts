@@ -120,6 +120,10 @@ export const PermAdminAuditView: Permission = "admin.view-audit";
  */
 export const PermUserDeleteAny: Permission = "user.delete-any";
 /**
+ * PermUserSuspend allows admins to suspend or unsuspend lower-ranked users.
+ */
+export const PermUserSuspend: Permission = "user.suspend";
+/**
  * PermUserDeleteSelf allows users to delete their own account.
  */
 export const PermUserDeleteSelf: Permission = "user.delete-self";

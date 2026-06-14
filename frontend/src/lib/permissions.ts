@@ -79,6 +79,10 @@ export const PERMISSION_METADATA: Record<string, PermissionMetadata> = {
   },
 
   // User management
+  'user.suspend': {
+    description:
+      'Suspend or unsuspend a lower-ranked user from interacting with the server'
+  },
   'user.delete-any': {
     description: "Delete another user's account. The actor must outrank the target user."
   },

@@ -175,9 +175,11 @@ message Event {
     RbacPermissionDeniedEvent rbac_permission_denied = 811;
     RbacPermissionClearedEvent rbac_permission_cleared = 812;
 
-    // ----- Moderation (840-899, durable, room-owned) -----
+    // ----- Moderation (840-899, durable, room/user-owned) -----
     RoomMemberBannedEvent room_member_banned = 840;
     RoomMemberUnbannedEvent room_member_unbanned = 841;
+    UserSuspendedEvent user_suspended = 842;
+    UserUnsuspendedEvent user_unsuspended = 843;
 
     // ----- Auth/security audit (900-999, durable, evt.auth.server / evt.user.{userId}) -----
     // These facts are intentionally minimal: no raw token, verification code,

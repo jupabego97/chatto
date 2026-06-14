@@ -1,7 +1,7 @@
 # FDR-021: Admin Dashboard & System Monitoring
 
 **Status:** Active
-**Last reviewed:** 2026-06-06
+**Last reviewed:** 2026-06-08
 
 ## Overview
 
@@ -11,6 +11,7 @@ The admin section gives owners and admins visibility into the server's operation
 
 - The admin UI lives under `/chat/[serverId]/server-admin/`. Non-admins see an "access denied" panel; the link is hidden from the chat header for them.
 - **Users page** — paginated list of all server members with login, email, roles, verification status. Admins can edit profiles, assign roles, suspend, or delete users (subject to outranking the target — see FDR-001).
+- **Moderation page** — shows active server-level user suspensions alongside active room bans. Suspension rows include target, moderator, reason, creation time, and expiry; room-ban rows include the banned user, room, reason, and expiry.
 - **System Info page** — shows backing message-broker connection status, storage account limits and current usage, stream/consumer health, projection health (lag, entry counts, and rough memory estimates), and `admin.systemInfo.stats` (user count, channel room count, DM room count).
 - **Audit log page** — chronological diagnostic event-log view for forensic review. The list view uses `admin.eventLog`; the detail view uses `admin.eventLogEntry` to show the raw payload JSON for human inspection.
 - The audit/event-log GraphQL connection returns `totalCount` as `Int64` because it reflects retained stream message counts, which can exceed GraphQL's 32-bit `Int` range on long-running servers.
@@ -49,7 +50,7 @@ The admin section gives owners and admins visibility into the server's operation
 
 ### 6. Nested `admin` resolver with field-specific capability gates
 
-**Decision:** Admin queries are grouped under a nested `Query.admin` type gated by `admin.access`, while sensitive fields still check their narrower capabilities (`admin.view-users`, `admin.view-system`, `admin.view-audit`) before returning data.
+**Decision:** Admin queries are grouped under a nested `Query.admin` type. Broad admin entry is gated by `admin.access`, and suspension tooling may also enter the namespace with `user.suspend`; sensitive fields still check their narrower capabilities (`admin.view-users`, `admin.view-system`, `admin.view-audit`, `user.suspend`) before returning data.
 **Why:** The nested shape gives the UI one obvious admin boundary, and the field-level checks let operators delegate user, system, and audit visibility independently.
 **Tradeoff:** A user may be able to enter the admin area but see permission denials or empty panels for specific sections. The UI has to reflect that capability split clearly.
 
@@ -60,11 +61,12 @@ The admin section gives owners and admins visibility into the server's operation
 - `admin.view-system` — gates `admin.systemInfo` and `admin.projections`.
 - `admin.view-audit` — gates `admin.eventLog` and `admin.eventLogEntry`.
 - `role.assign` — gates user edits and role changes via the `requireUserAdminTarget` helper (permission + outrank-target check).
+- `user.suspend` — gates server-level user suspension and unsuspension via the `requireUserSuspendTarget` helper (permission + outrank-target check).
 
 ## Related
 
 - **ADRs:** ADR-001 (NATS JetStream as primary data store), ADR-033 (event-sourced state with projections), ADR-034 (single event stream), ADR-036 (runtime state in `RUNTIME_STATE`)
-- **FDRs:** FDR-001 (Roles & Permissions), FDR-018 (Account Lifecycle), FDR-020 (Server Branding & Configuration), FDR-022 (User Profile), FDR-024 (Permission Inspection Tool), FDR-025 (User Search & Member Directory)
+- **FDRs:** FDR-001 (Roles & Permissions), FDR-018 (Account Lifecycle), FDR-020 (Server Branding & Configuration), FDR-022 (User Profile), FDR-024 (Permission Inspection Tool), FDR-025 (User Search & Member Directory), FDR-028 (User Suspension)
 
 ## Open Questions
 

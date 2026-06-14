@@ -194,7 +194,7 @@ func (c *ChattoCore) ListAdmins(ctx context.Context) ([]string, error) {
 }
 
 // AssignServerRole assigns any role to a user.
-// The role must exist (system or custom). The everyone role cannot be assigned (it's implicit).
+// The role must exist (system or custom). Virtual roles cannot be assigned.
 // Pass SystemActorID as actorID to bypass hierarchy checks (for internal/bootstrap use).
 //
 // Hierarchy checks (mirroring RevokeServerRole for symmetry):
@@ -203,7 +203,7 @@ func (c *ChattoCore) ListAdmins(ctx context.Context) ([]string, error) {
 //     cannot decorate each other with new roles, only system bootstrap or
 //     a strictly-higher-ranked admin can.
 func (c *ChattoCore) AssignServerRole(ctx context.Context, actorID, userID, roleName string) error {
-	if roleName == RoleEveryone {
+	if roleName == RoleEveryone || roleName == RoleSuspended {
 		return ErrImplicitRole
 	}
 
@@ -243,7 +243,7 @@ func (c *ChattoCore) AssignServerRole(ctx context.Context, actorID, userID, role
 }
 
 // RevokeServerRole removes an role from a user.
-// The role must exist (system or custom). The everyone role cannot be revoked (it's implicit).
+// The role must exist (system or custom). Virtual roles cannot be revoked.
 // Pass SystemActorID as actorID to bypass hierarchy and self-demote checks (for internal/bootstrap use).
 //
 // Checks (in order):
@@ -251,7 +251,7 @@ func (c *ChattoCore) AssignServerRole(ctx context.Context, actorID, userID, role
 //   - Actor must outrank the role being revoked (role-position hierarchy).
 //   - Actor must outrank the target user (user-position hierarchy) — peers cannot demote each other.
 func (c *ChattoCore) RevokeServerRole(ctx context.Context, actorID, userID, roleName string) error {
-	if roleName == RoleEveryone {
+	if roleName == RoleEveryone || roleName == RoleSuspended {
 		return ErrImplicitRole
 	}
 
@@ -288,9 +288,9 @@ func (c *ChattoCore) RevokeServerRole(ctx context.Context, actorID, userID, role
 }
 
 // GetRoleUsers returns all user IDs explicitly assigned to a role.
-// The implicit `everyone` role returns []; all authenticated users carry it.
+// Virtual roles return []; they are derived from runtime/domain state.
 func (c *ChattoCore) GetRoleUsers(ctx context.Context, roleName string) ([]string, error) {
-	if roleName == RoleEveryone {
+	if roleName == RoleEveryone || roleName == RoleSuspended {
 		return []string{}, nil
 	}
 	if !c.RBAC.RoleExists(roleName) {

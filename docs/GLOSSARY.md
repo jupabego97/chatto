@@ -96,9 +96,13 @@ Chatto's RBAC model. Read top-to-bottom — terms build on each other.
 
 **Everyone** — Implicit virtual role (position 0) held by every authenticated user. Default-permission grants attach here.
 
+**Suspended role** — Protected virtual role internally named `suspended` and shown as `@suspended`. Applied only while a user has an active server-level suspension; not manually assignable.
+
 **Scope** — Tier at which a permission is configured: `server`, `group`, or `room`. Resolution: room > group > server (first explicit decision wins). See `.claude/rules/authorization.md`.
 
-**User-level override** — Permission grant or deny attached directly to a user, not via a role. Outranks every role grant. Used for suspensions and ad-hoc grants.
+**User-level override** — Permission grant or deny attached directly to a user, not via a role. Outranks every ordinary role grant. Used for ad-hoc exceptions; active suspension denies preflight these grants.
+
+**User suspension** — Server-level moderation state that keeps a user authenticated but temporarily denies interaction/admin permissions through the virtual `@suspended` role. See [FDR-028](fdr/FDR-028-user-suspension.md).
 
 **DM Privacy Boundary** — Static set of permissions (`message.manage`, `message.echo`, `room.manage`, …) unconditionally denied inside DM rooms regardless of role grants. Owners can't moderate DM contents; DM read access comes from room membership, not a separate read permission. See [ADR-037](adr/ADR-037-dm-access-via-membership.md).
 

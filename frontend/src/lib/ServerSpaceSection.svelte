@@ -105,6 +105,11 @@
         canAdminManageRoles
         canAdminViewSystem
         canAdminViewAudit
+        canAdminSuspendUsers
+        suspension {
+          isSuspended
+          expiresAt
+        }
       }
     }
   `);
@@ -216,6 +221,10 @@
         // Reload the icon when instance config (name/logo) changes.
         if (event.__typename === 'ServerUpdatedEvent') {
           reloadInstance();
+        }
+
+        if (event.__typename === 'UserSuspensionChangedEvent') {
+          void loadAll();
         }
 
         // Root message in any room on this server → mark that room

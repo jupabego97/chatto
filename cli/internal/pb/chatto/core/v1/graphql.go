@@ -54,6 +54,7 @@ func (*RoomMarkedAsReadEvent) IsEventType()             {}
 func (*MentionStatusClearedEvent) IsEventType()         {}
 func (*RoomGroupsUpdatedEvent) IsEventType()            {}
 func (*SessionTerminatedEvent) IsEventType()            {}
+func (*UserSuspensionChangedEvent) IsEventType()        {}
 
 // Synthetic, in-process only. Emitted by StreamMyEvents on a 25s ticker purely
 // as a liveness signal for the client-side watchdog.

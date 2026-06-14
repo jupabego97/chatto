@@ -15,7 +15,16 @@ export type ViewerData = {
   canAdminManageRoles: boolean;
   canAdminViewSystem: boolean;
   canAdminViewAudit: boolean;
+  canAdminSuspendUsers: boolean;
+  suspension: {
+    isSuspended: boolean;
+    expiresAt?: string | null;
+  };
 };
+
+type ViewerPermissionField = {
+  [K in keyof ViewerData]: ViewerData[K] extends boolean ? K : never;
+}[keyof ViewerData];
 
 /**
  * Server-level permissions for the current user, plus a `loaded` flag.
@@ -35,7 +44,12 @@ const EMPTY_PERMISSIONS: ServerPermissions = {
   canAdminViewRoles: false,
   canAdminManageRoles: false,
   canAdminViewSystem: false,
-  canAdminViewAudit: false
+  canAdminViewAudit: false,
+  canAdminSuspendUsers: false,
+  suspension: {
+    isSuspended: false,
+    expiresAt: null
+  }
 };
 
 /**
@@ -68,13 +82,14 @@ export function getServerPermissions(
  * Maps a permission string constant to the corresponding typed boolean on ViewerData.
  * Used by the admin layout to bridge its string-based nav/route system.
  */
-const PERMISSION_TO_FIELD: Record<string, keyof ViewerData> = {
+const PERMISSION_TO_FIELD: Record<string, ViewerPermissionField> = {
   'admin.access': 'canViewAdmin',
   'admin.view-users': 'canAdminViewUsers',
   'role.assign': 'canAdminManageUsers',
   'role.manage': 'canAdminManageRoles',
   'admin.view-system': 'canAdminViewSystem',
-  'admin.view-audit': 'canAdminViewAudit'
+  'admin.view-audit': 'canAdminViewAudit',
+  'user.suspend': 'canAdminSuspendUsers'
 };
 
 export function viewerHasPermission(viewer: ViewerData, perm: string): boolean {

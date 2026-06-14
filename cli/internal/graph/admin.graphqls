@@ -301,6 +301,42 @@ type RoomBan {
 extend type AdminQueries {
   "List active room bans. Requires server-scope `room.ban-member`."
   roomBans(roomId: ID): [RoomBan!]! @goField(forceResolver: true)
+
+  "List active user suspensions. Requires `user.suspend`."
+  userSuspensions: [UserSuspension!]! @goField(forceResolver: true)
+}
+
+"An active server-level user suspension shown in admin moderation tools."
+type UserSuspension {
+  "The event ID that created the active suspension."
+  id: ID!
+  "The suspended user."
+  userId: ID!
+  "The suspended user, if the account still exists."
+  user: User @goField(forceResolver: true)
+  "The moderator who created the suspension."
+  moderatorId: ID!
+  "The moderator who created the suspension, if the account still exists."
+  moderator: User @goField(forceResolver: true)
+  "Moderator-entered reason retained for audit."
+  reason: String!
+  "When the suspension was created."
+  createdAt: Time!
+  "When this suspension expires. Null means indefinite."
+  expiresAt: Time
+}
+
+"The current viewer's server-level suspension status."
+type ViewerSuspension {
+  "Whether the viewer is currently suspended."
+  isSuspended: Boolean!
+  "When the suspension expires. Null means indefinite or not suspended."
+  expiresAt: Time
+}
+
+extend type Viewer {
+  "The viewer's suspension status. The reason is intentionally not exposed here."
+  suspension: ViewerSuspension! @goField(forceResolver: true)
 }
 
 "Admin mutations for security and user management."
@@ -311,6 +347,10 @@ type AdminMutations {
   updateUser(input: AdminUpdateUserInput!): User! @goField(forceResolver: true)
   "Clear the 30-day login change cooldown for a user, allowing them to immediately rename themselves. Idempotent."
   clearUsernameCooldown(input: ClearUsernameCooldownInput!): Boolean! @goField(forceResolver: true)
+  "Suspend a lower-ranked user from permission-gated server interactions. Requires `user.suspend`."
+  suspendUser(input: SuspendUserInput!): Boolean! @goField(forceResolver: true)
+  "Remove an active suspension from a lower-ranked user. Requires `user.suspend`."
+  unsuspendUser(input: UnsuspendUserInput!): Boolean! @goField(forceResolver: true)
 }
 
 "Input for AdminMutations.updateBlockedUsernames."
@@ -333,6 +373,24 @@ input AdminUpdateUserInput {
   login: String
   "New display name."
   displayName: String
+}
+
+"Input for AdminMutations.suspendUser."
+input SuspendUserInput {
+  "ID of the user to suspend."
+  userId: ID!
+  "Moderator-entered reason retained for audit."
+  reason: String!
+  "Optional expiry for a temporary suspension. Null means indefinite."
+  expiresAt: Time
+}
+
+"Input for AdminMutations.unsuspendUser."
+input UnsuspendUserInput {
+  "ID of the user to unsuspend."
+  userId: ID!
+  "Moderator-entered reason retained for audit."
+  reason: String!
 }
 
 extend type Mutation {

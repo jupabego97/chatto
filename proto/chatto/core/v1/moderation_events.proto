@@ -35,3 +35,20 @@ message RoomMemberUnbannedEvent {
   string user_id = 2;
   string reason = 3;
 }
+
+// UserSuspendedEvent records a moderator suspending a user at the server level.
+// The Event envelope actor_id is the moderator. The payload user_id is the
+// target. Absence of expires_at means the suspension is indefinite.
+message UserSuspendedEvent {
+  string user_id = 1;
+  string reason = 2;
+  optional google.protobuf.Timestamp expires_at = 3;
+}
+
+// UserUnsuspendedEvent records a moderator removing an active server-level
+// suspension. The Event envelope actor_id is the moderator. The payload user_id
+// is the target.
+message UserUnsuspendedEvent {
+  string user_id = 1;
+  string reason = 2;
+}

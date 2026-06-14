@@ -242,6 +242,24 @@ func (r *Resolver) requireUserPermissionTarget(ctx context.Context, callerID, ta
 	return nil
 }
 
+func (r *Resolver) requireUserSuspendTarget(ctx context.Context, callerID, targetID string) error {
+	can, err := r.core.HasServerPermission(ctx, callerID, core.PermUserSuspend)
+	if err != nil {
+		return fmt.Errorf("failed to check user.suspend permission: %w", err)
+	}
+	if !can {
+		return core.ErrPermissionDenied
+	}
+	outranks, err := r.core.OutranksUser(ctx, callerID, targetID)
+	if err != nil {
+		return fmt.Errorf("failed to check role hierarchy: %w", err)
+	}
+	if !outranks {
+		return core.ErrPermissionDenied
+	}
+	return nil
+}
+
 // isServerAdmin returns true when the user has the owner or admin role.
 func (r *Resolver) isServerAdmin(ctx context.Context, userID string) (bool, error) {
 	isOwner, err := r.core.IsServerOwner(ctx, userID)

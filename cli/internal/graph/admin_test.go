@@ -3,7 +3,9 @@ package graph
 import (
 	"errors"
 	"testing"
+	"time"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"hmans.de/chatto/internal/core"
 	"hmans.de/chatto/internal/graph/model"
 )
@@ -317,6 +319,109 @@ func TestAdminUpdateUser_Authorization(t *testing.T) {
 		})
 		if err == nil {
 			t.Error("expected error for empty input, got nil")
+		}
+	})
+}
+
+func TestAdminUserSuspension(t *testing.T) {
+	env := setupTestResolverWithAdmin(t, []string{"testuser@example.com"})
+	amr := env.resolver.AdminMutations()
+	aqr := env.resolver.AdminQueries()
+
+	t.Run("unauthenticated denied", func(t *testing.T) {
+		_, err := amr.SuspendUser(env.unauthContext(), &model.AdminMutations{}, model.SuspendUserInput{
+			UserID: env.testUser.Id,
+			Reason: "missing actor",
+		})
+		if !errors.Is(err, core.ErrNotAuthenticated) {
+			t.Fatalf("expected ErrNotAuthenticated, got %v", err)
+		}
+	})
+
+	t.Run("caller without user.suspend denied", func(t *testing.T) {
+		target := env.createVerifiedUser(t, "suspend-no-perm-target", "Target", "password123")
+		caller := env.createVerifiedUser(t, "suspend-no-perm-caller", "Caller", "password123")
+		_, err := amr.SuspendUser(env.authContextForUser(caller), &model.AdminMutations{}, model.SuspendUserInput{
+			UserID: target.Id,
+			Reason: "no permission",
+		})
+		if !errors.Is(err, core.ErrPermissionDenied) {
+			t.Fatalf("expected ErrPermissionDenied, got %v", err)
+		}
+	})
+
+	t.Run("peer or higher-ranked target denied", func(t *testing.T) {
+		admin := env.createVerifiedUser(t, "suspend-admin", "Admin", "password123")
+		if err := env.core.AssignServerRole(env.ctx, core.SystemActorID, admin.Id, core.RoleAdmin); err != nil {
+			t.Fatalf("AssignServerRole: %v", err)
+		}
+		_, err := amr.SuspendUser(env.authContextForUser(admin), &model.AdminMutations{}, model.SuspendUserInput{
+			UserID: env.testUser.Id,
+			Reason: "cannot suspend owner",
+		})
+		if !errors.Is(err, core.ErrPermissionDenied) {
+			t.Fatalf("expected ErrPermissionDenied, got %v", err)
+		}
+	})
+
+	t.Run("lower-ranked target succeeds and viewer sees only state and expiry", func(t *testing.T) {
+		target := env.createVerifiedUser(t, "suspend-success-target", "Suspended", "password123")
+		expiresAt := timestamppb.New(time.Now().Add(time.Hour))
+		ok, err := amr.SuspendUser(env.authContext(), &model.AdminMutations{}, model.SuspendUserInput{
+			UserID:    target.Id,
+			Reason:    "policy test",
+			ExpiresAt: expiresAt,
+		})
+		if err != nil {
+			t.Fatalf("SuspendUser: %v", err)
+		}
+		if !ok {
+			t.Fatal("expected suspendUser true")
+		}
+
+		viewerSuspension, err := env.resolver.Viewer().Suspension(env.authContextForUser(target), &model.Viewer{UserID: target.Id})
+		if err != nil {
+			t.Fatalf("viewer.suspension: %v", err)
+		}
+		if !viewerSuspension.IsSuspended || viewerSuspension.ExpiresAt == nil {
+			t.Fatalf("expected suspended viewer with expiry, got %#v", viewerSuspension)
+		}
+
+		active, err := aqr.UserSuspensions(env.authContext(), &model.AdminQueries{})
+		if err != nil {
+			t.Fatalf("UserSuspensions: %v", err)
+		}
+		found := false
+		for _, suspension := range active {
+			if suspension.UserID == target.Id {
+				found = true
+				if suspension.Reason != "policy test" {
+					t.Fatalf("admin reason = %q, want policy test", suspension.Reason)
+				}
+			}
+		}
+		if !found {
+			t.Fatal("expected active suspension in admin list")
+		}
+	})
+
+	t.Run("reason required and past expiry rejected", func(t *testing.T) {
+		target := env.createVerifiedUser(t, "suspend-invalid-target", "Invalid Target", "password123")
+		_, err := amr.SuspendUser(env.authContext(), &model.AdminMutations{}, model.SuspendUserInput{
+			UserID: target.Id,
+			Reason: " ",
+		})
+		if err == nil {
+			t.Fatal("expected blank reason to fail")
+		}
+
+		_, err = amr.SuspendUser(env.authContext(), &model.AdminMutations{}, model.SuspendUserInput{
+			UserID:    target.Id,
+			Reason:    "too late",
+			ExpiresAt: timestamppb.New(time.Now().Add(-time.Minute)),
+		})
+		if err == nil {
+			t.Fatal("expected past expiry to fail")
 		}
 	})
 }

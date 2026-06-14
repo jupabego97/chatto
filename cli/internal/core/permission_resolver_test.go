@@ -955,6 +955,49 @@ func TestPermissionResolver_UserLevelOverrides(t *testing.T) {
 	})
 }
 
+func TestPermissionResolver_ActiveSuspensionDeniesBeforeNormalGrants(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	actor, _ := core.CreateUser(ctx, SystemActorID, "suspend-actor", "Suspend Actor", "password123")
+	target, _ := core.CreateUser(ctx, SystemActorID, "suspend-target", "Suspend Target", "password123")
+
+	if err := core.AssignOwnerRole(ctx, target.Id); err != nil {
+		t.Fatalf("AssignOwnerRole: %v", err)
+	}
+	if err := core.GrantUserPermission(ctx, target.Id, PermAdminAccess); err != nil {
+		t.Fatalf("GrantUserPermission: %v", err)
+	}
+
+	has, err := core.HasServerPermission(ctx, target.Id, PermAdminAccess)
+	if err != nil {
+		t.Fatalf("baseline admin.access: %v", err)
+	}
+	if !has {
+		t.Fatal("baseline: owner with user grant should have admin.access")
+	}
+
+	if _, err := core.SuspendUser(ctx, actor.Id, target.Id, "policy test", nil); err != nil {
+		t.Fatalf("SuspendUser: %v", err)
+	}
+
+	has, err = core.HasServerPermission(ctx, target.Id, PermAdminAccess)
+	if err != nil {
+		t.Fatalf("suspended admin.access: %v", err)
+	}
+	if has {
+		t.Fatal("expected @suspended deny to beat owner and user-level grants")
+	}
+
+	has, err = core.HasServerPermission(ctx, target.Id, PermUserDeleteSelf)
+	if err != nil {
+		t.Fatalf("suspended user.delete-self: %v", err)
+	}
+	if !has {
+		t.Fatal("expected non-denied permission to follow normal RBAC")
+	}
+}
+
 // ============================================================================
 // DM Permission Contract — locks down what the unified walker resolves
 // in a DM room for a regular participant and for elevated roles. The DM

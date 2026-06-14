@@ -178,6 +178,12 @@ func defaultRBACRoles() map[string]*corev1.Role {
 			Description: "All authenticated users",
 			Position:    PositionEveryone,
 		},
+		RoleSuspended: {
+			Name:        RoleSuspended,
+			DisplayName: "@suspended",
+			Description: "Virtual role applied while a user is suspended",
+			Position:    PositionSuspended,
+		},
 	}
 }
 
@@ -203,6 +209,14 @@ func defaultRBACDecisions() []rbacSeedDecision {
 				})
 			}
 		}
+	}
+	for _, perm := range DefaultSuspendedDenials() {
+		decisions = append(decisions, rbacSeedDecision{
+			scope:      ScopeServer,
+			subject:    RoleSuspended,
+			permission: perm,
+			decision:   DecisionDeny,
+		})
 	}
 	return decisions
 }

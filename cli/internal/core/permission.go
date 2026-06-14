@@ -126,6 +126,9 @@ const (
 	// API boundary when the cross-user delete mutation is implemented).
 	PermUserDeleteAny Permission = "user.delete-any"
 
+	// PermUserSuspend allows admins to suspend or unsuspend lower-ranked users.
+	PermUserSuspend Permission = "user.suspend"
+
 	// PermUserDeleteSelf allows users to delete their own account.
 	PermUserDeleteSelf Permission = "user.delete-self"
 )
@@ -170,6 +173,7 @@ var allPermissions = []PermissionMetadata{
 
 	// User management
 	{PermUserDeleteAny, "Delete Any User", "Delete any user's account. Subject to the rank check — actors can only delete users they outrank.", CategoryUser, []PermissionScope{ScopeServer}},
+	{PermUserSuspend, "Suspend Users", "Suspend or unsuspend lower-ranked users", CategoryUser, []PermissionScope{ScopeServer}},
 	{PermUserDeleteSelf, "Delete Own Account", "Delete your own account", CategoryUser, []PermissionScope{ScopeServer}},
 }
 
@@ -254,6 +258,31 @@ func DefaultEveryonePermissions() []Permission {
 		PermMessagePostInThread,
 		PermMessageReact,
 		PermMessageEcho,
+	}
+}
+
+// DefaultSuspendedDenials returns permissions explicitly denied to users with
+// an active server-level suspension.
+func DefaultSuspendedDenials() []Permission {
+	return []Permission{
+		PermServerManage,
+		PermRoomCreate,
+		PermRoomJoin,
+		PermRoomList,
+		PermRoomManage,
+		PermRoomMemberBan,
+		PermMessagePost,
+		PermMessagePostInThread,
+		PermMessageManage,
+		PermMessageReact,
+		PermMessageEcho,
+		PermRoleManage,
+		PermRoleAssign,
+		PermAdminAccess,
+		PermAdminUsersView,
+		PermAdminSystemView,
+		PermAdminAuditView,
+		PermUserDeleteAny,
 	}
 }
 

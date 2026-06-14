@@ -161,6 +161,12 @@ type ChattoCore struct {
 	// WaitForSeq from user/account writers.
 	UsersProjector *events.Projector
 
+	// UserSuspensions tracks active server-level user suspensions.
+	UserSuspensions *UserSuspensionProjection
+
+	// UserSuspensionsProjector runs the consumer for UserSuspensions.
+	UserSuspensionsProjector *events.Projector
+
 	// ContentKeys holds wrapped per-user DEK epochs used by encrypted
 	// message bodies and durable user PII.
 	ContentKeys *ContentKeyProjection
@@ -728,6 +734,9 @@ func NewChattoCore(ctx context.Context, nc *nats.Conn, cfg config.CoreConfig) (*
 	users := NewUserProjection(encMgr.keyWrapper, encMgr.contentKeys)
 	usersProjector := newProjector(users, "Users", users.adminProjectionEstimate)
 
+	userSuspensions := NewUserSuspensionProjection()
+	userSuspensionsProjector := newProjector(userSuspensions, "User Suspensions", userSuspensions.adminProjectionEstimate)
+
 	contentKeys := NewContentKeyProjection()
 	contentKeysProjector := newProjector(contentKeys, "Content Keys", contentKeys.adminProjectionEstimate)
 
@@ -766,6 +775,8 @@ func NewChattoCore(ctx context.Context, nc *nats.Conn, cfg config.CoreConfig) (*
 		ReactionsProjector:       reactionsProjector,
 		Users:                    users,
 		UsersProjector:           usersProjector,
+		UserSuspensions:          userSuspensions,
+		UserSuspensionsProjector: userSuspensionsProjector,
 		ContentKeys:              contentKeys,
 		ContentKeysProjector:     contentKeysProjector,
 		RBAC:                     rbac,

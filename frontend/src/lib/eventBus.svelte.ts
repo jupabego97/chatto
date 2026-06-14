@@ -221,6 +221,10 @@ export const MyServerEventsSubscriptionDoc = graphql(`
         ... on SessionTerminatedEvent {
           reason
         }
+        ... on UserSuspensionChangedEvent {
+          suspended
+          expiresAt
+        }
         ... on HeartbeatEvent {
           alive
         }
@@ -492,6 +496,20 @@ export function onThreadFollowChanged(handler: (update: ThreadFollowChanged) => 
 export function onSessionTerminated(handler: (reason: string) => void): () => void {
   return onTypedEvent('SessionTerminatedEvent', (_env, e) => {
     return e.reason;
+  }, handler);
+}
+
+export type UserSuspensionChanged = {
+  suspended: boolean;
+  expiresAt: string | null;
+};
+
+export function onUserSuspensionChanged(handler: (event: UserSuspensionChanged) => void): () => void {
+  return onTypedEvent('UserSuspensionChangedEvent', (_env, e) => {
+    return {
+      suspended: e.suspended,
+      expiresAt: e.expiresAt ?? null
+    };
   }, handler);
 }
 

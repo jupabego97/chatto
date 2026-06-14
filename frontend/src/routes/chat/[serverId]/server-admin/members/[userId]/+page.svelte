@@ -10,6 +10,8 @@
   import { getServerPermissions } from '$lib/state/server/permissions.svelte';
   import { Panel } from '$lib/components/admin';
   import { UserPermissionsMatrix } from '$lib/components/rbac';
+  import SuspendUserModal from '$lib/components/moderation/SuspendUserModal.svelte';
+  import UnsuspendUserModal from '$lib/components/moderation/UnsuspendUserModal.svelte';
   import { Hint, Pill } from '$lib/ui';
   import PaneHeader from '$lib/ui/PaneHeader.svelte';
   import PageTitle from '$lib/ui/PageTitle.svelte';
@@ -24,12 +26,16 @@
     formatCooldownRemaining
   } from '$lib/validation';
   import { viewerOutranksTarget } from '$lib/roleHierarchy';
+  import { getUserSettings } from '$lib/state/userSettings.svelte';
+  import { formatDate as formatDateUtil } from '$lib/utils/formatTime';
+  import type { PresenceStatus } from '$lib/gql/graphql';
 
   type User = {
     id: string;
     login: string;
     displayName: string;
     avatarUrl?: string | null;
+    presenceStatus: PresenceStatus;
     roles: string[];
     lastLoginChange?: string | null;
   };
@@ -40,20 +46,30 @@
     permissions: string[];
     permissionDenials: string[];
   };
-  // Everyone role is implicit for all space members and shouldn't be assignable
-  const IMPLICIT_ROLES = ['everyone'];
+  type ActiveSuspension = {
+    id: string;
+    userId: string;
+    reason: string;
+    createdAt: string;
+    expiresAt?: string | null;
+  };
+  // These roles are virtual/implicit and shouldn't be manually assignable.
+  const IMPLICIT_ROLES = ['everyone', 'suspended'];
 
   const currentUser = $derived(serverRegistry.getStore(getActiveServer()).currentUser);
   const connection = useConnection();
+  const userSettings = getUserSettings();
   const userId = $derived(page.params.userId!);
 
   const serverPerms = getServerPermissions();
   const canAdminManageUsers = $derived(serverPerms.current.canAdminManageUsers);
+  const canAdminSuspendUsers = $derived(serverPerms.current.canAdminSuspendUsers);
 
   let member = $state<User | null>(null);
   let allRoles = $state<Role[]>([]);
   let viewerRoles = $state<string[]>([]);
   let memberSpaceRoles = $state<string[]>([]); // Member's space roles (separate from member object)
+  let activeSuspension = $state<ActiveSuspension | null>(null);
   let canAssignRoles = $state(false);
   let canManageRoles = $state(false);
   let loading = $state(true);
@@ -67,18 +83,23 @@
   let identityError = $state<string | null>(null);
   let lastLoginChange = $state<Date | null>(null);
   let clearingCooldown = $state(false);
+  let suspendDialogOpen = $state(false);
+  let unsuspendDialogOpen = $state(false);
+  let suspending = $state(false);
+  let unsuspending = $state(false);
+  let suspensionError = $state<string | null>(null);
 
   // Optimistic UI hint mirroring the backend's OutranksUser. The mutation
   // still re-checks server-side; this just gates whether the affordance
   // appears at all.
   const viewerCanManage = $derived(viewerOutranksTarget(viewerRoles, memberSpaceRoles, allRoles));
 
-  async function loadData() {
+  async function loadData(includeSuspensions = canAdminSuspendUsers) {
     error = null;
 
     const resp = await connection().client.query(
       graphql(`
-        query SpaceMemberDetails($userId: ID!) {
+        query SpaceMemberDetails($userId: ID!, $includeSuspensions: Boolean!) {
           viewer {
             user {
               id
@@ -104,12 +125,22 @@
               login
               displayName
               avatarUrl
+              presenceStatus
               roles
+            }
+          }
+          admin @include(if: $includeSuspensions) {
+            userSuspensions {
+              id
+              userId
+              reason
+              createdAt
+              expiresAt
             }
           }
         }
       `),
-      { userId }
+      { userId, includeSuspensions }
     );
 
     if (resp.error) {
@@ -128,6 +159,8 @@
     allRoles = resp.data.server.roles ?? [];
     viewerRoles = resp.data.viewer?.user.roles ?? [];
     memberSpaceRoles = resp.data.server.member?.roles ?? [];
+    activeSuspension =
+      resp.data.admin?.userSuspensions.find((s) => s.userId === userId) ?? null;
     canAssignRoles = resp.data.server.viewerCanAssignRoles;
     canManageRoles = resp.data.server.viewerCanManageRoles;
     editLogin = resp.data.server.member?.login ?? '';
@@ -212,6 +245,63 @@
     identityError = null;
   }
 
+  function formatDate(value: string | null | undefined): string {
+    if (!value) return 'No expiry';
+    return formatDateUtil(value, userSettings);
+  }
+
+  async function suspendUser(reason: string, expiresAt: string | null) {
+    if (!member || suspending) return;
+    suspending = true;
+    suspensionError = null;
+    const resp = await connection().client.mutation(
+      graphql(`
+        mutation AdminSuspendUser($input: SuspendUserInput!) {
+          admin {
+            suspendUser(input: $input)
+          }
+        }
+      `),
+      { input: { userId: member.id, reason, expiresAt } }
+    );
+    suspending = false;
+
+    if (resp.error) {
+      suspensionError = resp.error.message;
+      return;
+    }
+
+    toast.success('User suspended');
+    suspendDialogOpen = false;
+    await loadData(true);
+  }
+
+  async function unsuspendUser(reason: string) {
+    if (!member || unsuspending) return;
+    unsuspending = true;
+    suspensionError = null;
+    const resp = await connection().client.mutation(
+      graphql(`
+        mutation AdminUnsuspendMember($input: UnsuspendUserInput!) {
+          admin {
+            unsuspendUser(input: $input)
+          }
+        }
+      `),
+      { input: { userId: member.id, reason } }
+    );
+    unsuspending = false;
+
+    if (resp.error) {
+      suspensionError = resp.error.message;
+      return;
+    }
+
+    toast.success('User unsuspended');
+    unsuspendDialogOpen = false;
+    await loadData(true);
+  }
+
   async function clearCooldown() {
     if (!member || clearingCooldown) return;
     clearingCooldown = true;
@@ -247,6 +337,12 @@
     return IMPLICIT_ROLES.includes(roleName);
   }
 
+  function hasImplicitRole(roleName: string): boolean {
+    if (roleName === 'everyone') return true;
+    if (roleName === 'suspended') return activeSuspension !== null;
+    return false;
+  }
+
   function getRoleDisplayName(roleName: string): string {
     const role = allRoles.find((r) => r.name === roleName);
     return role?.displayName || roleName;
@@ -259,6 +355,7 @@
 
   // Check if this is the current user
   const isSelf = $derived(currentUser.user?.id === userId);
+  const canSuspendTarget = $derived(canAdminSuspendUsers && viewerCanManage && !isSelf);
 
   // Sorted space roles (excluding everyone, sorted by position)
   const sortedSpaceRoles = $derived(
@@ -307,8 +404,9 @@
 
   // Load data when params change
   $effect(() => {
+    const includeSuspensions = serverPerms.current.canAdminSuspendUsers;
     if (userId) {
-      loadData();
+      loadData(includeSuspensions);
     }
   });
 </script>
@@ -441,6 +539,64 @@
         </Panel>
       {/if}
 
+      {#if canAdminSuspendUsers}
+        <Panel title="Suspension" icon="iconify uil--user-times">
+          <div class="flex flex-col gap-4">
+            {#if suspensionError}
+              <FormError error={suspensionError} />
+            {/if}
+
+            {#if activeSuspension}
+              <div class="rounded-lg border border-danger/30 bg-danger/10 p-3 text-sm">
+                <div class="font-medium text-danger">Currently suspended</div>
+                <div class="mt-1 text-muted">Expires: {formatDate(activeSuspension.expiresAt)}</div>
+                <div class="mt-2 whitespace-pre-wrap break-words">{activeSuspension.reason}</div>
+              </div>
+              <div>
+                <Button
+                  variant="secondary"
+                  onclick={() => {
+                    suspensionError = null;
+                    unsuspendDialogOpen = true;
+                  }}
+                  disabled={!canSuspendTarget}
+                  loading={unsuspending}
+                  loadingText="Unsuspending..."
+                >
+                  <span class="iconify uil--user-check"></span>
+                  <span>Unsuspend</span>
+                </Button>
+              </div>
+            {:else}
+              <div class="text-sm text-muted">This user is not suspended.</div>
+              <div>
+                <Button
+                  variant="secondary"
+                  onclick={() => {
+                    suspensionError = null;
+                    suspendDialogOpen = true;
+                  }}
+                  disabled={!canSuspendTarget}
+                  loading={suspending}
+                  loadingText="Suspending..."
+                >
+                  <span class="iconify uil--user-times"></span>
+                  <span>Suspend</span>
+                </Button>
+              </div>
+            {/if}
+
+            {#if !viewerCanManage}
+              <div class="text-sm text-muted">
+                You cannot change this suspension because their highest role outranks yours.
+              </div>
+            {:else if isSelf}
+              <div class="text-sm text-muted">You cannot suspend your own account.</div>
+            {/if}
+          </div>
+        </Panel>
+      {/if}
+
       <!-- Role Assignments -->
       <Panel title="Role Assignments" icon="iconify uil--shield-check">
         <p class="mb-4 text-sm text-muted">
@@ -456,12 +612,14 @@
         <div class="flex flex-col gap-2">
           {#each allRoles as role (role.name)}
             {@const isImplicit = isImplicitRole(role.name)}
-            {@const has = isImplicit || hasRole(role.name)}
+            {@const has = hasImplicitRole(role.name) || hasRole(role.name)}
             {@const isUpdating = updating === role.name}
             {@const isSelfAdmin = isSelf && role.name === 'admin' && has}
             {@const isDisabled =
               !canAssignRoles || !viewerCanManage || isImplicit || isUpdating || isSelfAdmin}
-            {@const tooltip = isImplicit
+            {@const tooltip = role.name === 'suspended'
+              ? 'Applied automatically while the user has an active suspension'
+              : isImplicit
               ? 'All space members have this role implicitly'
               : isSelfAdmin
                 ? 'You cannot revoke your own admin role'
@@ -493,12 +651,14 @@
                 />
                 <div class="flex-1">
                   <div class="font-medium">{role.displayName}</div>
-                  {#if isImplicit}
+                  {#if role.name === 'suspended'}
+                    <div class="text-xs text-muted">Applied by active suspension</div>
+                  {:else if isImplicit}
                     <div class="text-xs text-muted">Implicit for all members</div>
                   {/if}
                 </div>
               </label>
-              {#if canManageRoles}
+              {#if canManageRoles && role.name !== 'suspended'}
                 <a
                   href={resolve('/chat/[serverId]/server-admin/permissions/[name]', { serverId: serverIdToSegment(getActiveServer()), name: role.name })}
                   class="link shrink-0 text-sm"
@@ -520,3 +680,24 @@
     {/if}
   </div>
 </div>
+
+{#if member && suspendDialogOpen}
+  <SuspendUserModal
+    user={member}
+    submitting={suspending}
+    error={suspensionError}
+    onconfirm={suspendUser}
+    onclose={() => (suspendDialogOpen = false)}
+  />
+{/if}
+
+{#if member && unsuspendDialogOpen}
+  <UnsuspendUserModal
+    user={member}
+    userId={member.id}
+    submitting={unsuspending}
+    error={suspensionError}
+    onconfirm={unsuspendUser}
+    onclose={() => (unsuspendDialogOpen = false)}
+  />
+{/if}

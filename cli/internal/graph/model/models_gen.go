@@ -63,6 +63,10 @@ type AdminMutations struct {
 	UpdateUser *corev1.User `json:"updateUser"`
 	// Clear the 30-day login change cooldown for a user, allowing them to immediately rename themselves. Idempotent.
 	ClearUsernameCooldown bool `json:"clearUsernameCooldown"`
+	// Suspend a lower-ranked user from permission-gated server interactions. Requires `user.suspend`.
+	SuspendUser bool `json:"suspendUser"`
+	// Remove an active suspension from a lower-ranked user. Requires `user.suspend`.
+	UnsuspendUser bool `json:"unsuspendUser"`
 }
 
 // Admin-only query namespace for operator tooling. Returns null if the user is not a server admin.
@@ -79,6 +83,8 @@ type AdminQueries struct {
 	Projections []*ProjectionState `json:"projections"`
 	// List active room bans. Requires server-scope `room.ban-member`.
 	RoomBans []*RoomBan `json:"roomBans"`
+	// List active user suspensions. Requires `user.suspend`.
+	UserSuspensions []*UserSuspension `json:"userSuspensions"`
 	// Resolve the explicit grants and denials configured for a role on a
 	// specific room group. Returns empty arrays if neither side has any keys.
 	GroupRolePermissions *RoomGroupRolePermissions `json:"groupRolePermissions"`
@@ -1084,6 +1090,16 @@ type StartDMInput struct {
 type Subscription struct {
 }
 
+// Input for AdminMutations.suspendUser.
+type SuspendUserInput struct {
+	// ID of the user to suspend.
+	UserID string `json:"userId"`
+	// Moderator-entered reason retained for audit.
+	Reason string `json:"reason"`
+	// Optional expiry for a temporary suspension. Null means indefinite.
+	ExpiresAt *timestamppb.Timestamp `json:"expiresAt,omitempty"`
+}
+
 // Point-in-time operator diagnostics for this deployment.
 type SystemInfo struct {
 	// NATS connection status and server info.
@@ -1170,6 +1186,14 @@ type UnfollowThreadInput struct {
 type UnsubscribeFromPushInput struct {
 	// The push service endpoint URL to unsubscribe.
 	Endpoint string `json:"endpoint"`
+}
+
+// Input for AdminMutations.unsuspendUser.
+type UnsuspendUserInput struct {
+	// ID of the user to unsuspend.
+	UserID string `json:"userId"`
+	// Moderator-entered reason retained for audit.
+	Reason string `json:"reason"`
 }
 
 // Input for AdminMutations.updateBlockedUsernames.
@@ -1338,6 +1362,26 @@ type UserPermissionScope struct {
 	ParentGroupID string `json:"parentGroupId"`
 }
 
+// An active server-level user suspension shown in admin moderation tools.
+type UserSuspension struct {
+	// The event ID that created the active suspension.
+	ID string `json:"id"`
+	// The suspended user.
+	UserID string `json:"userId"`
+	// The suspended user, if the account still exists.
+	User *corev1.User `json:"user,omitempty"`
+	// The moderator who created the suspension.
+	ModeratorID string `json:"moderatorId"`
+	// The moderator who created the suspension, if the account still exists.
+	Moderator *corev1.User `json:"moderator,omitempty"`
+	// Moderator-entered reason retained for audit.
+	Reason string `json:"reason"`
+	// When the suspension was created.
+	CreatedAt *timestamppb.Timestamp `json:"createdAt"`
+	// When this suspension expires. Null means indefinite.
+	ExpiresAt *timestamppb.Timestamp `json:"expiresAt,omitempty"`
+}
+
 // The viewer's notification preference for the server or a room.
 // Contains both the explicitly set level and the effective level after inheritance.
 type ViewerNotificationPreference struct {
@@ -1345,6 +1389,14 @@ type ViewerNotificationPreference struct {
 	Level NotificationLevel `json:"level"`
 	// The effective level after inheritance resolution (never DEFAULT).
 	EffectiveLevel NotificationLevel `json:"effectiveLevel"`
+}
+
+// The current viewer's server-level suspension status.
+type ViewerSuspension struct {
+	// Whether the viewer is currently suspended.
+	IsSuspended bool `json:"isSuspended"`
+	// When the suspension expires. Null means indefinite or not suspended.
+	ExpiresAt *timestamppb.Timestamp `json:"expiresAt,omitempty"`
 }
 
 // Fit mode for image transformations.

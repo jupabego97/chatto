@@ -19,6 +19,7 @@
   import ServerEventProvider from './ServerEventProvider.svelte';
   import SidebarNav from '$lib/components/SidebarNav.svelte';
   import MyThreadsNavItem from './MyThreadsNavItem.svelte';
+  import UserSuspensionBanner from './UserSuspensionBanner.svelte';
 
   let { children } = $props();
 
@@ -284,7 +285,7 @@
       });
     }
 
-    if (spaceData.hasAnyAdminPermission) {
+    if (spaceData.hasAnyAdminPermission || serverPerms.current.canAdminSuspendUsers) {
       items.push({
         href: resolve('/chat/[serverId]/server-admin/moderation', { serverId: serverSegment }),
         label: 'Moderation',
@@ -427,6 +428,7 @@
 
       <!-- Main content - always renders so room can load in parallel -->
       <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+        <UserSuspensionBanner />
         {@render children?.()}
       </div>
     </ServerEventProvider>

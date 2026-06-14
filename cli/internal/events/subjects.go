@@ -135,6 +135,8 @@ const (
 	EventUserAccountDeleted           = "account_deleted"
 	EventUserKeyShredded              = "user_key_shredded"
 	EventUserDEKGenerated             = "dek_generated"
+	EventUserSuspended                = "user_suspended"
+	EventUserUnsuspended              = "user_unsuspended"
 
 	// RBAC aggregate
 	EventRBACRoleCreated            = "role_created"
@@ -301,6 +303,10 @@ func EventTypeOf(e *corev1.Event) string {
 		return EventUserKeyShredded
 	case *corev1.Event_UserDekGenerated:
 		return EventUserDEKGenerated
+	case *corev1.Event_UserSuspended:
+		return EventUserSuspended
+	case *corev1.Event_UserUnsuspended:
+		return EventUserUnsuspended
 
 	case *corev1.Event_RbacRoleCreated:
 		return EventRBACRoleCreated
