@@ -7,6 +7,7 @@ import { serverRegistry } from './registry.svelte';
  * This matches the shape returned by the Viewer type in the schema.
  */
 export type ViewerData = {
+  /** Whether the viewer has at least one admin-capability entry point. */
   canViewAdmin: boolean;
   canStartDMs: boolean;
   canAdminViewUsers: boolean;
@@ -21,8 +22,8 @@ export type ViewerData = {
 
 /**
  * Server-level permissions for the current user, plus a `loaded` flag.
- * The underlying state lives on the per-instance `ServerStateStore`
- * (populated by `ServerSpaceSection`'s viewer query).
+ * The underlying state lives on the per-server `ServerStateStore`
+ * (populated by `ServerSidebarEntry`'s viewer query).
  */
 export type ServerPermissions = ViewerData & {
   loaded: boolean;
@@ -73,7 +74,6 @@ export function getServerPermissions(
  * Used by the admin layout to bridge its string-based nav/route system.
  */
 const PERMISSION_TO_FIELD: Record<string, keyof ViewerData> = {
-  'admin.access': 'canViewAdmin',
   'admin.view-users': 'canAdminViewUsers',
   'role.assign': 'canAdminManageUsers',
   'role.manage': 'canAdminManageRoles',

@@ -27,7 +27,7 @@ Bot accounts are first-class Chatto users for automation and integrations. They 
 ### 1. Bots are visible users, not hidden integrations
 
 **Decision:** Bot accounts are ordinary user records with a bot kind, badge, and owner link.
-**Why:** Messages, mentions, reactions, membership, permissions, moderation, deletion, and crypto-shredding already revolve around users. A bot that posts a message should leave the same accountable identity trail as a human author. See ADR-039.
+**Why:** Messages, mentions, reactions, membership, permissions, moderation, deletion, and crypto-shredding already revolve around users. A bot that posts a message should leave the same accountable identity trail as a human author. See ADR-040.
 **Tradeoff:** User-facing surfaces need to handle bot badges and owner context rather than assuming every member is a human.
 
 ### 2. Ownership is human-only and not transferable in v1
@@ -39,7 +39,7 @@ Bot accounts are first-class Chatto users for automation and integrations. They 
 ### 3. Bot tokens are dedicated credentials
 
 **Decision:** Bots use dedicated named API tokens rather than passwords, OAuth identities, browser cookies, or human bearer sessions.
-**Why:** Bot credentials need names, explicit expiry, one-time secret display, revocation per token, and a recognizable prefix for secret scanning. Reusing human sessions would blur UI login with automation access. See ADR-039.
+**Why:** Bot credentials need names, explicit expiry, one-time secret display, revocation per token, and a recognizable prefix for secret scanning. Reusing human sessions would blur UI login with automation access. See ADR-040.
 **Tradeoff:** The API has an additional credential family to maintain and document.
 
 ### 4. Token expiry is chosen when the token is issued
@@ -67,7 +67,7 @@ Bot accounts are first-class Chatto users for automation and integrations. They 
 
 ## Related
 
-- **ADRs:** ADR-004 (authorization at API boundary), ADR-007 (per-user encryption with crypto-shredding), ADR-024 (opaque bearer tokens), ADR-036 (runtime state), ADR-039 (bot accounts as user accounts with dedicated API tokens)
+- **ADRs:** ADR-004 (authorization at API boundary), ADR-007 (per-user encryption with crypto-shredding), ADR-024 (opaque bearer tokens), ADR-036 (runtime state), ADR-040 (bot accounts as user accounts with dedicated API tokens)
 - **FDRs:** FDR-001 (Roles & Permissions), FDR-018 (Account Lifecycle), FDR-023 (Authentication & Sessions), FDR-025 (User Search & Member Directory)
 
 ## Open Questions

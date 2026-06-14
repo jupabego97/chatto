@@ -132,22 +132,25 @@ func (UserKind) EnumDescriptor() ([]byte, []int) {
 type UserPresenceStatus int32
 
 const (
-	UserPresenceStatus_USER_PRESENCE_STATUS_ONLINE         UserPresenceStatus = 0
-	UserPresenceStatus_USER_PRESENCE_STATUS_AWAY           UserPresenceStatus = 1
-	UserPresenceStatus_USER_PRESENCE_STATUS_DO_NOT_DISTURB UserPresenceStatus = 2
+	UserPresenceStatus_USER_PRESENCE_STATUS_UNSPECIFIED    UserPresenceStatus = 0
+	UserPresenceStatus_USER_PRESENCE_STATUS_ONLINE         UserPresenceStatus = 1
+	UserPresenceStatus_USER_PRESENCE_STATUS_AWAY           UserPresenceStatus = 2
+	UserPresenceStatus_USER_PRESENCE_STATUS_DO_NOT_DISTURB UserPresenceStatus = 3
 )
 
 // Enum value maps for UserPresenceStatus.
 var (
 	UserPresenceStatus_name = map[int32]string{
-		0: "USER_PRESENCE_STATUS_ONLINE",
-		1: "USER_PRESENCE_STATUS_AWAY",
-		2: "USER_PRESENCE_STATUS_DO_NOT_DISTURB",
+		0: "USER_PRESENCE_STATUS_UNSPECIFIED",
+		1: "USER_PRESENCE_STATUS_ONLINE",
+		2: "USER_PRESENCE_STATUS_AWAY",
+		3: "USER_PRESENCE_STATUS_DO_NOT_DISTURB",
 	}
 	UserPresenceStatus_value = map[string]int32{
-		"USER_PRESENCE_STATUS_ONLINE":         0,
-		"USER_PRESENCE_STATUS_AWAY":           1,
-		"USER_PRESENCE_STATUS_DO_NOT_DISTURB": 2,
+		"USER_PRESENCE_STATUS_UNSPECIFIED":    0,
+		"USER_PRESENCE_STATUS_ONLINE":         1,
+		"USER_PRESENCE_STATUS_AWAY":           2,
+		"USER_PRESENCE_STATUS_DO_NOT_DISTURB": 3,
 	}
 )
 
@@ -181,6 +184,7 @@ func (UserPresenceStatus) EnumDescriptor() ([]byte, []int) {
 type VideoStatus int32
 
 const (
+	// buf:lint:ignore ENUM_ZERO_VALUE_SUFFIX
 	VideoStatus_VIDEO_STATUS_PENDING    VideoStatus = 0
 	VideoStatus_VIDEO_STATUS_PROCESSING VideoStatus = 1
 	VideoStatus_VIDEO_STATUS_COMPLETED  VideoStatus = 2
@@ -1006,6 +1010,7 @@ type Role struct {
 	DisplayName   string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"` // Human-readable name, e.g., "Owner", "Moderator", "Content Reviewer"
 	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
 	Position      int32                  `protobuf:"varint,4,opt,name=position,proto3" json:"position,omitempty"` // Hierarchy position: lower = higher rank. Owner=0, Everyone=MAX_INT32
+	Pingable      bool                   `protobuf:"varint,5,opt,name=pingable,proto3" json:"pingable,omitempty"` // Whether messages can ping users assigned to this role.
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1068,6 +1073,13 @@ func (x *Role) GetPosition() int32 {
 	return 0
 }
 
+func (x *Role) GetPingable() bool {
+	if x != nil {
+		return x.Pingable
+	}
+	return false
+}
+
 // UserPresence represents a user's current live presence status.
 // Stored under presence.{userId} in MEMORY_CACHE.
 type UserPresence struct {
@@ -1111,7 +1123,7 @@ func (x *UserPresence) GetStatus() UserPresenceStatus {
 	if x != nil {
 		return x.Status
 	}
-	return UserPresenceStatus_USER_PRESENCE_STATUS_ONLINE
+	return UserPresenceStatus_USER_PRESENCE_STATUS_UNSPECIFIED
 }
 
 // PresenceChange represents a change in a user's presence status.
@@ -1720,10 +1732,8 @@ func (x *CachedLinkPreview) GetFetchedAtUnix() int64 {
 //     appended (orphan recovery). The layout is a hint, not a source
 //     of truth for "which groups exist".
 //
-// Migration: the boot-time migrator picks up legacy state from older
-// shapes (`legacy_sections`, `legacy_unsorted_room_ids`) and writes
-// per-key group docs + a fresh `group_ids` list, then leaves the
-// legacy fields empty. New writes only ever set `group_ids`.
+// Current writes only ever set `group_ids`. The legacy fields are retained for
+// wire compatibility with older backups/clients.
 type RoomLayout struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// legacy_sections is the on-the-wire compatible read for the
@@ -1877,7 +1887,7 @@ func (x *RoomGroup) GetDescription() string {
 // VideoProcessingState tracks the async processing state of a video attachment.
 // Legacy entries were stored in SERVER_RUNTIME at key "video.{attachmentId}".
 // New durable completed/failed manifests live in AssetProcessing* EVT events;
-// this shape remains for transient worker progress and legacy import.
+// this shape remains for transient worker progress.
 type VideoProcessingState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Current processing status
@@ -2144,12 +2154,13 @@ const file_chatto_core_v1_models_proto_rawDesc = "" +
 	"\astorage\"H\n" +
 	"\x0eRoomMembership\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x17\n" +
-	"\aroom_id\x18\x03 \x01(\tR\x06roomIdJ\x04\b\x02\x10\x03\"{\n" +
+	"\aroom_id\x18\x03 \x01(\tR\x06roomIdJ\x04\b\x02\x10\x03\"\x97\x01\n" +
 	"\x04Role\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x1a\n" +
-	"\bposition\x18\x04 \x01(\x05R\bposition\"J\n" +
+	"\bposition\x18\x04 \x01(\x05R\bposition\x12\x1a\n" +
+	"\bpingable\x18\x05 \x01(\bR\bpingable\"J\n" +
 	"\fUserPresence\x12:\n" +
 	"\x06status\x18\x01 \x01(\x0e2\".chatto.core.v1.UserPresenceStatusR\x06status\"A\n" +
 	"\x0ePresenceChange\x12\x17\n" +
@@ -2240,11 +2251,12 @@ const file_chatto_core_v1_models_proto_rawDesc = "" +
 	"\bUserKind\x12\x19\n" +
 	"\x15USER_KIND_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fUSER_KIND_HUMAN\x10\x01\x12\x11\n" +
-	"\rUSER_KIND_BOT\x10\x02*}\n" +
-	"\x12UserPresenceStatus\x12\x1f\n" +
-	"\x1bUSER_PRESENCE_STATUS_ONLINE\x10\x00\x12\x1d\n" +
-	"\x19USER_PRESENCE_STATUS_AWAY\x10\x01\x12'\n" +
-	"#USER_PRESENCE_STATUS_DO_NOT_DISTURB\x10\x02*y\n" +
+	"\rUSER_KIND_BOT\x10\x02*\xa3\x01\n" +
+	"\x12UserPresenceStatus\x12$\n" +
+	" USER_PRESENCE_STATUS_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bUSER_PRESENCE_STATUS_ONLINE\x10\x01\x12\x1d\n" +
+	"\x19USER_PRESENCE_STATUS_AWAY\x10\x02\x12'\n" +
+	"#USER_PRESENCE_STATUS_DO_NOT_DISTURB\x10\x03*y\n" +
 	"\vVideoStatus\x12\x18\n" +
 	"\x14VIDEO_STATUS_PENDING\x10\x00\x12\x1b\n" +
 	"\x17VIDEO_STATUS_PROCESSING\x10\x01\x12\x1a\n" +
