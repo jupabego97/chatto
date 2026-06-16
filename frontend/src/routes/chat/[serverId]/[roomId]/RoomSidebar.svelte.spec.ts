@@ -373,4 +373,48 @@ describe('RoomSidebar', () => {
     await expect.element(q(container, 'h1')).toHaveTextContent('Room Information');
     expect(container.textContent).toContain('No room information has been added yet.');
   });
+
+  it('shows the room-ban action for other members when allowed', async () => {
+    const { container } = render(RoomSidebarTestHarness, {
+      props: {
+        currentUserId: 'viewer',
+        canBanRoomMembers: true,
+        roomData: roomData(
+          [
+            { ...member(0), id: 'viewer', displayName: 'Viewer' },
+            { ...member(1), id: 'other', displayName: 'Other Member' }
+          ],
+          2,
+          false
+        )
+      }
+    });
+
+    buttonByText(container, 'Other Member')!.click();
+    await tick();
+
+    expect(container.textContent).toContain('Ban from room');
+  });
+
+  it('hides the room-ban action when member moderation is disabled', async () => {
+    const { container } = render(RoomSidebarTestHarness, {
+      props: {
+        currentUserId: 'viewer',
+        canBanRoomMembers: false,
+        roomData: roomData(
+          [
+            { ...member(0), id: 'viewer', displayName: 'Viewer' },
+            { ...member(1), id: 'other', displayName: 'Other Member' }
+          ],
+          2,
+          false
+        )
+      }
+    });
+
+    buttonByText(container, 'Other Member')!.click();
+    await tick();
+
+    expect(container.textContent).not.toContain('Ban from room');
+  });
 });

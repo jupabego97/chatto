@@ -84,6 +84,20 @@ describe('RoomSidebarToggle', () => {
     expect(container.querySelector('[aria-label="Hide room information"]')).toBeTruthy();
   });
 
+  it('can render only the files panel', async () => {
+    const { container } = render(RoomSidebarToggle, {
+      props: {
+        activePanel: null,
+        panels: ['files'],
+        onToggle: vi.fn()
+      }
+    });
+
+    expect(container.querySelector('[aria-label="Show members"]')).toBeFalsy();
+    expect(container.querySelector('[aria-label="Show room information"]')).toBeFalsy();
+    expect(container.querySelector('[aria-label="Show files"]')).toBeTruthy();
+  });
+
   it('uses a background-only pressed state for the active panel', async () => {
     const { container } = render(RoomSidebarToggle, {
       props: {
