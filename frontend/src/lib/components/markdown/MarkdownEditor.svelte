@@ -19,6 +19,7 @@ caller, not here.
     editable = true,
     autofocus = false,
     testid,
+    editorClass,
     onUpdate,
     onKeyDown,
     onPaste,
@@ -28,6 +29,7 @@ caller, not here.
     editable?: boolean;
     autofocus?: boolean;
     testid?: string;
+    editorClass?: string;
     onUpdate?: (markdown: string) => void;
     onKeyDown?: (event: KeyboardEvent) => boolean;
     onPaste?: (event: ClipboardEvent) => boolean;
@@ -40,6 +42,7 @@ caller, not here.
   {editable}
   {autofocus}
   {testid}
+  {editorClass}
   {onUpdate}
   {onKeyDown}
   {onPaste}

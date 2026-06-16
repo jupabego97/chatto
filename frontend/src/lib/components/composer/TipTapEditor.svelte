@@ -684,6 +684,7 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
     editable = true,
     autofocus = false,
     testid,
+    editorClass,
     onUpdate,
     onKeyDown,
     onPaste,
@@ -693,6 +694,7 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
     editable?: boolean;
     autofocus?: boolean;
     testid?: string;
+    editorClass?: string;
     onUpdate?: (text: string) => void;
     onKeyDown?: (event: KeyboardEvent) => boolean;
     onPaste?: (event: ClipboardEvent) => boolean;
@@ -1118,6 +1120,7 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
     onscroll={() => editor && updateActiveControls(editor)}
     class={[
       'tiptap-editor max-h-50 min-h-8 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-transparent py-1 text-text',
+      editorClass,
       !editable && 'cursor-not-allowed'
     ]}
   ></div>

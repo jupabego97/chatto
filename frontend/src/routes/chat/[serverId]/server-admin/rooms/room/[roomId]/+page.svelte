@@ -251,6 +251,7 @@
             placeholder="Add Markdown-formatted room information..."
             editable={!savingInformation}
             testid="room-information-editor"
+            editorClass="max-h-120 min-h-72"
             onUpdate={(value) => (information = value)}
             onReady={(api) => {
               informationEditorApi = api;
