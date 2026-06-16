@@ -362,6 +362,27 @@ describe('RoomSidebar', () => {
     expect(container.querySelector('[aria-label="Members"]')).toBeFalsy();
   });
 
+  it('preserves blank lines in room information rendering', async () => {
+    const { container } = render(RoomSidebarTestHarness, {
+      props: {
+        activePanel: 'information',
+        roomData: roomData(
+          [member(1)],
+          1,
+          false,
+          'Stuff\n\nhttps://docs.chatto.run\nhttps://chatto.run\nhttps://hmans.dev\n\nNo Stuff\n\n- Office Hours Fridays 11-13 CEST\n- I like pie'
+        )
+      }
+    });
+
+    await vi.waitFor(() => {
+      expect(container.querySelectorAll('.preserved-blank-line')).toHaveLength(3);
+      expect(container.querySelector('.prose li')?.textContent).toBe(
+        'Office Hours Fridays 11-13 CEST'
+      );
+    });
+  });
+
   it('links room managers to the room information editor', async () => {
     const { container } = render(RoomSidebarTestHarness, {
       props: {

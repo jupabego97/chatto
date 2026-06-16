@@ -37,6 +37,10 @@
     margin-top: 0;
   }
 
+  & .preserved-blank-line {
+    min-height: 1.5em;
+  }
+
   /* Blockquotes keep their top margin even as the first child, so the
      left border has breathing room from whatever sits above (e.g. the
      message header). */

@@ -646,14 +646,48 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
     return markdown.replace(/ {2,}(\n\s*\n\s*(?:[-+*]|\d{1,9}[.)])\s)/g, '$1');
   }
 
+  function normalizeSerializedHardBreakArtifacts(markdown: string): string {
+    const lines = markdown.split('\n');
+    let inFence: { marker: '`' | '~'; length: number } | null = null;
+
+    return lines
+      .map((line) => {
+        const fenceMatch = line.match(/^[ \t]{0,3}(`{3,}|~{3,})/);
+
+        if (fenceMatch) {
+          const markerRun = fenceMatch[1];
+          const marker = markerRun[0] as '`' | '~';
+
+          if (
+            inFence &&
+            inFence.marker === marker &&
+            markerRun.length >= inFence.length
+          ) {
+            inFence = null;
+          } else if (!inFence) {
+            inFence = { marker, length: markerRun.length };
+          }
+
+          return line;
+        }
+
+        if (inFence) return line;
+        if (/^[ \t]+$/.test(line)) return '';
+        return line.replace(/[ \t]{2,}$/g, '');
+      })
+      .join('\n');
+  }
+
   function trimSerializedTrailingBlankLines(markdown: string): string {
     return markdown.replace(/\n+$/g, '');
   }
 
   function getSerializedMarkdown(e: Editor): string {
     return trimSerializedTrailingBlankLines(
-      normalizeSerializedHardBreaksBeforeLists(
-        trimSerializedTrailingEmptyParagraph(decodeSerializedMarkdownText(e.getMarkdown()), e)
+      normalizeSerializedHardBreakArtifacts(
+        normalizeSerializedHardBreaksBeforeLists(
+          trimSerializedTrailingEmptyParagraph(decodeSerializedMarkdownText(e.getMarkdown()), e)
+        )
       )
     );
   }

@@ -87,6 +87,21 @@ describe('renderMarkdown', () => {
       expect(html).toContain('<br>');
     });
 
+    it('can preserve blank markdown lines as visible rows', async () => {
+      const html = await renderMarkdown('Stuff\n\nNo Stuff\n\n- item', {
+        preserveBlankLines: true
+      });
+
+      expect(html.match(/class="preserved-blank-line"/g)).toHaveLength(2);
+      expect(html).toContain('<ul>');
+      expect(html).toContain('item');
+    });
+
+    it('does not preserve blank markdown lines by default', async () => {
+      const html = await renderMarkdown('Stuff\n\nNo Stuff');
+      expect(html).not.toContain('preserved-blank-line');
+    });
+
     it('auto-links plain https URLs', async () => {
       const html = await renderMarkdown('Check out https://example.com for more');
       expect(html).toContain('href="https://example.com"');

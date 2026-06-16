@@ -102,4 +102,33 @@ describe('MarkdownEditor', () => {
 
     await vi.waitFor(() => expect(updates.at(-1)).toBe('Things I hate:\n\n\n\n- lists'));
   });
+
+  it('normalizes pasted multiline text without persisting hard-break spaces', async () => {
+    const updates: string[] = [];
+    const { container } = render(MarkdownEditor, {
+      props: {
+        testid: 'markdown-editor',
+        onUpdate: (markdown) => updates.push(markdown)
+      }
+    });
+    const editor = await findEditor(container);
+
+    await insertText(
+      editor,
+      'Stuff\n\nhttps://docs.chatto.run\nhttps://chatto.run\nhttps://hmans.dev\n\nNo Stuff\n\n- Office Hours Fridays 11-13 CEST\n- I like pie'
+    );
+
+    await vi.waitFor(() => {
+      const markdown = updates.at(-1) ?? '';
+      expect(markdown).toContain('Stuff');
+      expect(markdown).toContain('https://docs.chatto.run');
+      expect(markdown).toContain('https://chatto.run');
+      expect(markdown).toContain('https://hmans.dev');
+      expect(markdown).toContain('No Stuff');
+      expect(markdown).toContain('- Office Hours Fridays 11-13 CEST');
+      expect(markdown).toContain('- I like pie');
+      expect(markdown).not.toMatch(/[ \t]{2,}\n/);
+      expect(markdown).not.toMatch(/\n[ \t]+\n/);
+    });
+  });
 });

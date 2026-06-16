@@ -4,7 +4,6 @@
 </script>
 
 <script lang="ts">
-  /* eslint-disable svelte/no-navigation-without-resolve -- goto target is built via buildMessageLinkPath which already calls resolve() */
   import { goto } from '$app/navigation';
   import { getActiveServer } from '$lib/state/activeServer.svelte';
   import { serverRegistry } from '$lib/state/server/registry.svelte';
@@ -17,12 +16,14 @@
     members = [],
     roleHandles = [],
     edited = false,
+    preserveBlankLines = false,
     onMentionClick
   }: {
     body: string;
     members?: RoomMember[];
     roleHandles?: string[];
     edited?: boolean;
+    preserveBlankLines?: boolean;
     onMentionClick?: (userId: string, anchorRect: DOMRect) => void;
   } = $props();
 
@@ -63,9 +64,10 @@
     members: RoomMember[],
     roleHandles: string[],
     edited: boolean,
-    viewerLogin: string | undefined
+    viewerLogin: string | undefined,
+    preserveBlankLines: boolean
   ): Promise<string> {
-    const html = await renderMd(body);
+    const html = await renderMd(body, { preserveBlankLines });
     const wrapped = wrapValidMentions(html, members, viewerLogin, roleHandles);
     return edited ? injectEditedMarker(wrapped) : wrapped;
   }
@@ -94,6 +96,7 @@
       // Internal message link → navigate in-app via SvelteKit
       const messageLink = parseMessageLink(anchor.href);
       if (messageLink?.serverId) {
+        // eslint-disable-next-line svelte/no-navigation-without-resolve -- buildMessageLinkPath resolves the SvelteKit route.
         goto(buildMessageLinkPath(messageLink.serverId, messageLink.roomId, messageLink.messageId));
         return;
       }
@@ -107,7 +110,7 @@
 </script>
 
 <div class="prose max-w-none min-w-0" role="presentation" onclick={handleContentClick}>
-  {#await render(body, members, roleHandles, edited, viewerLogin)}
+  {#await render(body, members, roleHandles, edited, viewerLogin, preserveBlankLines)}
     <!-- Show escaped body while loading -->
     <!-- eslint-disable-next-line svelte/no-at-html-tags -->
     {@html body.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}

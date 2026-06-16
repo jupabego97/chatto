@@ -88,6 +88,11 @@ function wordBoundaryEmphasis(state: StateInline, silent: boolean): boolean {
 
 let md: MarkdownIt | null = null;
 let codeHighlighting: CodeHighlightingModule | null = null;
+const PRESERVED_BLANK_LINE_SENTINEL = '\uE000chatto-blank-line\uE000';
+
+export type RenderMarkdownOptions = {
+  preserveBlankLines?: boolean;
+};
 
 type LowlightText = {
   type: 'text';
@@ -241,6 +246,46 @@ function extractFenceLanguages(markdown: string): string[] {
   return [...languages];
 }
 
+function preserveMarkdownBlankLines(markdown: string): string {
+  const lines = markdown.split('\n');
+  const output: string[] = [];
+  let inFence: { marker: '`' | '~'; length: number } | null = null;
+
+  for (const line of lines) {
+    const fenceMatch = line.match(/^[ \t]{0,3}(`{3,}|~{3,})/);
+
+    if (fenceMatch) {
+      const markerRun = fenceMatch[1];
+      const marker = markerRun[0] as '`' | '~';
+
+      if (inFence && inFence.marker === marker && markerRun.length >= inFence.length) {
+        inFence = null;
+      } else if (!inFence) {
+        inFence = { marker, length: markerRun.length };
+      }
+
+      output.push(line);
+      continue;
+    }
+
+    if (!inFence && line.trim() === '') {
+      output.push('', PRESERVED_BLANK_LINE_SENTINEL, '');
+      continue;
+    }
+
+    output.push(line);
+  }
+
+  return output.join('\n');
+}
+
+function replacePreservedBlankLineSentinels(html: string): string {
+  return html.replaceAll(
+    `<p>${PRESERVED_BLANK_LINE_SENTINEL}</p>`,
+    '<p class="preserved-blank-line" aria-hidden="true">&nbsp;</p>'
+  );
+}
+
 async function ensureFenceLanguagesLoaded(languages: string[]): Promise<void> {
   if (languages.length === 0) return;
 
@@ -321,12 +366,17 @@ export const rendererReady = Promise.resolve().then(initialize);
 /**
  * Renders markdown to HTML.
  */
-export async function renderMarkdown(body: string): Promise<string> {
+export async function renderMarkdown(
+  body: string,
+  options: RenderMarkdownOptions = {}
+): Promise<string> {
   try {
     await ensureFenceLanguagesLoaded(extractFenceLanguages(body));
     initialize();
 
-    return md!.render(body);
+    const source = options.preserveBlankLines ? preserveMarkdownBlankLines(body) : body;
+    const html = md!.render(source);
+    return options.preserveBlankLines ? replacePreservedBlankLineSentinels(html) : html;
   } catch (err) {
     console.error('[Markdown] renderMarkdown failed:', err, 'Body:', body.slice(0, 100));
     throw err;
