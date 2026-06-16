@@ -214,15 +214,6 @@ func (c *wireConn) handleHello(frameID string, hello *wirev1.ClientHello) {
 		return
 	}
 
-	var afterSeq uint64
-	if hello.GetResumeAfter() != "" {
-		afterSeq, err = c.server.core.ParseEventDeliveryCursor(user.GetId(), hello.GetResumeAfter(), time.Now())
-		if err != nil {
-			c.sendError(frameID, "", wirev1.ErrorCode_ERROR_CODE_FULL_REFRESH_REQUIRED, "event replay requires a full refresh", false)
-			return
-		}
-	}
-
 	_ = c.conn.SetReadDeadline(time.Time{})
 
 	c.mu.Lock()
@@ -236,20 +227,16 @@ func (c *wireConn) handleHello(frameID string, hello *wirev1.ClientHello) {
 			ProtocolVersion: wireProtocolVersion,
 			ServerVersion:   c.server.version,
 			Methods:         append([]string(nil), wireMethods...),
-			Features:        []string{"binary-protobuf", "requests", "my-events", "event-replay-cursor"},
+			Features:        []string{"binary-protobuf", "requests", "my-events"},
 		}},
 	})
 
-	events, err := c.server.core.StreamMyEvents(c.ctx, user.GetId(), afterSeq)
+	events, err := c.server.core.StreamMyEvents(c.ctx, user.GetId())
 	if err != nil {
-		if core.EventReplayRequiresFullRefresh(err) {
-			c.sendError(frameID, "", wirev1.ErrorCode_ERROR_CODE_FULL_REFRESH_REQUIRED, "event replay requires a full refresh", false)
-			return
-		}
 		c.sendError(frameID, "", wirev1.ErrorCode_ERROR_CODE_INTERNAL, "failed to subscribe to events", true)
 		return
 	}
-	go c.forwardEvents(user.GetId(), events)
+	go c.forwardEvents(events)
 }
 
 func (c *wireConn) authenticateHello(hello *wirev1.ClientHello) (*corev1.User, error) {
@@ -439,7 +426,7 @@ func (c *wireConn) handleCancel(cancel *wirev1.CancelRequest) {
 	}
 }
 
-func (c *wireConn) forwardEvents(userID string, events <-chan core.EventEnvelope) {
+func (c *wireConn) forwardEvents(events <-chan core.EventEnvelope) {
 	for {
 		select {
 		case <-c.ctx.Done():
@@ -448,7 +435,7 @@ func (c *wireConn) forwardEvents(userID string, events <-chan core.EventEnvelope
 			if !ok {
 				return
 			}
-			streamEvent := c.streamEvent(userID, event)
+			streamEvent := c.streamEvent(event)
 			if streamEvent == nil {
 				continue
 			}
@@ -462,7 +449,7 @@ func (c *wireConn) forwardEvents(userID string, events <-chan core.EventEnvelope
 	}
 }
 
-func (c *wireConn) streamEvent(userID string, event core.EventEnvelope) *wirev1.StreamEvent {
+func (c *wireConn) streamEvent(event core.EventEnvelope) *wirev1.StreamEvent {
 	if event == nil {
 		return nil
 	}
@@ -470,9 +457,6 @@ func (c *wireConn) streamEvent(userID string, event core.EventEnvelope) *wirev1.
 		EventId:     event.ID(),
 		EventType:   wireEventType(event),
 		Invalidates: wireInvalidationHints(event),
-	}
-	if seq := event.DeliverySeq(); seq > 0 {
-		streamEvent.DeliveryCursor = c.server.core.FormatEventDeliveryCursor(userID, seq, time.Now())
 	}
 	switch {
 	case event.EVTEvent() != nil:

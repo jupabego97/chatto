@@ -172,9 +172,6 @@ func TestWireAPI_RequestResponseAndLiveEvent(t *testing.T) {
 	if pushed.GetDurableEvent().GetId() != postResp.GetEvent().GetId() {
 		t.Fatalf("pushed event id = %q, want response event id %q", pushed.GetDurableEvent().GetId(), postResp.GetEvent().GetId())
 	}
-	if pushed.GetDeliveryCursor() == "" {
-		t.Fatal("pushed durable event has no delivery cursor")
-	}
 	if pushed.GetEventType() != "message_posted" {
 		t.Fatalf("pushed event type = %q, want message_posted", pushed.GetEventType())
 	}
@@ -207,14 +204,14 @@ func TestWireAPI_UnknownMethodReturnsStructuredError(t *testing.T) {
 	}
 }
 
-func TestWireAPI_ReplaysDurableEventsAfterCursor(t *testing.T) {
+func TestWireAPI_ResumeAfterDoesNotBlockLiveEvents(t *testing.T) {
 	env := setupWebSocketTestServer(t)
 
-	user, err := env.core.CreateUser(env.ctx, "system", "wirereplay", "Wire Replay", "password123")
+	user, err := env.core.CreateUser(env.ctx, "system", "wireresume", "Wire Resume", "password123")
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
-	room, err := env.core.CreateRoom(env.ctx, user.Id, core.KindChannel, "", "wire-replay", "")
+	room, err := env.core.CreateRoom(env.ctx, user.Id, core.KindChannel, "", "wire-resume", "")
 	if err != nil {
 		t.Fatalf("CreateRoom: %v", err)
 	}
@@ -222,31 +219,15 @@ func TestWireAPI_ReplaysDurableEventsAfterCursor(t *testing.T) {
 		t.Fatalf("JoinRoom: %v", err)
 	}
 
-	env.login(t, "wirereplay", "password123")
+	env.login(t, "wireresume", "password123")
 	conn := env.connectWire(t)
-	sendWireHello(t, conn, "")
+	sendWireHello(t, conn, "client-held-cursor")
 
-	first, err := env.core.PostMessage(env.ctx, core.KindChannel, room.Id, user.Id, "first replay marker", nil, "", "", nil, false)
+	event, err := env.core.PostMessage(env.ctx, core.KindChannel, room.Id, user.Id, "resume marker", nil, "", "", nil, false)
 	if err != nil {
-		t.Fatalf("PostMessage first: %v", err)
+		t.Fatalf("PostMessage: %v", err)
 	}
-	firstEvent := readWireDurableEvent(t, conn, first.GetId(), 5*time.Second)
-	if firstEvent.GetDeliveryCursor() == "" {
-		t.Fatal("first event has no delivery cursor")
-	}
-	_ = conn.Close()
-
-	second, err := env.core.PostMessage(env.ctx, core.KindChannel, room.Id, user.Id, "second replay marker", nil, "", "", nil, false)
-	if err != nil {
-		t.Fatalf("PostMessage second: %v", err)
-	}
-
-	reconnected := env.connectWire(t)
-	sendWireHello(t, reconnected, firstEvent.GetDeliveryCursor())
-	replayed := readWireDurableEvent(t, reconnected, second.GetId(), 5*time.Second)
-	if replayed.GetDeliveryCursor() == "" {
-		t.Fatal("replayed event has no delivery cursor")
-	}
+	readWireDurableEvent(t, conn, event.GetId(), 5*time.Second)
 }
 
 func readWireResponse(t *testing.T, conn *websocket.Conn, requestID string, timeout time.Duration) *wirev1.Response {

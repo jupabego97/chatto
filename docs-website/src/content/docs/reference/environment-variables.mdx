@@ -221,6 +221,10 @@ Only used when `storage_backend` is set to `s3`. See the [S3 Storage guide](/gui
   NKey seed (when using `nkey` auth method).
 </EnvVar>
 
+<EnvVar name="CHATTO_NATS_CLIENT_CA_CERT" toml="nats.client.ca_cert">
+  PEM-encoded CA certificate for verifying the NATS server's TLS certificate. When set, the NATS client connection uses TLS.
+</EnvVar>
+
 ## Authentication
 
 <EnvVar name="CHATTO_AUTH_DIRECT_REGISTRATION" toml="auth.direct_registration" default="true">
@@ -229,6 +233,22 @@ Only used when `storage_backend` is set to `s3`. See the [S3 Storage guide](/gui
 
 <EnvVar name="CHATTO_AUTH_TOKEN_TTL" toml="auth.token_ttl" default="90d">
   Inactivity TTL for bearer auth tokens. Supports durations like `90d`, `2160h`. Successful validation refreshes the TTL; inactive tokens expire automatically.
+</EnvVar>
+
+<EnvVar name="CHATTO_AUTH_EMAIL_OTP_THROTTLING_ENABLED" toml="auth.email_otp.throttling_enabled" default="true">
+  Enable throttling for registration and email-verification code delivery and wrong-code attempts. Set to `false` to disable these throttles while keeping OTP TTL enforcement.
+</EnvVar>
+
+<EnvVar name="CHATTO_AUTH_EMAIL_OTP_TTL" toml="auth.email_otp.ttl" default="15m">
+  How long registration and email-verification codes remain valid. Supports durations like `15m`, `30m`, or `1h`.
+</EnvVar>
+
+<EnvVar name="CHATTO_AUTH_EMAIL_OTP_MAX_DELIVERED_CODES" toml="auth.email_otp.max_delivered_codes" default="10">
+  Maximum successfully delivered registration or email-verification codes allowed for the same email challenge before fresh code requests are throttled.
+</EnvVar>
+
+<EnvVar name="CHATTO_AUTH_EMAIL_OTP_MAX_WRONG_ATTEMPTS" toml="auth.email_otp.max_wrong_attempts" default="5">
+  Maximum wrong-code submissions allowed for the same email challenge before the challenge is exhausted until its TTL expires.
 </EnvVar>
 
 ### External Login Providers
@@ -267,11 +287,11 @@ See [External Login Providers](/guides/external-login-providers/) for callback U
 </EnvVar>
 
 <EnvVar name="CHATTO_SMTP_PORT" toml="smtp.port">
-  SMTP port. Common value: `587` (STARTTLS).
+  SMTP port. Common values: `587` for STARTTLS, or `465` for implicit TLS/SMTPS.
 </EnvVar>
 
 <EnvVar name="CHATTO_SMTP_TLS" toml="smtp.tls" default="mandatory">
-  SMTP TLS policy. Use `mandatory` to require STARTTLS. Use `opportunistic` only when the SMTP server cannot support mandatory STARTTLS and plaintext fallback is explicitly acceptable.
+  SMTP TLS policy. Use `mandatory` to require STARTTLS on port `587`, or `implicit` for SMTPS on port `465`. When this value is omitted or left as `mandatory`, Chatto automatically uses implicit TLS for port `465`. Use `opportunistic` only when the SMTP server cannot support mandatory STARTTLS and plaintext fallback is explicitly acceptable.
 </EnvVar>
 
 <EnvVar name="CHATTO_SMTP_USERNAME" toml="smtp.username">
@@ -354,6 +374,10 @@ See [External Login Providers](/guides/external-login-providers/) for callback U
 
 <EnvVar name="CHATTO_LIVEKIT_SERVER_ID" toml="livekit.server_id">
   Unique identifier for this Chatto server, prefixed to deterministic LiveKit room names. This value must match across replicas of one Chatto server, and should differ only across different Chatto servers sharing the same LiveKit cluster. When empty, room names use the unprefixed format. The old `CHATTO_LIVEKIT_INSTANCE_ID` / `livekit.instance_id` name is still accepted as a deprecated alias.
+</EnvVar>
+
+<EnvVar name="CHATTO_LIVEKIT_INSTANCE_ID" toml="livekit.instance_id">
+  Deprecated alias for `CHATTO_LIVEKIT_SERVER_ID` / `livekit.server_id`. Prefer the server ID name in new deployments.
 </EnvVar>
 
 <EnvVar name="CHATTO_LIVEKIT_WEBHOOK_API_KEY" toml="livekit.webhook_api_key">

@@ -31,9 +31,10 @@ var resetRBACCmd = &cobra.Command{
 	Use:   "rbac",
 	Short: "Reset and re-seed the RBAC aggregate",
 	Long: `Appends reset facts to the event-sourced RBAC aggregate, re-creates
-the system roles (owner / admin / moderator) with their default permission
-grants, and assigns the 'owner' role to every user whose verified email matches
-the 'owners.emails' list in chatto.toml.
+the system roles, re-seeds default permission grants for non-owner roles, and
+assigns the 'owner' role to every user whose verified email matches the
+'owners.emails' list in chatto.toml. Owner permissions are effective
+automatically and are not stored as editable grants.
 
 This is the repair tool for the event-sourced RBAC layout and the
 operator escape hatch for misconfigured / drifted RBAC state.
@@ -79,6 +80,7 @@ func runResetRBAC(cmd *cobra.Command, args []string) {
 	defer cancel()
 
 	cfg.Core.AuthTokenTTL = cfg.Auth.TokenTTLOrDefault()
+	cfg.Core.EmailOTP = cfg.Auth.EmailOTP
 	cfg.Core.Replicas = cfg.NATS.ReplicasOrDefault()
 	cfg.Core.Limits = cfg.Limits
 	cfg.Core.Owners = cfg.Owners

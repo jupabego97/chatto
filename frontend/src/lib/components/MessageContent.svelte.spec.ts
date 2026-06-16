@@ -20,7 +20,7 @@ function member(login: string): RoomMember {
 }
 
 describe('renderMarkdown', () => {
-  // Wait for Shiki to initialize before running tests
+  // Wait for the markdown renderer to initialize before running tests
   beforeAll(async () => {
     await rendererReady;
   });
@@ -79,7 +79,6 @@ describe('renderMarkdown', () => {
 
     it('renders code blocks with language hint', async () => {
       const html = await renderMarkdown('```javascript\nconst x = 1;\n```');
-      // Shiki uses language-* class on the code element
       expect(html).toContain('language-javascript');
     });
 
@@ -252,7 +251,7 @@ describe('renderMarkdown', () => {
 });
 
 describe('MessageContent component', () => {
-  // Wait for Shiki to initialize before running tests
+  // Wait for the markdown renderer to initialize before running tests
   beforeAll(async () => {
     await rendererReady;
   });
@@ -280,6 +279,30 @@ describe('MessageContent component', () => {
     const link = q(container, 'a')!;
     expect(link.getAttribute('target')).toBe('_blank');
     expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+  });
+
+  it('renders fenced code blocks with highlighted markup and hides raw fences', async () => {
+    const { container } = renderMessage('```javascript\nconst x = 1;\n```');
+
+    await expect.poll(() => q(container, 'pre.hljs')).toBeTruthy();
+
+    const pre = q(container, 'pre.hljs')!;
+    const code = q(container, 'pre.hljs code.language-javascript')!;
+    expect(pre.getAttribute('data-language')).toBe('javascript');
+    expect(code.textContent).toContain('const x = 1;');
+    expect(container.textContent).not.toContain('```javascript');
+  });
+
+  it('renders a highlighted code block after leading text', async () => {
+    const { container } = renderMessage(
+      'Check this out:\n```javascript\nconsole.log("hello");\n```'
+    );
+
+    await expect.poll(() => q(container, 'pre.hljs')).toBeTruthy();
+    expect(container.textContent).toContain('Check this out:');
+    expect(q(container, 'pre.hljs code.language-javascript')?.textContent).toContain(
+      'console.log("hello");'
+    );
   });
 
   describe('mention wiring', () => {
