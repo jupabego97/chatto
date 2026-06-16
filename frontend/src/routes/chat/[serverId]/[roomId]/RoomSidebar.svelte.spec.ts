@@ -362,6 +362,35 @@ describe('RoomSidebar', () => {
     expect(container.querySelector('[aria-label="Members"]')).toBeFalsy();
   });
 
+  it('links room managers to the room information editor', async () => {
+    const { container } = render(RoomSidebarTestHarness, {
+      props: {
+        activePanel: 'information',
+        informationEditHref: '/chat/-/server-admin/rooms/room/room-1#information',
+        roomData: roomData([member(1)], 1, false, '**Welcome**')
+      }
+    });
+
+    const editLink = container.querySelector(
+      '[aria-label="Edit room information"]'
+    ) as HTMLAnchorElement | null;
+    expect(editLink).toBeTruthy();
+    expect(editLink!.getAttribute('href')).toBe(
+      '/chat/-/server-admin/rooms/room/room-1#information'
+    );
+  });
+
+  it('hides the room information editor link when unavailable', async () => {
+    const { container } = render(RoomSidebarTestHarness, {
+      props: {
+        activePanel: 'information',
+        roomData: roomData([member(1)], 1, false, '**Welcome**')
+      }
+    });
+
+    expect(container.querySelector('[aria-label="Edit room information"]')).toBeFalsy();
+  });
+
   it('renders an empty state when room information is blank', async () => {
     const { container } = render(RoomSidebarTestHarness, {
       props: {

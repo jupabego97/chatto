@@ -18,6 +18,7 @@ mounting the full chat room shell.
     presentation = 'desktop',
     currentUserId = 'viewer',
     canBanRoomMembers = false,
+    informationEditHref = null,
     onPresenceCacheReady,
     onClose
   }: {
@@ -27,6 +28,7 @@ mounting the full chat room shell.
     presentation?: 'desktop' | 'overlay';
     currentUserId?: string | null;
     canBanRoomMembers?: boolean;
+    informationEditHref?: string | null;
     onPresenceCacheReady?: (cache: PresenceCache) => void;
     onClose?: () => void;
   } = $props();
@@ -47,6 +49,7 @@ mounting the full chat room shell.
 <RoomSidebar
   {roomId}
   information={roomData.room.information ?? null}
+  {informationEditHref}
   {activePanel}
   {presentation}
   loading={false}

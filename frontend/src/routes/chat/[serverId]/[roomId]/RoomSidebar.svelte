@@ -43,6 +43,7 @@ calls, and similar room-specific panels can plug into the same shell. See the
     loading = false,
     roomId,
     information = null,
+    informationEditHref = null,
     activePanel = 'members',
     presentation = 'desktop',
     canBanRoomMembers = false,
@@ -53,6 +54,7 @@ calls, and similar room-specific panels can plug into the same shell. See the
     loading?: boolean;
     roomId: string;
     information?: string | null;
+    informationEditHref?: string | null;
     activePanel?: RoomSidebarPanel;
     presentation?: 'desktop' | 'overlay';
     canBanRoomMembers?: boolean;
@@ -208,6 +210,13 @@ calls, and similar room-specific panels can plug into the same shell. See the
   {/if}
   <PaneHeader {title} {loading} skeletonButtons={0}>
     {#snippet actions()}
+      {#if activePanel === 'information' && informationEditHref}
+        <HeaderIconButton
+          icon="uil--pen"
+          label="Edit room information"
+          href={informationEditHref}
+        />
+      {/if}
       <HeaderIconButton icon="uil--times" label="Hide room extras" onclick={() => onClose?.()} />
     {/snippet}
   </PaneHeader>

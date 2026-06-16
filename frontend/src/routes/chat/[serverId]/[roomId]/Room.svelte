@@ -293,6 +293,14 @@
     roomSidebarPanelForRoom(room.isDM, roomSidebarPanels.mobilePanel)
   );
   const roomSidebarTogglePanels = $derived(room.isDM ? DM_ROOM_SIDEBAR_PANELS : undefined);
+  const roomInformationEditHref = $derived(
+    !room.isDM && room.roomData?.canManageRoom
+      ? `${resolve('/chat/[serverId]/server-admin/rooms/room/[roomId]', {
+          serverId: serverSegment,
+          roomId
+        })}#information`
+      : null
+  );
 
   let leavingRoom = $state(false);
 
@@ -479,6 +487,7 @@
           <RoomSidebar
             {roomId}
             information={room.roomData?.room.information ?? null}
+            informationEditHref={roomInformationEditHref}
             activePanel={mobileRoomSidebarPanel}
             presentation="overlay"
             loading={room.isRoomLoading}
@@ -499,6 +508,7 @@
         <RoomSidebar
           {roomId}
           information={room.roomData?.room.information ?? null}
+          informationEditHref={roomInformationEditHref}
           activePanel={activeRoomSidebarPanel}
           loading={room.isRoomLoading}
           canBanRoomMembers={canBanMembersFromRoomSidebar(
