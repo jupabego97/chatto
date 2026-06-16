@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package chatto.api.v1;
+
+import "chatto/core/v1/event.proto";
+import "chatto/core/v1/models.proto";
+
+option go_package = "hmans.de/chatto/internal/pb/chatto/api/v1;apiv1";
+
+// ChattoApiService is the experimental app API used by the /api/wire WebSocket.
+service ChattoApiService {
+  rpc GetViewer(GetViewerRequest) returns (GetViewerResponse);
+  rpc ListMyRooms(ListMyRoomsRequest) returns (ListMyRoomsResponse);
+  rpc GetRoomTimeline(GetRoomTimelineRequest) returns (GetRoomTimelineResponse);
+  rpc PostMessage(PostMessageRequest) returns (PostMessageResponse);
+  rpc SendTypingIndicator(SendTypingIndicatorRequest) returns (SendTypingIndicatorResponse);
+}
+
+// Viewer is the current authenticated user context.
+message Viewer {
+  chatto.core.v1.User user = 1;
+}
+
+// GetViewerRequest requests the current authenticated user.
+message GetViewerRequest {}
+
+// GetViewerResponse returns the current authenticated user.
+message GetViewerResponse {
+  Viewer viewer = 1;
+}
+
+// ListMyRoomsRequest requests rooms the current user participates in.
+message ListMyRoomsRequest {
+  chatto.core.v1.RoomKind kind = 1;
+}
+
+// ListMyRoomsResponse returns rooms the current user participates in.
+message ListMyRoomsResponse {
+  repeated chatto.core.v1.Room rooms = 1;
+}
+
+// GetRoomTimelineRequest requests visible room timeline events.
+message GetRoomTimelineRequest {
+  string room_id = 1;
+  int32 limit = 2;
+  uint64 before_sequence = 3;
+}
+
+// TimelineEvent pairs a room event with its EVT stream sequence.
+message TimelineEvent {
+  chatto.core.v1.Event event = 1;
+  uint64 sequence = 2;
+}
+
+// GetRoomTimelineResponse returns a page of room timeline events.
+message GetRoomTimelineResponse {
+  repeated TimelineEvent events = 1;
+  bool has_older = 2;
+  bool has_newer = 3;
+  uint64 start_sequence = 4;
+  uint64 end_sequence = 5;
+}
+
+// PostMessageRequest posts a message into a room.
+message PostMessageRequest {
+  string room_id = 1;
+  string body = 2;
+  string thread_root_event_id = 3;
+  string in_reply_to_event_id = 4;
+  bool also_send_to_channel = 5;
+  bool large_mention_confirmed = 6;
+}
+
+// PostMessageResponse returns the committed message event.
+message PostMessageResponse {
+  chatto.core.v1.Event event = 1;
+  uint64 sequence = 2;
+}
+
+// SendTypingIndicatorRequest publishes a transient typing signal.
+message SendTypingIndicatorRequest {
+  string room_id = 1;
+  string thread_root_event_id = 2;
+}
+
+// SendTypingIndicatorResponse is empty on success.
+message SendTypingIndicatorResponse {}

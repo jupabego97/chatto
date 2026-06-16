@@ -47,6 +47,12 @@ description = "Generate Go code from protobuf schemas"
 dir = "proto"
 run = "buf generate"
 
+[tasks.codegen-proto-frontend]
+description = "Generate TypeScript code from protobuf schemas"
+depends = ["deps-frontend"]
+dir = "proto"
+run = "buf generate --template buf.gen.frontend.yaml"
+
 [tasks.codegen-cli]
 description = "Generate GraphQL code using gqlgen"
 depends = ["deps-cli", "codegen-proto"]

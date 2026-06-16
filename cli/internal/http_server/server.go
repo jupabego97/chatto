@@ -170,6 +170,7 @@ func (s *HTTPServer) setupRoutes() error {
 	s.setupServerInfoRoutes()
 	s.setupWebhookRoutes()
 	s.setupGraphQLAPI(allowedOrigins)
+	s.setupWireAPI(allowedOrigins)
 	s.setupOIDCRoutes()
 	s.setupAuthRoutes()
 	s.setupOAuthRoutes()

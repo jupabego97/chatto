@@ -1,6 +1,6 @@
 # Chatto Architecture
 
-This document is the **inventory**: what currently exists in the system — streams, KV buckets, object stores, subject patterns, key shapes, GraphQL operations. It's the *what's where* reference, not the *why* one.
+This document is the **inventory**: what currently exists in the system — streams, KV buckets, object stores, subject patterns, key shapes, GraphQL operations, and experimental wire APIs. It's the *what's where* reference, not the *why* one.
 
 For *why* a particular design decision was made:
 
@@ -21,6 +21,7 @@ For *why* a particular design decision was made:
   - [Mutations](#mutations)
   - [Subscriptions](#subscriptions)
   - [Admin sub-API](#admin-sub-api)
+- [Experimental Protobuf Wire API](#experimental-protobuf-wire-api)
 - [Architecture Pattern: Event-Sourced Writes](#architecture-pattern-event-sourced-writes)
   - [Write Path](#write-path)
   - [Consistency Model](#consistency-model)
@@ -38,7 +39,7 @@ For *why* a particular design decision was made:
 
 ## Overview
 
-Chatto is a real-time chat application with a GraphQL gateway and NATS/JetStream backend. Durable domain state is event-sourced in the `EVT` stream and served from projections; `RUNTIME_STATE` holds persisted latest-value runtime state such as notifications, push subscriptions, and auth tokens.
+Chatto is a real-time chat application with a GraphQL gateway, an experimental protobuf WebSocket API, and a NATS/JetStream backend. Durable domain state is event-sourced in the `EVT` stream and served from projections; `RUNTIME_STATE` holds persisted latest-value runtime state such as notifications, push subscriptions, and auth tokens.
 
 ### Core Concepts
 
@@ -71,13 +72,14 @@ For connecting to an external NATS cluster:
 
 ## Architecture & APIs
 
-Key files: [`cli/internal/core/core.go`](../cli/internal/core/core.go), [`cli/internal/events/`](../cli/internal/events/), [`cli/internal/http_server/metrics.go`](../cli/internal/http_server/metrics.go), [`proto/chatto/core/v1/`](../proto/chatto/core/v1/)
+Key files: [`cli/internal/core/core.go`](../cli/internal/core/core.go), [`cli/internal/events/`](../cli/internal/events/), [`cli/internal/http_server/metrics.go`](../cli/internal/http_server/metrics.go), [`cli/internal/http_server/wire.go`](../cli/internal/http_server/wire.go), [`frontend/src/lib/wire/client.ts`](../frontend/src/lib/wire/client.ts), [`frontend/src/lib/state/server/wireEventLogger.ts`](../frontend/src/lib/state/server/wireEventLogger.ts), [`frontend/src/lib/pb/`](../frontend/src/lib/pb/), [`proto/chatto/core/v1/`](../proto/chatto/core/v1/), [`proto/chatto/wire/v1/`](../proto/chatto/wire/v1/), [`proto/chatto/api/v1/`](../proto/chatto/api/v1/)
 
 - **NATS**: At the core, Chatto uses a series of NATS JetStream streams, KV buckets and object storage. Data stored in these is defined as Protocol Buffers (see `proto/`).
 - **Core**: The `core` package defines Chatto's domain logic and directly talks to NATS to interact with KV buckets, object stores, and the `EVT` stream. `ChattoCore` remains the compatibility facade, while smaller services own projection readiness and domain-specific write concerns.
-- **GraphQL**: Client-facing API for all operations (auth, management, messaging). Subscriptions over WebSocket for real-time updates. Fields require authentication by default unless marked public in the schema; resolvers call Core methods directly and enforce operation-specific authorization before each call.
+- **GraphQL**: Primary client-facing API for all operations (auth, management, messaging). Subscriptions over WebSocket for real-time updates. Fields require authentication by default unless marked public in the schema; resolvers call Core methods directly and enforce operation-specific authorization before each call.
+- **Protobuf Wire API**: Experimental `/api/wire` WebSocket endpoint using binary protobuf `chatto.wire.v1.ClientFrame` / `ServerFrame` messages. It multiplexes request/response methods from `chatto.api.v1.ChattoApiService` and async live events adapted from `StreamMyEvents` over one authenticated socket.
 - **Metrics**: Optional Prometheus-compatible per-process metrics run on a separate internal HTTP listener configured by `[metrics]`. The endpoint exposes Go/process collectors plus Chatto readiness, GraphQL WebSocket counts, `myEvents` stream counters, NATS client counters, and projection health/lag gauges.
-- **Web Client**: SvelteKit-based SPA that gets compiled and embedded into the Go binary. Talks to GraphQL API over HTTP/WebSocket.
+- **Web Client**: SvelteKit-based SPA that gets compiled and embedded into the Go binary. GraphQL remains the product API used by the UI; the experimental wire prototype also generates TypeScript protobuf classes under `frontend/src/lib/pb/` and exposes a typed `WireClient` under `frontend/src/lib/wire/`.
 - **Email**: Optional SMTP integration for transactional emails (verification, password reset). Configured via `[smtp]` in config. The `internal/email` package provides a `Mailer` that returns `ErrSMTPDisabled` when SMTP is not configured, allowing callers to handle gracefully.
 
 ## Core Services
@@ -309,6 +311,39 @@ Diagnostic fields (`admin.systemInfo`, `admin.eventLog`, `admin.eventLogEntry`, 
 | `admin.updateBlockedUsernames(input)`            | Mutation  | Update the newline-separated blocked-username list.                                          |
 | `admin.updateUser(input)`                        | Mutation  | Update a user's login / display name (bypasses the 30-day cooldown).                         |
 | `admin.clearUsernameCooldown(userId)`            | Mutation  | Manually clear a user's login change cooldown.                                               |
+
+## Experimental Protobuf Wire API
+
+Key files: [`cli/internal/http_server/wire.go`](../cli/internal/http_server/wire.go), [`frontend/src/lib/wire/client.ts`](../frontend/src/lib/wire/client.ts), [`frontend/src/lib/state/server/wireEventLogger.ts`](../frontend/src/lib/state/server/wireEventLogger.ts), [`frontend/src/lib/pb/`](../frontend/src/lib/pb/), [`proto/chatto/wire/v1/protocol.proto`](../proto/chatto/wire/v1/protocol.proto), [`proto/chatto/api/v1/chat.proto`](../proto/chatto/api/v1/chat.proto), [`proto/buf.gen.yaml`](../proto/buf.gen.yaml), [`proto/buf.gen.frontend.yaml`](../proto/buf.gen.frontend.yaml)
+
+`GET /api/wire` upgrades to a binary protobuf WebSocket. It is experimental and parallel to GraphQL: the embedded web client still uses GraphQL for product behavior, while this endpoint plus `frontend/src/lib/wire/WireClient` prototype a schemaful single-socket API for request/response traffic and async live events. `buf generate` emits Go protobufs under `cli/internal/pb/`; `buf generate --template buf.gen.frontend.yaml` emits TypeScript protobufs under `frontend/src/lib/pb/`.
+
+The frontend currently starts a diagnostic `WireClient` alongside each authenticated GraphQL `myEvents` bus and logs decoded protobuf `StreamEvent` frames to the browser console. It does not yet feed product state; GraphQL remains the UI's state update path.
+
+The transport envelope is `chatto.wire.v1`:
+
+| Frame | Direction | Purpose |
+| ----- | --------- | ------- |
+| `ClientFrame.hello` | Client → server | Starts the session, optionally carrying a bearer token and a durable-event resume cursor. Same-origin cookie sessions can authenticate through the WebSocket upgrade request. |
+| `ClientFrame.request` | Client → server | Sends one protobuf-encoded API request with `request_id`, `method`, and `body`. |
+| `ClientFrame.cancel` | Client → server | Cancels one in-flight request by `request_id`. |
+| `ClientFrame.ack` | Client → server | Advisory acknowledgement for pushed events; currently not durable state. |
+| `ServerFrame.hello` | Server → client | Acknowledges authentication and returns protocol/server versions plus supported methods. |
+| `ServerFrame.response` | Server → client | Returns one protobuf-encoded response body for a request. |
+| `ServerFrame.event` | Server → client | Pushes async `StreamEvent` messages from the same delivery machinery as GraphQL `myEvents`. |
+| `ServerFrame.error` | Server → client | Returns structured wire errors such as `UNAUTHENTICATED`, `PERMISSION_DENIED`, `UNIMPLEMENTED`, and `FULL_REFRESH_REQUIRED`. |
+
+The API method schema lives in `chatto.api.v1.ChattoApiService`. Current prototype methods are:
+
+| Method | Request | Response | Notes |
+| ------ | ------- | -------- | ----- |
+| `/chatto.api.v1.ChattoApiService/GetViewer` | `GetViewerRequest` | `GetViewerResponse` | Returns the authenticated user. |
+| `/chatto.api.v1.ChattoApiService/ListMyRooms` | `ListMyRoomsRequest` | `ListMyRoomsResponse` | Returns channel or DM rooms where the caller is an explicit member. |
+| `/chatto.api.v1.ChattoApiService/GetRoomTimeline` | `GetRoomTimelineRequest` | `GetRoomTimelineResponse` | Reads visible room timeline events from projections; requires room membership. |
+| `/chatto.api.v1.ChattoApiService/PostMessage` | `PostMessageRequest` | `PostMessageResponse` | Posts a root/thread message; requires room membership and `message.post`. |
+| `/chatto.api.v1.ChattoApiService/SendTypingIndicator` | `SendTypingIndicatorRequest` | `SendTypingIndicatorResponse` | Publishes transient typing state; requires room membership. |
+
+`StreamEvent` can carry a durable `corev1.Event`, a transient `corev1.LiveEvent`, or a synthetic `HeartbeatEvent`. Durable events include the same signed, user-bound delivery cursor used by GraphQL `myEvents(after:)`; reconnect replay still goes through `MyEventsService`, waits for projection readiness, filters by current room membership, and rejects invalid/expired/over-budget cursors with `FULL_REFRESH_REQUIRED`. Each pushed event also includes an `event_type` string and coarse invalidation hints so older clients can refetch affected room/user/server surfaces even when they do not understand a new protobuf oneof variant.
 
 ## Architecture Pattern: Event-Sourced Writes
 
