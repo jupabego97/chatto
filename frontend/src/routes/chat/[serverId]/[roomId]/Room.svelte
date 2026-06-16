@@ -468,6 +468,7 @@
         >
           <RoomSidebar
             {roomId}
+            information={room.roomData?.room.information ?? null}
             activePanel={mobileRoomSidebarPanel}
             presentation="overlay"
             loading={room.isRoomLoading}
@@ -484,6 +485,7 @@
       <div class="hidden lg:flex">
         <RoomSidebar
           {roomId}
+          information={room.roomData?.room.information ?? null}
           activePanel={activeRoomSidebarPanel}
           loading={room.isRoomLoading}
           canBanRoomMembers={room.roomData?.canBanRoomMembers ?? false}

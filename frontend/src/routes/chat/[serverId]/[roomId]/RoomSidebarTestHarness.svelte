@@ -44,6 +44,7 @@ mounting the full chat room shell.
 
 <RoomSidebar
   {roomId}
+  information={roomData.room.information ?? null}
   {activePanel}
   {presentation}
   loading={false}
