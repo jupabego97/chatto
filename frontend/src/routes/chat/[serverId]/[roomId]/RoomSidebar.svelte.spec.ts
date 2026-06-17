@@ -370,7 +370,7 @@ describe('RoomSidebar', () => {
           [member(1)],
           1,
           false,
-          'Stuff\n\nhttps://docs.chatto.run\nhttps://chatto.run\nhttps://hmans.dev\n\nNo Stuff\n\n- Office Hours Fridays 11-13 CEST\n- I like pie'
+          'Stuff\n\n\n\nhttps://docs.chatto.run\nhttps://chatto.run\nhttps://hmans.dev\n\n\n\nNo Stuff\n\n\n\n- Office Hours Fridays 11-13 CEST\n- I like pie'
         )
       }
     });
@@ -381,6 +381,20 @@ describe('RoomSidebar', () => {
         'Office Hours Fridays 11-13 CEST'
       );
     });
+  });
+
+  it('does not preserve ordinary paragraph separators as blank lines in room information', async () => {
+    const { container } = render(RoomSidebarTestHarness, {
+      props: {
+        activePanel: 'information',
+        roomData: roomData([member(1)], 1, false, 'title\n\ncontent')
+      }
+    });
+
+    await vi.waitFor(() => {
+      expect(container.querySelector('.prose p')?.textContent).toBe('title');
+    });
+    expect(container.querySelectorAll('.preserved-blank-line')).toHaveLength(0);
   });
 
   it('links room managers to the room information editor', async () => {

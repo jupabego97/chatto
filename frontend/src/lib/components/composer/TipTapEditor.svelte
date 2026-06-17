@@ -650,32 +650,39 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
     const lines = markdown.split('\n');
     let inFence: { marker: '`' | '~'; length: number } | null = null;
 
-    return lines
-      .map((line) => {
-        const fenceMatch = line.match(/^[ \t]{0,3}(`{3,}|~{3,})/);
+    const output: string[] = [];
 
-        if (fenceMatch) {
-          const markerRun = fenceMatch[1];
-          const marker = markerRun[0] as '`' | '~';
+    for (const line of lines) {
+      const fenceMatch = line.match(/^[ \t]{0,3}(`{3,}|~{3,})/);
 
-          if (
-            inFence &&
-            inFence.marker === marker &&
-            markerRun.length >= inFence.length
-          ) {
-            inFence = null;
-          } else if (!inFence) {
-            inFence = { marker, length: markerRun.length };
-          }
+      if (fenceMatch) {
+        const markerRun = fenceMatch[1];
+        const marker = markerRun[0] as '`' | '~';
 
-          return line;
+        if (inFence && inFence.marker === marker && markerRun.length >= inFence.length) {
+          inFence = null;
+        } else if (!inFence) {
+          inFence = { marker, length: markerRun.length };
         }
 
-        if (inFence) return line;
-        if (/^[ \t]+$/.test(line)) return '';
-        return line.replace(/[ \t]{2,}$/g, '');
-      })
-      .join('\n');
+        output.push(line);
+        continue;
+      }
+
+      if (inFence) {
+        output.push(line);
+        continue;
+      }
+
+      if (/^[ \t]+$/.test(line)) {
+        output.push('', '', '');
+        continue;
+      }
+
+      output.push(line.replace(/[ \t]{2,}$/g, ''));
+    }
+
+    return output.join('\n');
   }
 
   function trimSerializedTrailingBlankLines(markdown: string): string {

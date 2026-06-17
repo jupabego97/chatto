@@ -103,6 +103,49 @@ describe('MarkdownEditor', () => {
     await vi.waitFor(() => expect(updates.at(-1)).toBe('Things I hate:\n\n\n\n- lists'));
   });
 
+  it('serializes visual empty paragraphs between typed paragraphs', async () => {
+    const updates: string[] = [];
+    const { container } = render(MarkdownEditor, {
+      props: {
+        testid: 'markdown-editor',
+        onUpdate: (markdown) => updates.push(markdown)
+      }
+    });
+    const editor = await findEditor(container);
+
+    await insertText(editor, 'title');
+    await pressKey(editor, 'Enter');
+    await pressKey(editor, 'Enter');
+    await insertText(editor, 'content');
+    await pressKey(editor, 'Enter');
+    await pressKey(editor, 'Enter');
+    await insertText(editor, 'title two');
+    await pressKey(editor, 'Enter');
+    await pressKey(editor, 'Enter');
+    await insertText(editor, 'content two');
+
+    await vi.waitFor(() =>
+      expect(updates.at(-1)).toBe('title\n\n\n\ncontent\n\n\n\ntitle two\n\n\n\ncontent two')
+    );
+  });
+
+  it('serializes visual empty paragraphs between pasted paragraphs', async () => {
+    const updates: string[] = [];
+    const { container } = render(MarkdownEditor, {
+      props: {
+        testid: 'markdown-editor',
+        onUpdate: (markdown) => updates.push(markdown)
+      }
+    });
+    const editor = await findEditor(container);
+
+    await insertText(editor, 'title\n\ncontent\n\ntitle two\n\ncontent two');
+
+    await vi.waitFor(() =>
+      expect(updates.at(-1)).toBe('title\n\n\n\ncontent\n\n\n\ntitle two\n\n\n\ncontent two')
+    );
+  });
+
   it('normalizes pasted multiline text without persisting hard-break spaces', async () => {
     const updates: string[] = [];
     const { container } = render(MarkdownEditor, {

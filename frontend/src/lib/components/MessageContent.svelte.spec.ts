@@ -88,7 +88,7 @@ describe('renderMarkdown', () => {
     });
 
     it('can preserve blank markdown lines as visible rows', async () => {
-      const html = await renderMarkdown('Stuff\n\nNo Stuff\n\n- item', {
+      const html = await renderMarkdown('Stuff\n\n\n\nNo Stuff\n\n\n\n- item', {
         preserveBlankLines: true
       });
 
@@ -98,7 +98,14 @@ describe('renderMarkdown', () => {
     });
 
     it('does not preserve blank markdown lines by default', async () => {
-      const html = await renderMarkdown('Stuff\n\nNo Stuff');
+      const html = await renderMarkdown('Stuff\n\n\n\nNo Stuff');
+      expect(html).not.toContain('preserved-blank-line');
+    });
+
+    it('does not preserve ordinary paragraph separators as visible rows', async () => {
+      const html = await renderMarkdown('Stuff\n\nNo Stuff', {
+        preserveBlankLines: true
+      });
       expect(html).not.toContain('preserved-blank-line');
     });
 
