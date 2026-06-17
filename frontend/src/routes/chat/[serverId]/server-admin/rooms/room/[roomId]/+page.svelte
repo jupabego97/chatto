@@ -182,6 +182,13 @@
       savingInformation = false;
     }
   }
+
+  function handleInformationKeydown(event: KeyboardEvent) {
+    if (!(event.metaKey || event.ctrlKey) || event.key !== 'Enter') return;
+    if (!informationDirty || informationError || savingInformation) return;
+    event.preventDefault();
+    void saveInformation();
+  }
 </script>
 
 <PageTitle title={`${pageTitle} | Server Admin`} />
@@ -250,6 +257,7 @@
           error={informationError}
           placeholder="Add Markdown-formatted room information..."
           testid="room-information-editor"
+          onkeydown={handleInformationKeydown}
         />
         <div class="flex items-center justify-between gap-3">
           <p class={['text-sm', informationError ? 'text-danger' : 'text-muted']}>

@@ -777,7 +777,11 @@
               {@const groupEvents = item?.events}
               {@const groupKind = item?.kind}
               {#if groupEvents && groupKind && groupEvents.length > 0}
-                <SystemEventGroup events={groupEvents} kind={groupKind} />
+                <SystemEventGroup
+                  events={groupEvents}
+                  kind={groupKind}
+                  {onOpenRoomInformation}
+                />
               {/if}
             {:else}
               <!--
