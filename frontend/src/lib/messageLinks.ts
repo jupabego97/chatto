@@ -21,6 +21,7 @@ export interface MessageLink {
   messageId: string;
 }
 
+/** Stable message permalink path. Intentionally ID-based even when the room has a name route. */
 export function buildMessageLinkPath(
   serverId: string,
   roomId: string,

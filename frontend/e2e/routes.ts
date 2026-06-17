@@ -129,7 +129,7 @@ export const patterns = {
   anyRoom: new RegExp(`/chat/-(?:/${ROOM_SEGMENT_PATTERN}|/r/${ROOM_SEGMENT_PATTERN})$`),
   /** Any thread page: /chat/-/{roomId}/{threadId} or /chat/-/r/{roomName}/{threadId}. */
   anyThread: new RegExp(
-    `/chat/-(?:/${ROOM_SEGMENT_PATTERN}|/r/${ROOM_SEGMENT_PATTERN})/[a-zA-Z0-9]+$`
+    `/chat/-(?:/(?!r/)${ROOM_SEGMENT_PATTERN}|/r/${ROOM_SEGMENT_PATTERN})/[a-zA-Z0-9]+$`
   ),
   /** Any admin user page: /chat/-/server-admin/members/{id} */
   anyAdminUser: /\/chat\/-\/server-admin\/members\/[a-zA-Z0-9]+/,

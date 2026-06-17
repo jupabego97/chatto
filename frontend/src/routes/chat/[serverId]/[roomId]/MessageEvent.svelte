@@ -266,9 +266,8 @@
     e.preventDefault();
     e.stopPropagation();
     try {
-      await navigator.clipboard.writeText(
-        buildMessageLinkURL(getActiveServer(), currentRoomSegment, event.id)
-      );
+      // Copied message links use immutable room IDs so renames/name reuse cannot retarget them.
+      await navigator.clipboard.writeText(buildMessageLinkURL(getActiveServer(), roomId, event.id));
       toast.success('Message link copied');
     } catch {
       toast.error('Failed to copy link');

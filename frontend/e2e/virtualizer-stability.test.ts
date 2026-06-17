@@ -4,7 +4,7 @@ import { createAndLoginTestUser } from './fixtures/testUser';
 import { withServerUser } from './fixtures/serverUser';
 import { TIMEOUTS } from './constants';
 import { waitForRoomReady } from './fixtures/realtimeSync';
-import { getRoomIdForUrlSegment } from './fixtures/graphqlHelpers';
+import { getRoomIdForUrlSegment, getRoomUrlSegmentFromUrl } from './fixtures/graphqlHelpers';
 
 /**
  * Post messages via GraphQL API (much faster than UI-based posting).
@@ -26,9 +26,9 @@ async function postMessagesViaAPI(page: Page, roomId: string, messages: string[]
  */
 async function getRoomIdFromUrl(page: Page): Promise<string> {
   const url = page.url();
-  const match = url.match(/\/chat\/-\/([^/?]+)/);
-  if (!match) throw new Error(`Could not extract room ID from URL: ${url}`);
-  return getRoomIdForUrlSegment(page, match[1]);
+  const segment = getRoomUrlSegmentFromUrl(url);
+  if (!segment) throw new Error(`Could not extract room ID from URL: ${url}`);
+  return getRoomIdForUrlSegment(page, segment);
 }
 
 async function getScrollFadeOpacities(page: Page): Promise<{ top: number; bottom: number }> {
