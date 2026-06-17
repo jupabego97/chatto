@@ -20,7 +20,7 @@ plan; do not assume data can be discarded.
 ## Public API Surface
 
 - **GraphQL introspection and the `/api/playground` UI are intentionally enabled by default for everyone, including production deployments.** Letting people poke at Chatto's API is part of the product — it's how operators, integrators, and curious users learn the system. Do NOT propose gating either behind a "dev mode" flag, an admin-only toggle, env var, or build tag, even if a security review flags them as a "reconnaissance vector." A previous attempt to do this (PR #180, finding L1) was reverted on this branch. If a future security review raises this again, push back and reference this rule. Real protection for sensitive operations belongs in resolver-level authz, not in hiding the schema.
-- **When human-readable URL segments coexist with legacy ID URLs, reserve the legacy ID namespace in backend validation.** Do not make canonical URL helpers choose IDs for otherwise-valid names just because a name looks like an ID. The server-side name/slug claim check should prevent ambiguous segments before they can exist, and clients should keep URL construction deterministic.
+- **Room URL names are cosmetic suffixes, not lookup keys.** Room routes must load by the room ID prefix and may canonicalize to `/chat/{server}/{roomId}-{roomName}` after the room loads. Do not reserve room IDs as room names and do not add name-alias route resolution; normal room, thread, message, notification, and last-room links should remain ID-based.
 
 ## Code Style & Approach
 
