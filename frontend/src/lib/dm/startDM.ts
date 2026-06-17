@@ -1,8 +1,8 @@
 import { graphql } from '$lib/gql';
 import { graphqlClientManager } from '$lib/state/server/graphqlClient.svelte';
 import { goto } from '$app/navigation';
+import { resolve } from '$app/paths';
 import { serverIdToSegment } from '$lib/navigation';
-import { roomPathForSegment } from '$lib/roomUrls';
 
 const StartDMMutation = graphql(`
   mutation StartDM($input: StartDMInput!) {
@@ -22,6 +22,11 @@ export async function startDMWith(serverId: string, userId: string): Promise<voi
     .toPromise();
 
   if (result.data?.startDM) {
-    goto(roomPathForSegment(serverIdToSegment(serverId), result.data.startDM.id));
+    goto(
+      resolve('/chat/[serverId]/[roomId]', {
+        serverId: serverIdToSegment(serverId),
+        roomId: result.data.startDM.id
+      })
+    );
   }
 }

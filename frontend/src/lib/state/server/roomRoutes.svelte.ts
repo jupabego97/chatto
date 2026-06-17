@@ -41,10 +41,6 @@ function resolvedRoom(room: RoomURLTarget): ResolvedRoomRoute {
   };
 }
 
-function isURLSafeRoomSegment(segment: string): boolean {
-  return /^[A-Za-z0-9_-]{1,30}$/.test(segment);
-}
-
 export class RoomRouteResolverStore {
   constructor(
     private readonly client: Client,

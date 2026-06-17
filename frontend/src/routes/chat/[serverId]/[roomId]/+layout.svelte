@@ -4,6 +4,7 @@
   import { page } from '$app/state';
   import { getActiveServer } from '$lib/state/activeServer.svelte';
   import { serverRegistry } from '$lib/state/server/registry.svelte';
+  import type { ResolvedPathname } from '$app/types';
   import {
     roomMessagePathForSegment,
     roomPathForSegment,
@@ -33,8 +34,8 @@
 
   const isMessageLinkMode = $derived(/\/m\/[^/]+$/.test(page.url.pathname));
 
-  function canonicalRoomPath(canonicalSegment: string): string {
-    let path: string;
+  function canonicalRoomPath(canonicalSegment: string): ResolvedPathname {
+    let path: ResolvedPathname;
     if (isMessageLinkMode && messageId) {
       path = roomMessagePathForSegment(page.params.serverId!, canonicalSegment, messageId);
     } else if (threadId) {
@@ -42,7 +43,7 @@
     } else {
       path = roomPathForSegment(page.params.serverId!, canonicalSegment);
     }
-    return `${path}${page.url.search}${page.url.hash}`;
+    return `${path}${page.url.search}${page.url.hash}` as ResolvedPathname;
   }
 
   $effect(() => {

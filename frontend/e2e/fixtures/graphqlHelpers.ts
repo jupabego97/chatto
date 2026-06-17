@@ -212,12 +212,36 @@ export async function postThreadReplyViaAPI(
  * `core.LegacyServerSpaceID` on the backend, `SERVER_SPACE_ID` on the
  * frontend.
  */
+export async function getRoomIdForUrlSegment(page: Page, segment: string): Promise<string> {
+  const decodedSegment = decodeURIComponent(segment);
+  const data = await graphqlQuery<{
+    viewer: { user: { rooms: Array<{ id: string; name: string }> } };
+  }>(
+    page,
+    `query {
+      viewer {
+        user {
+          rooms {
+            id
+            name
+          }
+        }
+      }
+    }`
+  );
+
+  const room = data.viewer.user.rooms.find(
+    (candidate) => candidate.id === decodedSegment || candidate.name === decodedSegment
+  );
+  return room?.id ?? decodedSegment;
+}
+
 export async function getIdsFromUrl(
   page: Page
 ): Promise<{ spaceId: string; roomId: string }> {
   const match = page.url().match(/\/chat\/-\/([^/]+)/);
   if (!match) throw new Error(`Could not extract roomId from URL: ${page.url()}`);
-  const roomId = match[1];
+  const roomId = await getRoomIdForUrlSegment(page, match[1]);
   return { spaceId: 'server', roomId };
 }
 

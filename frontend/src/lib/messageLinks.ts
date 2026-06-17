@@ -7,6 +7,7 @@
 import { serverRegistry } from '$lib/state/server/registry.svelte';
 import { serverIdToSegment, segmentToServerId } from '$lib/navigation';
 import { roomMessagePathForSegment } from '$lib/roomUrls';
+import type { ResolvedPathname } from '$app/types';
 
 export interface MessageLink {
   /** URL segment for the server (`-` for origin, hostname for remote). */
@@ -21,7 +22,7 @@ export function buildMessageLinkPath(
   serverId: string,
   roomId: string,
   messageId: string
-): string {
+): ResolvedPathname {
   return roomMessagePathForSegment(serverIdToSegment(serverId), roomId, messageId);
 }
 

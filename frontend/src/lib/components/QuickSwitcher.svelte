@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
+  import type { ResolvedPathname } from '$app/types';
   import { scoreItem } from './quickSwitcherSearch';
   import { serverIdToSegment } from '$lib/navigation';
   import { serverRegistry } from '$lib/state/server/registry.svelte';
@@ -32,7 +33,7 @@
     participants?: UserAvatarUserFragment[];
     currentUserId?: string;
     targetUserId?: string;
-    href?: string;
+    href?: ResolvedPathname;
     icon?: string;
     score: number;
   };
@@ -203,7 +204,7 @@
       detail: '',
       serverId: '',
       serverName: '',
-      href: '/chat/notifications',
+      href: resolve('/chat/notifications'),
       icon: 'uil--bell',
       score: 0
     });
@@ -386,7 +387,7 @@
 
   // --- Navigation ---
 
-  function itemUrl(item: ResultItem): string | undefined {
+  function itemUrl(item: ResultItem): ResolvedPathname | undefined {
     if ((item.kind === 'destination' || item.kind === 'server') && item.href) return item.href;
     if (item.kind === 'dm')
       return roomPathForSegment(serverIdToSegment(item.serverId), item.id);
@@ -419,7 +420,7 @@
     if (item.kind === 'user') {
       try {
         const roomId = await startDMFromUser(item);
-        const url = roomPathForSegment(serverIdToSegment(item.serverId), roomId);
+        const url: ResolvedPathname = roomPathForSegment(serverIdToSegment(item.serverId), roomId);
         recentQuickSwitcher.record(url);
         goto(url);
       } catch (err) {
@@ -431,7 +432,7 @@
     const url = itemUrl(item);
     if (url) {
       recentQuickSwitcher.record(url);
-      goto(url);
+      goto(url as ResolvedPathname);
     }
   }
 

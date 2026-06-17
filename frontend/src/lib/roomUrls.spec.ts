@@ -15,6 +15,7 @@ describe('room URL helpers', () => {
 
   it('recognizes legacy room ID segments for fallback lookup', () => {
     expect(looksLikeRoomIDSegment('R7gUDvZNyvHkk4K')).toBe(true);
+    expect(looksLikeRoomIDSegment('deadbeef123456')).toBe(true);
     expect(looksLikeRoomIDSegment('general')).toBe(false);
   });
 

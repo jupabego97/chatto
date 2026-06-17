@@ -1,6 +1,7 @@
 import { expect, type Page } from '@playwright/test';
 import { test } from './setup';
 import { createAndLoginTestUser } from './fixtures/testUser';
+import { getRoomIdForUrlSegment } from './fixtures/graphqlHelpers';
 import { TIMEOUTS } from './constants';
 import * as routes from './routes';
 
@@ -71,7 +72,7 @@ async function postMessageAndGetId(
 async function getIdsFromUrl(page: Page): Promise<{ spaceId: string; roomId: string }> {
   const match = page.url().match(/\/chat\/-\/([^/]+)/);
   if (!match) throw new Error(`Could not extract roomId from URL: ${page.url()}`);
-  return { spaceId: 'server', roomId: match[1] };
+  return { spaceId: 'server', roomId: await getRoomIdForUrlSegment(page, match[1]) };
 }
 
 async function clickReplyAttributionJump(page: Page, replyBody: string): Promise<void> {

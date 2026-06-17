@@ -14,6 +14,8 @@
 
 /** URL segment for the home (local) instance. */
 const HOME = '-';
+const RESERVED_CHAT_SEGMENTS = '(?:overview|threads|settings|preferences|server-admin)';
+const ROOM_SEGMENT_PATTERN = `(?!${RESERVED_CHAT_SEGMENTS}(?:[/?#]|$))[a-zA-Z0-9_-]+`;
 
 // --- Root routes ---
 
@@ -118,19 +120,19 @@ export const patterns = {
   /** Any chat route after login redirect (home instance routes or instance-agnostic pages) */
   chatRedirect: /\/chat\/(-|notifications)/,
   /** Any room page: /chat/-/{roomId} (channels and DMs share this shape post-#330 phase 3). */
-  anyRoom: /\/chat\/-\/[a-zA-Z0-9]+$/,
+  anyRoom: new RegExp(`/chat/-/${ROOM_SEGMENT_PATTERN}$`),
   /** Any thread page: /chat/-/{roomId}/{threadId} */
-  anyThread: /\/chat\/-\/[a-zA-Z0-9]+\/[a-zA-Z0-9]+$/,
+  anyThread: new RegExp(`/chat/-/${ROOM_SEGMENT_PATTERN}/[a-zA-Z0-9]+$`),
   /** Any admin user page: /chat/-/server-admin/members/{id} */
   anyAdminUser: /\/chat\/-\/server-admin\/members\/[a-zA-Z0-9]+/,
   /** Any non-admin chat route (home instance or instance-agnostic) */
   nonAdmin: /\/chat\/(?:-(?:\/(?!server-admin)|$)|notifications)/,
   /** Chat root or any room (used after redirects) */
-  chatRootOrRoom: /\/chat\/-(?:\/[a-zA-Z0-9]+)?$/,
+  chatRootOrRoom: new RegExp(`/chat/-(?:/${ROOM_SEGMENT_PATTERN})?$`),
   /** Chat root or any room, allowing query params */
-  chatRootOrRoomWithQuery: /\/chat\/-(?:\/[a-zA-Z0-9]+)?(?:\?.*)?$/,
+  chatRootOrRoomWithQuery: new RegExp(`/chat/-(?:/${ROOM_SEGMENT_PATTERN})?(?:\\?.*)?$`),
   /** Any room with query params (e.g. ?highlight=) */
-  anyRoomWithQuery: /\/chat\/-\/[a-zA-Z0-9]+/,
+  anyRoomWithQuery: new RegExp(`/chat/-/${ROOM_SEGMENT_PATTERN}`),
   /** Browse rooms — folded into the server overview at /chat/-/overview */
   browseRooms: /\/chat\/-\/overview$/,
   /** Email verified redirect */

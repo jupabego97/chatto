@@ -6,6 +6,7 @@
 import { serverIdToSegment } from '$lib/navigation';
 import { roomPathForSegment } from '$lib/roomUrls';
 import { Codecs, serverSlot } from './slot';
+import type { ResolvedPathname } from '$app/types';
 
 const SUFFIX = 'lastRoom';
 
@@ -29,7 +30,7 @@ export function clearLastRoom(serverId: string): void {
  * Resolve the last-visited path for a server, or null if none.
  * Enables single-hop navigation from index pages to the user's last room.
  */
-export function resolveLastPosition(serverId: string): string | null {
+export function resolveLastPosition(serverId: string): ResolvedPathname | null {
   const lastRoom = getLastRoom(serverId);
   if (!lastRoom) return null;
   return roomPathForSegment(serverIdToSegment(serverId), lastRoom);

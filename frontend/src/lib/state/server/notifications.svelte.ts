@@ -3,6 +3,7 @@ import { graphql } from '$lib/gql';
 import type { NotificationsQuery } from '$lib/gql/graphql';
 import type { Client } from '@urql/svelte';
 import { resolve } from '$app/paths';
+import type { ResolvedPathname } from '$app/types';
 import { serverIdToSegment } from '$lib/navigation';
 import { roomPathForSegment, roomThreadPathForSegment } from '$lib/roomUrls';
 
@@ -608,7 +609,7 @@ export class NotificationStore {
    * Use this with `PendingHighlightStore.set()` to deliver the highlight
    * intent without polluting the URL.
    */
-  getCleanPath(serverId: string, notification: NotificationItem): string {
+  getCleanPath(serverId: string, notification: NotificationItem): ResolvedPathname {
     const seg = serverIdToSegment(serverId);
     const t = notificationTarget(notification);
     const roomSegment = t.isDM ? t.roomId : (t.roomName ?? t.roomId);
@@ -637,7 +638,7 @@ export class NotificationStore {
    *   store delivers the intent one-shot. Kept for permalink-style call sites
    *   that genuinely want the URL to encode the highlight.
    */
-  getNavigationPath(serverId: string, notification: NotificationItem): string {
+  getNavigationPath(serverId: string, notification: NotificationItem): ResolvedPathname {
     const seg = serverIdToSegment(serverId);
     const t = notificationTarget(notification);
     const roomSegment = t.isDM ? t.roomId : (t.roomName ?? t.roomId);
@@ -657,10 +658,10 @@ export class NotificationStore {
         roomThreadPathForSegment(seg, roomSegment, t.threadRootId) +
         '?highlight=' +
         t.eventId
-      );
+      ) as ResolvedPathname;
     }
 
     const roomPath = roomPathForSegment(seg, roomSegment);
-    return t.eventId ? `${roomPath}?highlight=${t.eventId}` : roomPath;
+    return t.eventId ? (`${roomPath}?highlight=${t.eventId}` as ResolvedPathname) : roomPath;
   }
 }
