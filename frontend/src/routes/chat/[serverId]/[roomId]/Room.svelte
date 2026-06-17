@@ -321,6 +321,15 @@
 
   let leavingRoom = $state(false);
 
+  function openRoomInformationPanel(): void {
+    if (room.isDM) return;
+    if (typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches) {
+      roomSidebarPanels.openDesktopPanel('information');
+    } else {
+      roomSidebarPanels.openMobilePanel('information');
+    }
+  }
+
   function openFileMessage(
     messageEventId: string,
     threadRootEventId: string | null,
@@ -471,6 +480,7 @@
           unreadAfterTime={unread.unreadAfterTime}
           unreadBeforeTime={unread.unreadBeforeTime}
           onOpenThread={openThread}
+          onOpenRoomInformation={openRoomInformationPanel}
           typingUserIds={typingIndicator.userIds}
           typingMembers={getRoomMembers()}
         />

@@ -83,7 +83,7 @@ func TestEventFactsRoomIDAndVisibility(t *testing.T) {
 				RoomInformationChanged: &corev1.RoomInformationChangedEvent{RoomId: "R1"},
 			}},
 			roomID:  "R1",
-			visible: false,
+			visible: true,
 		},
 	}
 	for _, tt := range tests {

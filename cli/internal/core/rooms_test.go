@@ -553,10 +553,15 @@ func TestChattoCore_UpdateRoomInformation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get room events: %v", err)
 	}
+	foundInformationEvent := false
 	for _, entry := range events.Events {
 		if entry.Event.GetRoomInformationChanged() != nil {
-			t.Fatal("RoomInformationChangedEvent should not appear in visible room timeline")
+			foundInformationEvent = true
+			break
 		}
+	}
+	if !foundInformationEvent {
+		t.Fatal("RoomInformationChangedEvent should appear in visible room timeline")
 	}
 }
 

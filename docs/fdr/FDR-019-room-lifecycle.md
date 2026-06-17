@@ -10,7 +10,7 @@ A channel room goes through a lifecycle of create, edit, archive, unarchive, and
 ## Behavior
 
 - **Create** — server admins (or anyone with `room.create` in the target group) create a channel room by giving it a name (1–30 chars, alphanumeric / hyphen / underscore, case-insensitive unique across the server), an optional description, and a room group.
-- **Edit** — `room.manage` holders can change the name, description, group, and Room Information of an existing room. Room Information is Markdown source shown inside the room sidebar to room members.
+- **Edit** — `room.manage` holders can change the name, description, group, and Room Information of an existing room. Room Information is Markdown source shown inside the room sidebar to room members. Updating it creates a visible room system notice with a link that opens the Room Information sidebar tab.
 - **Archive** — `room.manage` toggles an `archived` flag on the room. Archived rooms vanish from the sidebar, the Browse Rooms page, and search results, but members stay joined and history is intact. The owner can still navigate to the room directly.
 - **Unarchive** — same permission, flips the flag back. The room reappears in the sidebar and discovery surfaces.
 - **Ban member** — `room.ban-member` holders can ban a user from a channel room with a required reason and optional expiry. The banned user loses room read/write/live access immediately and cannot rejoin until the ban is removed or expires.
@@ -76,7 +76,7 @@ A channel room goes through a lifecycle of create, edit, archive, unarchive, and
 ### 10. Room Information uses a dedicated event
 
 **Decision:** Updating the Markdown Room Information appends `RoomInformationChangedEvent` on `evt.room.{roomId}.room_information_changed` instead of extending `RoomUpdatedEvent`.
-**Why:** Room Information is not a generic metadata edit. It is a user-visible in-room surface with its own authorization, live refresh behavior, and timeline-invisibility rule. A semantic event keeps replay, projections, and subscriptions explicit without a `fieldname` discriminator or nested update envelope.
+**Why:** Room Information is not a generic metadata edit. It is a user-visible in-room surface with its own authorization, live refresh behavior, and timeline notice. A semantic event keeps replay, projections, and subscriptions explicit without a `fieldname` discriminator or nested update envelope.
 **Tradeoff:** One more event type exists in the protocol. The benefit is clearer event facts and fewer overloaded `RoomUpdatedEvent` semantics.
 
 ## Permissions

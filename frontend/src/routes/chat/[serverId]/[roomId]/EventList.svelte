@@ -63,6 +63,7 @@
     onJumpToPresent,
     onReachedPresent,
     onSoftRefresh,
+    onOpenRoomInformation,
     pendingHighlightId = null
   }: {
     roomId: string;
@@ -103,6 +104,7 @@
     onJumpToPresent?: () => void;
     onReachedPresent?: () => void;
     onSoftRefresh?: (result: RefreshCurrentWindowResult, anchored: boolean) => void;
+    onOpenRoomInformation?: () => void;
     // Suppress auto-scroll while a highlight is pending (used by ThreadPane)
     pendingHighlightId?: string | null;
   } = $props();
@@ -792,6 +794,7 @@
                   {roomId}
                   {messageStore}
                   onOpenThread={getOpenThreadHandler(eventData)}
+                  {onOpenRoomInformation}
                 />
               {/if}
             {/if}

@@ -203,7 +203,7 @@ Admin queries are nested under a single `admin: AdminQueries` field that returns
 | ------------------------------ | -------------------------------------------------------------------------------- |
 | `createRoom`                   | Create a new channel room.                                                       |
 | `updateRoom`                   | Update a room's name / description (`room.manage`).                              |
-| `updateRoomInformation`        | Update a channel room's Markdown Room Information (`room.manage`); trims whitespace, stores empty as `""`, and does not create a visible timeline entry. |
+| `updateRoomInformation`        | Update a channel room's Markdown Room Information (`room.manage`); trims whitespace, stores empty as `""`, and appends a visible room timeline notice. |
 | `archiveRoom` / `unarchiveRoom`| Archive or restore a room (`room.manage`).                                       |
 | `joinRoom` / `leaveRoom`       | Join / leave a room.                                                             |
 | `banRoomMember` / `unbanRoomMember` | Create or remove a room ban (`room.ban-member`; DMs rejected; reasons required for moderation audit). Bans emit a normal leave event, maintain active ban state, and deny rejoin through ordinary join authorization. |
