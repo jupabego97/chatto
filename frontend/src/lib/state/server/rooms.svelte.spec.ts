@@ -4,7 +4,7 @@ import type { Client } from '@urql/svelte';
 import { NotificationLevel, RoomType } from '$lib/gql/graphql';
 import { NotificationLevelStore } from './notificationLevel.svelte';
 import { RoomUnreadStore } from './roomUnread.svelte';
-import { isRoomStateRefreshEvent, RoomsStore } from './rooms.svelte';
+import { isRoomStateRefreshEvent, RoomsStore, type RoomsListItem } from './rooms.svelte';
 
 type QueryRoom = {
   id: string;
@@ -81,6 +81,17 @@ function makeRoom(id: string, overrides: Partial<QueryRoom> = {}): QueryRoom {
         }
       ]
     }
+  };
+}
+
+function makeListRoom(id: string, overrides: Partial<RoomsListItem> = {}): RoomsListItem {
+  return {
+    id,
+    name: overrides.name ?? id,
+    type: overrides.type ?? RoomType.Channel,
+    hasUnread: overrides.hasUnread ?? false,
+    viewerNotificationCount: overrides.viewerNotificationCount ?? 0,
+    members: overrides.members ?? []
   };
 }
 
@@ -293,5 +304,41 @@ describe('RoomsStore - ingestServerEvent', () => {
     store.ingestServerEvent(makeEvent('HeartbeatEvent'));
 
     expect(store.refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe('RoomsStore - resolveLoadedURLSegment', () => {
+  it('resolves room IDs and canonicalizes channel IDs to names', () => {
+    const { client } = makeClient([]);
+    const store = makeStore(client);
+    store.rooms = [makeListRoom('R1', { name: 'General', type: RoomType.Channel })];
+
+    expect(store.resolveLoadedURLSegment('R1')).toMatchObject({
+      roomId: 'R1',
+      canonicalSegment: 'General'
+    });
+  });
+
+  it('resolves current channel names case insensitively', () => {
+    const { client } = makeClient([]);
+    const store = makeStore(client);
+    store.rooms = [makeListRoom('R1', { name: 'General', type: RoomType.Channel })];
+
+    expect(store.resolveLoadedURLSegment('general')).toMatchObject({
+      roomId: 'R1',
+      canonicalSegment: 'General'
+    });
+  });
+
+  it('keeps DM URLs ID based', () => {
+    const { client } = makeClient([]);
+    const store = makeStore(client);
+    store.rooms = [makeListRoom('deadbeef123456', { name: '', type: RoomType.Dm })];
+
+    expect(store.resolveLoadedURLSegment('deadbeef123456')).toMatchObject({
+      roomId: 'deadbeef123456',
+      canonicalSegment: 'deadbeef123456'
+    });
+    expect(store.resolveLoadedURLSegment('')).toBeNull();
   });
 });

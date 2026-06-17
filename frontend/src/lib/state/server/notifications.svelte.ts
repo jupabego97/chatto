@@ -4,6 +4,7 @@ import type { NotificationsQuery } from '$lib/gql/graphql';
 import type { Client } from '@urql/svelte';
 import { resolve } from '$app/paths';
 import { serverIdToSegment } from '$lib/navigation';
+import { roomPathForSegment, roomThreadPathForSegment } from '$lib/roomUrls';
 
 // GraphQL queries and mutations
 const NotificationsQueryDoc = graphql(`
@@ -610,29 +611,20 @@ export class NotificationStore {
   getCleanPath(serverId: string, notification: NotificationItem): string {
     const seg = serverIdToSegment(serverId);
     const t = notificationTarget(notification);
+    const roomSegment = t.isDM ? t.roomId : (t.roomName ?? t.roomId);
 
-    if (t.isDM && t.roomId) {
+    if (t.isDM && roomSegment) {
       // DMs are now rooms on the Server (#330 phase 3) — use the standard
       // room URL rather than the legacy /chat/dm/... path.
-      return resolve('/chat/[serverId]/[roomId]', {
-        serverId: seg,
-        roomId: t.roomId
-      });
+      return roomPathForSegment(seg, roomSegment);
     }
-    if (!t.roomId) {
+    if (!roomSegment) {
       return resolve('/chat/[serverId]', { serverId: seg });
     }
     if (t.threadRootId) {
-      return resolve('/chat/[serverId]/[roomId]/[threadId]', {
-        serverId: seg,
-        roomId: t.roomId,
-        threadId: t.threadRootId
-      });
+      return roomThreadPathForSegment(seg, roomSegment, t.threadRootId);
     }
-    return resolve('/chat/[serverId]/[roomId]', {
-      serverId: seg,
-      roomId: t.roomId
-    });
+    return roomPathForSegment(seg, roomSegment);
   }
 
   /**
@@ -648,36 +640,27 @@ export class NotificationStore {
   getNavigationPath(serverId: string, notification: NotificationItem): string {
     const seg = serverIdToSegment(serverId);
     const t = notificationTarget(notification);
+    const roomSegment = t.isDM ? t.roomId : (t.roomName ?? t.roomId);
 
-    if (t.isDM && t.roomId) {
+    if (t.isDM && roomSegment) {
       // DMs are now rooms on the Server (#330 phase 3) — use the standard
       // room URL rather than the legacy /chat/dm/... path.
-      return resolve('/chat/[serverId]/[roomId]', {
-        serverId: seg,
-        roomId: t.roomId
-      });
+      return roomPathForSegment(seg, roomSegment);
     }
 
-    if (!t.roomId) {
+    if (!roomSegment) {
       return resolve('/chat/[serverId]', { serverId: seg });
     }
 
     if (t.threadRootId && t.eventId) {
       return (
-        resolve('/chat/[serverId]/[roomId]/[threadId]', {
-          serverId: seg,
-          roomId: t.roomId,
-          threadId: t.threadRootId
-        }) +
+        roomThreadPathForSegment(seg, roomSegment, t.threadRootId) +
         '?highlight=' +
         t.eventId
       );
     }
 
-    const roomPath = resolve('/chat/[serverId]/[roomId]', {
-      serverId: seg,
-      roomId: t.roomId
-    });
+    const roomPath = roomPathForSegment(seg, roomSegment);
     return t.eventId ? `${roomPath}?highlight=${t.eventId}` : roomPath;
   }
 }

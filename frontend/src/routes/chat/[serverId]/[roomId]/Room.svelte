@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto, pushState, replaceState } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import { page } from '$app/state';
   import { dropZone } from '$lib/attachments/dropZone.svelte';
   import DropZoneOverlay from '$lib/attachments/DropZoneOverlay.svelte';
@@ -28,8 +29,12 @@
   import { useConnection } from '$lib/state/server/connection.svelte';
   import { serverRegistry } from '$lib/state/server/registry.svelte';
   import { getLiveDisplayName } from '$lib/state/userProfiles.svelte';
-  import { resolve } from '$app/paths';
   import { serverIdToSegment } from '$lib/navigation';
+  import {
+    roomPathForSegment,
+    roomThreadPathForSegment,
+    roomURLSegment
+  } from '$lib/roomUrls';
   import { getActiveServer } from '$lib/state/activeServer.svelte';
   import { clearLastRoom, setLastRoom } from '$lib/storage/lastRoom';
   import PageTitle from '$lib/ui/PageTitle.svelte';
@@ -61,17 +66,11 @@
 
   function openThread(threadRootEventId: string, highlightEventId?: string) {
     pendingThreadHighlight = highlightEventId ?? null;
-    goto(
-      resolve('/chat/[serverId]/[roomId]/[threadId]', {
-        serverId: serverSegment,
-        roomId,
-        threadId: threadRootEventId
-      })
-    );
+    goto(roomThreadPathForSegment(serverSegment, currentRoomURLSegment, threadRootEventId));
   }
 
   function closeThread() {
-    goto(resolve('/chat/[serverId]/[roomId]', { serverId: serverSegment, roomId }));
+    goto(roomPathForSegment(serverSegment, currentRoomURLSegment));
   }
 
   // Create context-based state (must be synchronous, before children render)
@@ -83,6 +82,7 @@
 
   // --- Extracted hooks ---
   const room = useRoomData(() => ({ roomId }));
+  const currentRoomURLSegment = $derived(room.roomData ? roomURLSegment(room.roomData.room) : roomId);
 
   const RoomMentionRolesQuery = graphql(`
     query RoomMentionRoles {
@@ -241,15 +241,11 @@
 
     if (threadId) {
       replaceState(
-        resolve('/chat/[serverId]/[roomId]/[threadId]', {
-          serverId: serverSegment,
-          roomId,
-          threadId
-        }),
+        roomThreadPathForSegment(serverSegment, currentRoomURLSegment, threadId),
         {}
       );
     } else {
-      replaceState(resolve('/chat/[serverId]/[roomId]', { serverId: serverSegment, roomId }), {});
+      replaceState(roomPathForSegment(serverSegment, currentRoomURLSegment), {});
     }
     applyHighlight(fromUrl);
   });

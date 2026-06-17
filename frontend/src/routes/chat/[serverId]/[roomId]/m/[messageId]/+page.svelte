@@ -7,7 +7,10 @@
 <script lang="ts" module>
   import { graphql } from '$lib/gql';
   import { goto } from '$app/navigation';
-  import { resolve } from '$app/paths';
+  import {
+    roomPathForSegment,
+    roomThreadPathForSegment
+  } from '$lib/roomUrls';
   import type { Client } from '@urql/svelte';
   import type { PendingHighlightStore } from '$lib/state/server/pendingHighlight.svelte';
 
@@ -37,10 +40,9 @@
     pendingHighlights: PendingHighlightStore,
     serverSegment: string,
     roomId: string,
+    canonicalRoomSegment: string,
     messageId: string
   ): Promise<void> {
-    const roomParams = { serverId: serverSegment, roomId };
-
     try {
       const result = await client
         .query(ResolveMessageLinkQuery, { roomId, eventId: messageId }, { requestPolicy: 'network-only' })
@@ -49,7 +51,7 @@
       const event = result.data?.room?.event;
       if (!event) {
         pendingHighlights.set(roomId, null, messageId);
-        goto(resolve('/chat/[serverId]/[roomId]', roomParams), { replaceState: true });
+        goto(roomPathForSegment(serverSegment, canonicalRoomSegment), { replaceState: true });
         return;
       }
 
@@ -60,19 +62,16 @@
       if (threadRoot) {
         pendingHighlights.set(roomId, threadRoot, messageId);
         goto(
-          resolve('/chat/[serverId]/[roomId]/[threadId]', {
-            ...roomParams,
-            threadId: threadRoot
-          }),
+          roomThreadPathForSegment(serverSegment, canonicalRoomSegment, threadRoot),
           { replaceState: true }
         );
         return;
       }
 
       pendingHighlights.set(roomId, null, messageId);
-      goto(resolve('/chat/[serverId]/[roomId]', roomParams), { replaceState: true });
+      goto(roomPathForSegment(serverSegment, canonicalRoomSegment), { replaceState: true });
     } catch {
-      goto(resolve('/chat/[serverId]/[roomId]', roomParams), { replaceState: true });
+      goto(roomPathForSegment(serverSegment, canonicalRoomSegment), { replaceState: true });
     }
   }
 </script>
@@ -85,6 +84,7 @@
 
   const connection = useConnection();
   const stores = $derived(serverRegistry.getStore(getActiveServer()));
+  let resolveRequest = 0;
 
   // Wait for the active server's rooms store to settle before redirecting,
   // so a deep-link to a DM doesn't briefly resolve as a missing channel
@@ -93,12 +93,17 @@
 
   $effect(() => {
     if (roomsStore.isInitialLoading) return;
-    resolveAndRedirect(
-      connection().client,
-      stores.pendingHighlights,
-      page.params.serverId!,
-      page.params.roomId!,
-      page.params.messageId!
-    );
+    const request = ++resolveRequest;
+    stores.roomRoutes.resolve(page.params.roomId!).then((resolved) => {
+      if (request !== resolveRequest || !resolved) return;
+      resolveAndRedirect(
+        connection().client,
+        stores.pendingHighlights,
+        page.params.serverId!,
+        resolved.roomId,
+        resolved.canonicalSegment,
+        page.params.messageId!
+      );
+    });
   });
 </script>

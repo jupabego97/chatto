@@ -5,6 +5,9 @@ type Query {
   "Get a specific room by ID."
   room(roomId: ID!): Room
 
+  "Resolve a channel room by current or historical name."
+  roomByName(name: String!): Room
+
   "Get a specific user by ID. Requires authentication."
   user(userId: ID!): User
 

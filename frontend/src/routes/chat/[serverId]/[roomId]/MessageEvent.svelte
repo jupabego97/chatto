@@ -1,7 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { startDMWith } from '$lib/dm/startDM';
-  import { resolve } from '$app/paths';
   import MessageContent from '$lib/components/MessageContent.svelte';
   import UserAvatar, { UserAvatarFragment } from '$lib/components/UserAvatar.svelte';
   import LinkPreviewCard from '$lib/components/LinkPreviewCard.svelte';
@@ -45,6 +44,7 @@
   import { toast } from '$lib/ui/toast';
   import { buildMessageLinkURL, parseMessageLink, type MessageLink } from '$lib/messageLinks';
   import { serverIdToSegment } from '$lib/navigation';
+  import { roomMessagePathForSegment, roomURLSegment } from '$lib/roomUrls';
   import { extractURLs } from '$lib/linkPreview';
   import MessagePreviewCard from '$lib/components/MessagePreviewCard.svelte';
 
@@ -68,6 +68,8 @@
 
   const connection = useConnection();
   const currentUser = $derived(serverRegistry.getStore(getActiveServer()).currentUser);
+  const currentRoom = $derived(stores.rooms.rooms.find((room) => room.id === roomId));
+  const currentRoomSegment = $derived(currentRoom ? roomURLSegment(currentRoom) : roomId);
   const roomPermissions = $derived(getRoomPermissions());
   const composerContext = getComposerContext();
   const replyState = composerContext.replyState;
@@ -263,7 +265,9 @@
     e.preventDefault();
     e.stopPropagation();
     try {
-      await navigator.clipboard.writeText(buildMessageLinkURL(getActiveServer(), roomId, event.id));
+      await navigator.clipboard.writeText(
+        buildMessageLinkURL(getActiveServer(), currentRoomSegment, event.id)
+      );
       toast.success('Message link copied');
     } catch {
       toast.error('Failed to copy link');
@@ -566,11 +570,11 @@
       {#if compact}
         <div class="flex w-11 shrink-0 items-center justify-center">
           <a
-            href={resolve('/chat/[serverId]/[roomId]/m/[messageId]', {
-              serverId: serverIdToSegment(getActiveServer()),
-              roomId,
-              messageId: event.id
-            })}
+            href={roomMessagePathForSegment(
+              serverIdToSegment(getActiveServer()),
+              currentRoomSegment,
+              event.id
+            )}
             onclick={copyMessageLink}
             oncontextmenu={(e) => e.stopPropagation()}
             title="Click to copy link to this message"
@@ -635,11 +639,11 @@
               <strong class="shrink-0 leading-none font-semibold text-muted">{displayName}</strong>
             {/if}
             <a
-              href={resolve('/chat/[serverId]/[roomId]/m/[messageId]', {
-                serverId: serverIdToSegment(getActiveServer()),
-                roomId,
-                messageId: event.id
-              })}
+              href={roomMessagePathForSegment(
+                serverIdToSegment(getActiveServer()),
+                currentRoomSegment,
+                event.id
+              )}
               onclick={copyMessageLink}
               oncontextmenu={(e) => e.stopPropagation()}
               title="Click to copy link to this message"

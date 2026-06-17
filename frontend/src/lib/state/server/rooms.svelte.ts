@@ -3,6 +3,7 @@ import type { Client } from '@urql/svelte';
 import { graphql, useFragment } from '$lib/gql';
 import { isUnsupportedGraphQLFieldError } from '$lib/gql/compatibility';
 import { RoomType, UserAvatarUserFragmentDoc, type UserAvatarUserFragment } from '$lib/gql/graphql';
+import { roomURLSegment } from '$lib/roomUrls';
 import type { NotificationLevelStore } from '$lib/state/server/notificationLevel.svelte';
 import type { RoomUnreadStore } from '$lib/state/server/roomUnread.svelte';
 
@@ -20,6 +21,12 @@ export type RoomsListGroup = {
   id: string;
   name: string;
   roomIds: string[];
+};
+
+export type ResolvedLoadedRoomSegment = {
+  room: RoomsListItem;
+  roomId: string;
+  canonicalSegment: string;
 };
 
 const MyRoomsQuery = graphql(`
@@ -246,6 +253,31 @@ export class RoomsStore {
         viewerNotificationCount: 0
       }));
     });
+  }
+
+  resolveLoadedURLSegment(segment: string): ResolvedLoadedRoomSegment | null {
+    const byId = this.rooms.find((room) => room.id === segment);
+    if (byId) {
+      return {
+        room: byId,
+        roomId: byId.id,
+        canonicalSegment: roomURLSegment(byId)
+      };
+    }
+
+    const normalized = segment.trim().toLowerCase();
+    if (!normalized) return null;
+
+    const byName = this.rooms.find(
+      (room) => room.type === RoomType.Channel && room.name.trim().toLowerCase() === normalized
+    );
+    if (!byName) return null;
+
+    return {
+      room: byName,
+      roomId: byName.id,
+      canonicalSegment: roomURLSegment(byName)
+    };
   }
 
   /**

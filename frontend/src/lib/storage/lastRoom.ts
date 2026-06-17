@@ -3,8 +3,8 @@
  * the room they were last in when they return to a server.
  */
 
-import { resolve } from '$app/paths';
 import { serverIdToSegment } from '$lib/navigation';
+import { roomPathForSegment } from '$lib/roomUrls';
 import { Codecs, serverSlot } from './slot';
 
 const SUFFIX = 'lastRoom';
@@ -32,8 +32,5 @@ export function clearLastRoom(serverId: string): void {
 export function resolveLastPosition(serverId: string): string | null {
   const lastRoom = getLastRoom(serverId);
   if (!lastRoom) return null;
-  return resolve('/chat/[serverId]/[roomId]', {
-    serverId: serverIdToSegment(serverId),
-    roomId: lastRoom
-  });
+  return roomPathForSegment(serverIdToSegment(serverId), lastRoom);
 }

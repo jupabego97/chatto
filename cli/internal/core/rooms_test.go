@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
@@ -354,6 +355,26 @@ func TestChattoCore_CreateRoom_DuplicateName_CaseInsensitive(t *testing.T) {
 	}
 }
 
+func TestChattoCore_CreateRoom_NameCannotUseCurrentRoomID(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	existing, err := core.CreateRoom(ctx, "test-user", KindChannel, "", "General", "General discussion")
+	if err != nil {
+		t.Fatalf("Failed to create first room: %v", err)
+	}
+
+	_, err = core.CreateRoom(ctx, "test-user", KindChannel, "", existing.Id, "ID-shaped room name")
+	if !errors.Is(err, ErrRoomNameExists) {
+		t.Errorf("Expected ErrRoomNameExists for room ID name, got: %v", err)
+	}
+
+	_, err = core.CreateRoom(ctx, "test-user", KindChannel, "", strings.ToLower(existing.Id), "ID-shaped room name")
+	if !errors.Is(err, ErrRoomNameExists) {
+		t.Errorf("Expected ErrRoomNameExists for case-insensitive room ID name, got: %v", err)
+	}
+}
+
 func TestChattoCore_RoomNameExists(t *testing.T) {
 	core, _ := setupTestCore(t)
 	ctx := testContext(t)
@@ -466,6 +487,30 @@ func TestChattoCore_UpdateRoom_DuplicateName(t *testing.T) {
 	}
 }
 
+func TestChattoCore_UpdateRoom_NameCannotUseCurrentRoomID(t *testing.T) {
+	core, _ := setupTestCore(t)
+	ctx := testContext(t)
+
+	roomA, err := core.CreateRoom(ctx, "test-user", KindChannel, "", "Room-A", "First room")
+	if err != nil {
+		t.Fatalf("Failed to create first room: %v", err)
+	}
+	roomB, err := core.CreateRoom(ctx, "test-user", KindChannel, "", "Room-B", "Second room")
+	if err != nil {
+		t.Fatalf("Failed to create second room: %v", err)
+	}
+
+	_, err = core.UpdateRoom(ctx, "test-user", KindChannel, roomB.Id, roomA.Id, "Updated description")
+	if !errors.Is(err, ErrRoomNameExists) {
+		t.Errorf("Expected ErrRoomNameExists when renaming to another room ID, got: %v", err)
+	}
+
+	_, err = core.UpdateRoom(ctx, "test-user", KindChannel, roomB.Id, roomB.Id, "Updated description")
+	if !errors.Is(err, ErrRoomNameExists) {
+		t.Errorf("Expected ErrRoomNameExists when renaming to own room ID, got: %v", err)
+	}
+}
+
 func TestChattoCore_UpdateRoom_SameName_DifferentCase(t *testing.T) {
 	core, _ := setupTestCore(t)
 	ctx := testContext(t)
@@ -550,6 +595,14 @@ func TestChattoCore_RoomNameExistsExcluding(t *testing.T) {
 	}
 	if exists {
 		t.Error("Should not find 'room-a' when excluding roomA (case-insensitive)")
+	}
+
+	exists, err = core.RoomNameExistsExcluding(ctx, KindChannel, roomA.Id, roomA.Id)
+	if err != nil {
+		t.Fatalf("Failed to check room ID exclusion: %v", err)
+	}
+	if !exists {
+		t.Error("Room IDs should remain reserved even when excluding the same room")
 	}
 }
 

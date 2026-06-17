@@ -1,28 +1,73 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import { page } from '$app/state';
   import { getActiveServer } from '$lib/state/activeServer.svelte';
   import { serverRegistry } from '$lib/state/server/registry.svelte';
+  import {
+    roomMessagePathForSegment,
+    roomPathForSegment,
+    roomThreadPathForSegment
+  } from '$lib/roomUrls';
+  import { clearLastRoom } from '$lib/storage/lastRoom';
   import Room from './Room.svelte';
 
   let { data, children } = $props();
 
-  let { roomId } = $derived(data);
+  let roomSegment = $derived(data.roomId);
 
   const activeServerId = $derived(getActiveServer());
+  const stores = $derived(serverRegistry.getStore(activeServerId));
 
   // Wait for the active server's merged rooms store (channels + DMs) to
   // settle before letting children mount. Without this, a freshly-loaded
   // room page can fire queries against the URL roomId before the store has
   // decided whether the room exists, briefly showing the not-found redirect.
-  const roomsStore = $derived(serverRegistry.getStore(activeServerId).rooms);
+  const roomsStore = $derived(stores.rooms);
   const ready = $derived(!roomsStore.isInitialLoading);
 
   let threadId = $derived(page.params.threadId);
+  let messageId = $derived(page.params.messageId);
+  let resolvedRoomId = $state<string | null>(null);
+  let resolveRequest = 0;
 
   const isMessageLinkMode = $derived(/\/m\/[^/]+$/.test(page.url.pathname));
+
+  function canonicalRoomPath(canonicalSegment: string): string {
+    let path: string;
+    if (isMessageLinkMode && messageId) {
+      path = roomMessagePathForSegment(page.params.serverId!, canonicalSegment, messageId);
+    } else if (threadId) {
+      path = roomThreadPathForSegment(page.params.serverId!, canonicalSegment, threadId);
+    } else {
+      path = roomPathForSegment(page.params.serverId!, canonicalSegment);
+    }
+    return `${path}${page.url.search}${page.url.hash}`;
+  }
+
+  $effect(() => {
+    if (!ready || !roomSegment) {
+      resolvedRoomId = null;
+      return;
+    }
+
+    const request = ++resolveRequest;
+    stores.roomRoutes.resolve(roomSegment).then((resolved) => {
+      if (request !== resolveRequest) return;
+      resolvedRoomId = resolved?.roomId ?? null;
+      if (!resolved) {
+        clearLastRoom(activeServerId);
+        goto(resolve('/chat/[serverId]', { serverId: page.params.serverId! }), { replaceState: true });
+        return;
+      }
+      if (resolved.canonicalSegment === roomSegment) return;
+
+      goto(canonicalRoomPath(resolved.canonicalSegment), { replaceState: true });
+    });
+  });
 </script>
 
-{#if ready && roomId}
+{#if ready && resolvedRoomId}
   {#if isMessageLinkMode}
     <!-- Message link resolver: renders +page.svelte which fetches + redirects -->
     {@render children?.()}
@@ -32,7 +77,7 @@
 			between room and thread URLs. This prevents unnecessary reloads.
 		-->
     {#key activeServerId}
-      <Room {roomId} {threadId} />
+      <Room roomId={resolvedRoomId} {threadId} />
     {/key}
   {/if}
 {/if}

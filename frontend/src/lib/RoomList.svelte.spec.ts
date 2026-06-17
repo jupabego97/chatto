@@ -41,6 +41,7 @@ const { mocks } = vi.hoisted(() => ({
         roomGroups: null,
         isInitialLoading: false,
         currentUserId: 'me',
+        resolveLoadedURLSegment: vi.fn(),
         markRead: vi.fn(),
         bumpRoom: vi.fn(),
         setUnread: vi.fn()
@@ -154,6 +155,7 @@ beforeEach(() => {
   mocks.store.rooms.roomGroups = null;
   mocks.store.rooms.isInitialLoading = false;
   mocks.store.rooms.currentUserId = 'me';
+  mocks.store.rooms.resolveLoadedURLSegment = vi.fn().mockReturnValue(null);
   setRooms();
   vi.clearAllMocks();
 });
@@ -206,8 +208,8 @@ describe('RoomList', () => {
 
     const { container } = render(RoomList);
 
-    await expect.element(q(container, '[href="/chat/-/channel-1"]')).toBeInTheDocument();
-    const channelRow = q(container, '[href="/chat/-/channel-1"]');
+    await expect.element(q(container, '[href="/chat/-/general"]')).toBeInTheDocument();
+    const channelRow = q(container, '[href="/chat/-/general"]');
     expect(channelRow?.querySelector('[data-testid="room-call-badge"]')).not.toBeNull();
     expect(channelRow?.querySelector('.uil--phone')).not.toBeNull();
   });

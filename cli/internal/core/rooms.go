@@ -63,7 +63,8 @@ const (
 	RoomDescriptionMaxLength = 500
 )
 
-// ErrRoomNameExists is returned when a room with the same name (case-insensitive) already exists.
+// ErrRoomNameExists is returned when a room with the same name (case-insensitive) already exists,
+// or when the requested name is already reserved by any current room ID.
 var ErrRoomNameExists = errors.New("a room with this name already exists in this space")
 
 // ValidateRoomName validates a room name and returns an error if invalid.
@@ -212,7 +213,8 @@ func (c *ChattoCore) CreateRoom(ctx context.Context, actorID string, kind RoomKi
 //
 // The flow per attempt:
 //  1. Read the catalog name-claim snapshot for the desired `name`;
-//     if any other room holds it, return ErrRoomNameExists immediately.
+//     if any other room holds it, or any room uses it as an ID, return
+//     ErrRoomNameExists immediately.
 //  2. Publish the event with the snapshot's applied evt.room.> seq.
 //     The projected state and OCC token describe the same observed
 //     event-log prefix.
@@ -220,9 +222,11 @@ func (c *ChattoCore) CreateRoom(ctx context.Context, actorID string, kind RoomKi
 //     rejects with ErrConflict if any evt.room.> message landed in the
 //     read-publish window — backoff briefly and retry.
 //
-// excludeRoomID is the ID to exclude from the uniqueness check —
-// used by UpdateRoom so a room can keep a name it already holds
-// (e.g. case-only changes, or no-op renames).
+// excludeRoomID is the ID to exclude from name-owner checks — used by
+// UpdateRoom so a room can keep a name it already holds (e.g. case-only
+// changes, or no-op renames). Room IDs are still reserved even when
+// excludeRoomID matches, because ID-shaped names would make URL
+// resolution ambiguous.
 func (c *ChattoCore) publishRoomEventWithNameOCC(ctx context.Context, name string, event *corev1.Event, excludeRoomID string) (uint64, error) {
 	// Determine publish subject from the event payload. Room events
 	// all target the per-room aggregate subject; this doesn't change
@@ -236,12 +240,15 @@ func (c *ChattoCore) publishRoomEventWithNameOCC(ctx context.Context, name strin
 	default:
 		return 0, fmt.Errorf("publishRoomEventWithNameOCC: unsupported event type %T", e)
 	}
+	if normalizeRoomName(name) == normalizeRoomName(roomID) {
+		return 0, ErrRoomNameExists
+	}
 	publishSubject := events.RoomAggregate(roomID).SubjectFor(event)
 	occFilter := events.RoomSubjectFilter()
 
 	for attempt := 0; attempt < maxRoomNameClaimRetries; attempt++ {
 		snapshot := c.rooms().nameClaimSnapshot(name)
-		if owner := snapshot.OwnerRoomID; owner != "" && owner != excludeRoomID {
+		if owner := snapshot.OwnerRoomID; owner != "" && (owner != excludeRoomID || snapshot.OwnerIsRoomID) {
 			return 0, ErrRoomNameExists
 		}
 
@@ -508,6 +515,20 @@ func (c *ChattoCore) FindRoomByID(ctx context.Context, room_id string) (*corev1.
 	return room, nil
 }
 
+// FindRoomByName resolves a current or historical channel-room name. The
+// catalog projection owns the replay-derived alias index; this method only
+// composes group_id onto the returned room like the other room read helpers.
+func (c *ChattoCore) FindRoomByName(ctx context.Context, name string) (*corev1.Room, error) {
+	room, ok := c.rooms().roomByName(name)
+	if !ok {
+		return nil, ErrNotFound
+	}
+	if gid := c.RoomGroups.GroupForRoom(room.Id); gid != "" {
+		room.GroupId = gid
+	}
+	return room, nil
+}
+
 // FindRoomKind is a thin wrapper around FindRoomByID for callers that
 // only need the kind. The room load is paid either way; the wrapper is
 // just there for ergonomics.
@@ -590,16 +611,17 @@ func (c *ChattoCore) ListMemberRooms(ctx context.Context, kind RoomKind, userID 
 }
 
 // RoomNameExists reports whether a channel room with the given name
-// (case-insensitive, whitespace-trimmed) currently exists. ADR-035
-// phase 6: served from RoomCatalog.FindByName.
+// (case-insensitive, whitespace-trimmed) currently exists, or whether
+// the value is reserved by a current room ID. ADR-035 phase 6: served
+// from RoomCatalog's name-claim snapshot.
 func (c *ChattoCore) RoomNameExists(_ context.Context, _ RoomKind, name string) (bool, error) {
-	return c.rooms().roomIDByName(name) != "", nil
+	return c.rooms().nameClaimSnapshot(name).OwnerRoomID != "", nil
 }
 
 // RoomNameExistsExcluding is like RoomNameExists but treats
-// excludeRoomID as "free." Used by callers checking whether a rename
-// would collide.
+// excludeRoomID as "free" for current name ownership. Current room IDs
+// remain reserved even when they match excludeRoomID.
 func (c *ChattoCore) RoomNameExistsExcluding(_ context.Context, _ RoomKind, name, excludeRoomID string) (bool, error) {
-	owner := c.rooms().roomIDByName(name)
-	return owner != "" && owner != excludeRoomID, nil
+	snapshot := c.rooms().nameClaimSnapshot(name)
+	return snapshot.OwnerRoomID != "" && (snapshot.OwnerRoomID != excludeRoomID || snapshot.OwnerIsRoomID), nil
 }

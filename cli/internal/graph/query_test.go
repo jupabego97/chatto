@@ -84,6 +84,92 @@ func TestQueryResolver_Room(t *testing.T) {
 	})
 }
 
+func TestQueryResolver_RoomByName(t *testing.T) {
+	env := setupTestResolver(t)
+
+	t.Run("resolves current room name", func(t *testing.T) {
+		room, err := env.resolver.Query().RoomByName(env.authContext(), "general")
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if room == nil {
+			t.Fatal("Expected room, got nil")
+		}
+		if room.Id != env.testRoom.Id {
+			t.Errorf("Expected room ID %s, got %s", env.testRoom.Id, room.Id)
+		}
+		if room.Name != env.testRoom.Name {
+			t.Errorf("Expected room name %s, got %s", env.testRoom.Name, room.Name)
+		}
+	})
+
+	t.Run("does not resolve room IDs", func(t *testing.T) {
+		room, err := env.resolver.Query().RoomByName(env.authContext(), env.testRoom.Id)
+		if err == nil {
+			t.Fatal("Expected error for room ID")
+		}
+		if room != nil {
+			t.Errorf("Expected nil room, got %+v", room)
+		}
+	})
+
+	t.Run("resolves historical name after rename", func(t *testing.T) {
+		renamed, err := env.core.UpdateRoom(env.ctx, env.testUser.Id, core.KindChannel, env.testRoom.Id, "CurrentName", "Renamed")
+		if err != nil {
+			t.Fatalf("Failed to rename room: %v", err)
+		}
+
+		room, err := env.resolver.Query().RoomByName(env.authContext(), "General")
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if room == nil {
+			t.Fatal("Expected room, got nil")
+		}
+		if room.Id != renamed.Id {
+			t.Errorf("Expected room ID %s, got %s", renamed.Id, room.Id)
+		}
+		if room.Name != "CurrentName" {
+			t.Errorf("Expected current room name CurrentName, got %s", room.Name)
+		}
+	})
+
+	t.Run("missing segment returns an error", func(t *testing.T) {
+		room, err := env.resolver.Query().RoomByName(env.authContext(), "missing-room")
+		if err == nil {
+			t.Fatal("Expected error for missing room segment")
+		}
+		if room != nil {
+			t.Errorf("Expected nil room, got %+v", room)
+		}
+	})
+
+	t.Run("requires authentication", func(t *testing.T) {
+		room, err := env.resolver.Query().RoomByName(env.unauthContext(), env.testRoom.Name)
+		if !errors.Is(err, ErrNotAuthenticated) {
+			t.Errorf("Expected ErrNotAuthenticated, got %v", err)
+		}
+		if room != nil {
+			t.Errorf("Expected nil room, got %+v", room)
+		}
+	})
+
+	t.Run("requires room membership", func(t *testing.T) {
+		otherUser, err := env.core.CreateUser(env.ctx, "system", "segmentuser", "Segment User", "password456")
+		if err != nil {
+			t.Fatalf("Failed to create other user: %v", err)
+		}
+
+		room, err := env.resolver.Query().RoomByName(env.authContextForUser(otherUser), env.testRoom.Name)
+		if !errors.Is(err, ErrNotRoomMember) {
+			t.Errorf("Expected ErrNotRoomMember, got %v", err)
+		}
+		if room != nil {
+			t.Errorf("Expected nil room, got %+v", room)
+		}
+	})
+}
+
 // Space Query/discovery resolvers were retired in PR(a); the type is gone from
 // the GraphQL surface. Public discovery now happens via the unauthenticated
 // `instance` query, which exposes the server name, logo, banner, etc.

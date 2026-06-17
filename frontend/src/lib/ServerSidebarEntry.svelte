@@ -12,6 +12,7 @@
   import { appState } from '$lib/state/globals.svelte';
   import ServerIcon from './ServerIcon.svelte';
   import { useTabResumeCallback } from '$lib/hooks';
+  import { roomPathForSegment } from '$lib/roomUrls';
 
   let {
     serverId,
@@ -359,7 +360,7 @@
     }
 
     if (roomId) {
-      await goto(resolve('/chat/[serverId]/[roomId]', { serverId: serverSegment, roomId }));
+      await goto(roomPathForSegment(serverSegment, roomId));
     } else {
       await goto(resolve('/chat/[serverId]', { serverId: serverSegment }));
     }

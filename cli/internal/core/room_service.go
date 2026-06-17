@@ -152,6 +152,10 @@ func (m *RoomService) room(roomID string) (*corev1.Room, bool) {
 	return m.directory.Catalog.Get(roomID)
 }
 
+func (m *RoomService) roomByName(name string) (*corev1.Room, bool) {
+	return m.directory.Catalog.ResolveName(name)
+}
+
 func (m *RoomService) roomsByKind(kind corev1.RoomKind) []*corev1.Room {
 	return m.directory.Catalog.AllByKind(kind)
 }

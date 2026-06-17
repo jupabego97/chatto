@@ -199,3 +199,81 @@ func TestRoomCatalogProjection_NameClaimSnapshotTracksRoomSeq(t *testing.T) {
 	require.Equal(t, "R1", snapshot.OwnerRoomID)
 	require.Equal(t, uint64(12), snapshot.Seq)
 }
+
+func TestRoomCatalogProjection_NameClaimSnapshotReservesRoomIDs(t *testing.T) {
+	p := NewRoomCatalogProjection()
+	require.NoError(t, p.Apply(roomCreatedEvent("R7gUDvZNyvHkk4K", "general", "", corev1.RoomKind_ROOM_KIND_CHANNEL), 10))
+	require.NoError(t, p.Apply(roomCreatedEvent("DM1", "", "", corev1.RoomKind_ROOM_KIND_DM), 11))
+
+	snapshot := p.NameClaimSnapshot("R7gUDvZNyvHkk4K")
+	require.Equal(t, "R7gUDvZNyvHkk4K", snapshot.OwnerRoomID)
+	require.True(t, snapshot.OwnerIsRoomID)
+	require.Equal(t, uint64(11), snapshot.Seq)
+
+	snapshot = p.NameClaimSnapshot("r7gudvznyvhkk4k")
+	require.Equal(t, "R7gUDvZNyvHkk4K", snapshot.OwnerRoomID)
+	require.True(t, snapshot.OwnerIsRoomID)
+
+	snapshot = p.NameClaimSnapshot("DM1")
+	require.Equal(t, "DM1", snapshot.OwnerRoomID)
+	require.True(t, snapshot.OwnerIsRoomID)
+}
+
+func TestRoomCatalogProjection_ResolveName(t *testing.T) {
+	t.Run("resolves current channel name case insensitively", func(t *testing.T) {
+		p := NewRoomCatalogProjection()
+		require.NoError(t, p.Apply(roomCreatedEvent("R1", "General", "", corev1.RoomKind_ROOM_KIND_CHANNEL), 1))
+
+		got, ok := p.ResolveName("general")
+		require.True(t, ok)
+		require.Equal(t, "R1", got.Id)
+		require.Equal(t, "General", got.Name)
+	})
+
+	t.Run("resolves historical channel name after rename", func(t *testing.T) {
+		p := NewRoomCatalogProjection()
+		require.NoError(t, p.Apply(roomCreatedEvent("R1", "general", "", corev1.RoomKind_ROOM_KIND_CHANNEL), 1))
+		require.NoError(t, p.Apply(roomUpdatedEvent("R1", "chat", ""), 2))
+
+		got, ok := p.ResolveName("general")
+		require.True(t, ok)
+		require.Equal(t, "R1", got.Id)
+		require.Equal(t, "chat", got.Name)
+	})
+
+	t.Run("does not resolve room IDs or DM rooms", func(t *testing.T) {
+		p := NewRoomCatalogProjection()
+		require.NoError(t, p.Apply(roomCreatedEvent("R1", "general", "", corev1.RoomKind_ROOM_KIND_CHANNEL), 1))
+		require.NoError(t, p.Apply(roomCreatedEvent("deadbeef123456", "", "", corev1.RoomKind_ROOM_KIND_DM), 2))
+
+		got, ok := p.ResolveName("R1")
+		require.False(t, ok)
+		require.Nil(t, got)
+
+		got, ok = p.ResolveName("deadbeef123456")
+		require.False(t, ok)
+		require.Nil(t, got)
+	})
+
+	t.Run("current name owner wins over historical alias", func(t *testing.T) {
+		p := NewRoomCatalogProjection()
+		require.NoError(t, p.Apply(roomCreatedEvent("R1", "general", "", corev1.RoomKind_ROOM_KIND_CHANNEL), 1))
+		require.NoError(t, p.Apply(roomUpdatedEvent("R1", "chat", ""), 2))
+		require.NoError(t, p.Apply(roomCreatedEvent("R2", "general", "", corev1.RoomKind_ROOM_KIND_CHANNEL), 3))
+
+		got, ok := p.ResolveName("general")
+		require.True(t, ok)
+		require.Equal(t, "R2", got.Id)
+	})
+
+	t.Run("deleted rooms are removed from historical aliases", func(t *testing.T) {
+		p := NewRoomCatalogProjection()
+		require.NoError(t, p.Apply(roomCreatedEvent("R1", "general", "", corev1.RoomKind_ROOM_KIND_CHANNEL), 1))
+		require.NoError(t, p.Apply(roomUpdatedEvent("R1", "chat", ""), 2))
+		require.NoError(t, p.Apply(roomDeletedEvent("R1"), 3))
+
+		got, ok := p.ResolveName("general")
+		require.False(t, ok)
+		require.Nil(t, got)
+	})
+}

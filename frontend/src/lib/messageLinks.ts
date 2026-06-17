@@ -4,9 +4,9 @@
  * at the same level (thread IDs and message IDs share the same ID space).
  */
 
-import { resolve } from '$app/paths';
 import { serverRegistry } from '$lib/state/server/registry.svelte';
 import { serverIdToSegment, segmentToServerId } from '$lib/navigation';
+import { roomMessagePathForSegment } from '$lib/roomUrls';
 
 export interface MessageLink {
   /** URL segment for the server (`-` for origin, hostname for remote). */
@@ -22,11 +22,7 @@ export function buildMessageLinkPath(
   roomId: string,
   messageId: string
 ): string {
-  return resolve('/chat/[serverId]/[roomId]/m/[messageId]', {
-    serverId: serverIdToSegment(serverId),
-    roomId,
-    messageId
-  });
+  return roomMessagePathForSegment(serverIdToSegment(serverId), roomId, messageId);
 }
 
 /** Absolute URL for clipboard copy. */
