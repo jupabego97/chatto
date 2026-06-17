@@ -97,6 +97,18 @@ describe('renderMarkdown', () => {
       expect(html).toContain('item');
     });
 
+    it('can preserve blank markdown lines after headings as visible rows', async () => {
+      const html = await renderMarkdown('## title\n\n\n\ntext\n\n\n\n## another title\n\n\n\nanother text', {
+        preserveBlankLines: true
+      });
+
+      expect(html.match(/class="preserved-blank-line"/g)).toHaveLength(3);
+      expect(html).toContain('<h2>title</h2>');
+      expect(html).toContain('<p>text</p>');
+      expect(html).toContain('<h2>another title</h2>');
+      expect(html).toContain('<p>another text</p>');
+    });
+
     it('does not preserve blank markdown lines by default', async () => {
       const html = await renderMarkdown('Stuff\n\n\n\nNo Stuff');
       expect(html).not.toContain('preserved-blank-line');

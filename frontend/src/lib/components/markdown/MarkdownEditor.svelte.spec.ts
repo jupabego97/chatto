@@ -85,6 +85,37 @@ describe('MarkdownEditor', () => {
     await vi.waitFor(() => expect(updates.at(-1)).toBe('!Stuff\n\n\n\nNo Stuff'));
   });
 
+  it('preserves visual empty paragraphs after restored markdown headings', async () => {
+    const updates: string[] = [];
+    let api: MarkdownEditorApi | null = null;
+    const { container } = render(MarkdownEditor, {
+      props: {
+        testid: 'markdown-editor',
+        onUpdate: (markdown) => updates.push(markdown),
+        onReady: (editorApi) => {
+          api = editorApi;
+          editorApi.setContent('## title\n\n\n\ntext\n\n\n\n## another title\n\n\n\nanother text');
+        }
+      }
+    });
+    const editor = await findEditor(container);
+
+    await vi.waitFor(() => expect(api).toBeTruthy());
+    await vi.waitFor(() => {
+      const blocks = Array.from(editor.children).map((element) => element.tagName);
+      expect(blocks).toEqual(['H2', 'P', 'P', 'P', 'H2', 'P', 'P']);
+    });
+
+    editor.focus();
+    await insertText(editor, '!');
+
+    await vi.waitFor(() =>
+      expect(updates.at(-1)).toBe(
+        '## !title\n\n\n\ntext\n\n\n\n## another title\n\n\n\nanother text'
+      )
+    );
+  });
+
   it('serializes a blank line before a list after hard breaks', async () => {
     const updates: string[] = [];
     const { container } = render(MarkdownEditor, {
@@ -126,6 +157,25 @@ describe('MarkdownEditor', () => {
 
     await vi.waitFor(() =>
       expect(updates.at(-1)).toBe('title\n\n\n\ncontent\n\n\n\ntitle two\n\n\n\ncontent two')
+    );
+  });
+
+  it('serializes visual empty paragraphs between typed markdown headings and paragraphs', async () => {
+    const updates: string[] = [];
+    const { container } = render(MarkdownEditor, {
+      props: {
+        testid: 'markdown-editor',
+        onUpdate: (markdown) => updates.push(markdown)
+      }
+    });
+    const editor = await findEditor(container);
+
+    await insertText(editor, '## title\n\ntext\n\n## another title\n\nanother text');
+
+    await vi.waitFor(() =>
+      expect(updates.at(-1)).toBe(
+        '## title\n\n\n\ntext\n\n\n\n## another title\n\n\n\nanother text'
+      )
     );
   });
 

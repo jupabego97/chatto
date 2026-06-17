@@ -627,6 +627,53 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
     });
   }
 
+  function markRestoredExplicitBlankParagraphs(markdown: string): string {
+    const lines = markdown.split('\n');
+    const output: string[] = [];
+    let inFence: { marker: '`' | '~'; length: number } | null = null;
+    let pendingBlankLines = 0;
+
+    const flushPendingBlankLines = () => {
+      if (pendingBlankLines === 0) return;
+
+      output.push('');
+      for (let i = 1; i < pendingBlankLines; i += 2) {
+        output.push(RESTORED_EMPTY_PARAGRAPH_MARKER, '');
+      }
+      pendingBlankLines = 0;
+    };
+
+    for (const line of lines) {
+      const fenceMatch = line.match(/^[ \t]{0,3}(`{3,}|~{3,})/);
+
+      if (fenceMatch) {
+        flushPendingBlankLines();
+        const markerRun = fenceMatch[1];
+        const marker = markerRun[0] as '`' | '~';
+
+        if (inFence && inFence.marker === marker && markerRun.length >= inFence.length) {
+          inFence = null;
+        } else if (!inFence) {
+          inFence = { marker, length: markerRun.length };
+        }
+
+        output.push(line);
+        continue;
+      }
+
+      if (!inFence && line.trim() === '') {
+        pendingBlankLines += 1;
+        continue;
+      }
+
+      flushPendingBlankLines();
+      output.push(line);
+    }
+
+    flushPendingBlankLines();
+    return output.join('\n');
+  }
+
   function decodeSerializedMarkdownText(markdown: string): string {
     return transformMarkdownOutsideCode(markdown, decodeSerializedTextEntities);
   }
@@ -674,7 +721,7 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
         continue;
       }
 
-      if (/^[ \t]+$/.test(line)) {
+      if (/^(?:[ \t]|\u00a0|&nbsp;)+$/.test(line)) {
         output.push('', '', '');
         continue;
       }
@@ -752,6 +799,7 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
   let linkHrefDraft = $state('');
   let linkDraftInitializedFor = $state<string | null>(null);
   let codeLanguageLoadToken = 0;
+  const RESTORED_EMPTY_PARAGRAPH_MARKER = '\u00a0';
 
   let hasLinkControls = $derived(activeLinkHref !== null);
   let activeCodeBlockLanguageLabel = $derived(
@@ -978,7 +1026,7 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
 
       setContent: (markdown: string) => {
         if (e.isDestroyed) return;
-        e.commands.setContent(escapeMarkdownHtml(markdown), {
+        e.commands.setContent(escapeMarkdownHtml(markRestoredExplicitBlankParagraphs(markdown)), {
           contentType: 'markdown',
           emitUpdate: false
         });
