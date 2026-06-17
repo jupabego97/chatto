@@ -392,7 +392,7 @@
     if (item.kind === 'dm')
       return roomPathForSegment(serverIdToSegment(item.serverId), item.id);
     if (item.kind === 'room')
-      return roomPathForSegment(serverIdToSegment(item.serverId), item.label);
+      return roomPathForSegment(serverIdToSegment(item.serverId), item.label, 'name');
     return undefined;
   }
 

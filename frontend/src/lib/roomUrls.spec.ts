@@ -4,6 +4,7 @@ import {
   looksLikeRoomIDSegment,
   roomMessagePathForSegment,
   roomPath,
+  roomPathForSegment,
   roomThreadPathForSegment,
   roomURLSegment
 } from './roomUrls';
@@ -31,9 +32,15 @@ describe('room URL helpers', () => {
 
   it('builds room paths from canonical targets and raw segments', () => {
     expect(roomPath('origin', { id: 'R1', name: 'General', type: RoomType.Channel })).toBe(
-      '/chat/-/General'
+      '/chat/-/r/General'
     );
-    expect(roomThreadPathForSegment('-', 'General', 'Eroot')).toBe('/chat/-/General/Eroot');
-    expect(roomMessagePathForSegment('-', 'General', 'Emsg')).toBe('/chat/-/General/m/Emsg');
+    expect(roomPathForSegment('-', 'R1')).toBe('/chat/-/R1');
+    expect(roomPathForSegment('-', 'General', 'name')).toBe('/chat/-/r/General');
+    expect(roomThreadPathForSegment('-', 'General', 'Eroot', 'name')).toBe(
+      '/chat/-/r/General/Eroot'
+    );
+    expect(roomMessagePathForSegment('-', 'General', 'Emsg', 'name')).toBe(
+      '/chat/-/r/General/m/Emsg'
+    );
   });
 });

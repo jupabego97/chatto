@@ -35,9 +35,10 @@ describe('RoomRouteResolverStore', () => {
     ];
 
     const resolver = new RoomRouteResolverStore(client, rooms);
-    await expect(resolver.resolve('general')).resolves.toMatchObject({
+    await expect(resolver.resolve('general', 'name')).resolves.toMatchObject({
       roomId: 'R1',
-      canonicalSegment: 'General'
+      canonicalSegment: 'General',
+      canonicalRouteKind: 'name'
     });
     expect(query).not.toHaveBeenCalled();
   });
@@ -58,9 +59,10 @@ describe('RoomRouteResolverStore', () => {
     const client = { query } as unknown as Client;
     const resolver = new RoomRouteResolverStore(client, makeRoomsStore(client));
 
-    await expect(resolver.resolve('old-name')).resolves.toMatchObject({
+    await expect(resolver.resolve('old-name', 'name')).resolves.toMatchObject({
       roomId: 'R1',
-      canonicalSegment: 'CurrentName'
+      canonicalSegment: 'CurrentName',
+      canonicalRouteKind: 'name'
     });
   });
 
@@ -80,12 +82,22 @@ describe('RoomRouteResolverStore', () => {
 
     await expect(resolver.resolve('R1')).resolves.toMatchObject({
       roomId: 'R1',
-      canonicalSegment: 'General'
+      canonicalSegment: 'General',
+      canonicalRouteKind: 'name'
     });
     expect(query).toHaveBeenCalledTimes(1);
   });
 
-  it('skips the legacy room query for non-ID-shaped unsupported names', async () => {
+  it('skips all lookup for non-ID-shaped unsupported legacy segments', async () => {
+    const query = vi.fn();
+    const client = { query } as unknown as Client;
+    const resolver = new RoomRouteResolverStore(client, makeRoomsStore(client));
+
+    await expect(resolver.resolve('old-name')).resolves.toBeNull();
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('returns null for unsupported historical names on older servers', async () => {
     const query = vi.fn((document: unknown) => {
       expect(operationName(document)).toBe('ResolveRoomByName');
       return {
@@ -99,21 +111,29 @@ describe('RoomRouteResolverStore', () => {
     const client = { query } as unknown as Client;
     const resolver = new RoomRouteResolverStore(client, makeRoomsStore(client));
 
-    await expect(resolver.resolve('old-name')).resolves.toBeNull();
+    await expect(resolver.resolve('old-name', 'name')).resolves.toBeNull();
     expect(query).toHaveBeenCalledTimes(1);
   });
 
-  it('tries room names after an ID-shaped segment is not a room ID', async () => {
+  it('does not try room names for an unresolved legacy ID-shaped segment', async () => {
     const query = vi.fn((document: unknown) => {
-      if (operationName(document) === 'ResolveRoomByIDFallback') {
-        return {
-          toPromise: () =>
-            Promise.resolve({
-              data: null,
-              error: { message: 'not found' }
-            })
-        };
-      }
+      expect(operationName(document)).toBe('ResolveRoomByIDFallback');
+      return {
+        toPromise: () =>
+          Promise.resolve({
+            data: null,
+            error: { message: 'not found' }
+          })
+      };
+    });
+    const client = { query } as unknown as Client;
+    const resolver = new RoomRouteResolverStore(client, makeRoomsStore(client));
+
+    await expect(resolver.resolve('R404')).resolves.toBeNull();
+  });
+
+  it('resolves ID-shaped names in the named route namespace', async () => {
+    const query = vi.fn((document: unknown) => {
       expect(operationName(document)).toBe('ResolveRoomByName');
       return {
         toPromise: () =>
@@ -126,9 +146,11 @@ describe('RoomRouteResolverStore', () => {
     const client = { query } as unknown as Client;
     const resolver = new RoomRouteResolverStore(client, makeRoomsStore(client));
 
-    await expect(resolver.resolve('Random')).resolves.toMatchObject({
+    await expect(resolver.resolve('Random', 'name')).resolves.toMatchObject({
       roomId: 'R2',
-      canonicalSegment: 'Random'
+      canonicalSegment: 'Random',
+      canonicalRouteKind: 'name'
     });
+    expect(query).toHaveBeenCalledTimes(1);
   });
 });

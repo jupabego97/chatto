@@ -43,7 +43,7 @@
   import { toast } from '$lib/ui/toast';
   import { buildMessageLinkURL, parseMessageLink, type MessageLink } from '$lib/messageLinks';
   import { serverIdToSegment } from '$lib/navigation';
-  import { roomMessagePathForSegment, roomURLSegment } from '$lib/roomUrls';
+  import { roomMessagePathForSegment, roomURLRouteKind, roomURLSegment } from '$lib/roomUrls';
   import { extractURLs } from '$lib/linkPreview';
   import MessagePreviewCard from '$lib/components/MessagePreviewCard.svelte';
   import { shouldHighlightCurrentUserMention } from './messageMentionHighlight';
@@ -70,6 +70,7 @@
   const currentUser = $derived(serverRegistry.getStore(getActiveServer()).currentUser);
   const currentRoom = $derived(stores.rooms.rooms.find((room) => room.id === roomId));
   const currentRoomSegment = $derived(currentRoom ? roomURLSegment(currentRoom) : roomId);
+  const currentRoomRouteKind = $derived(currentRoom ? roomURLRouteKind(currentRoom) : 'legacy-id');
   const roomPermissions = $derived(getRoomPermissions());
   const composerContext = getComposerContext();
   const replyState = composerContext.replyState;
@@ -579,7 +580,8 @@
             href={roomMessagePathForSegment(
               serverIdToSegment(getActiveServer()),
               currentRoomSegment,
-              event.id
+              event.id,
+              currentRoomRouteKind
             )}
             onclick={copyMessageLink}
             oncontextmenu={(e) => e.stopPropagation()}
@@ -648,7 +650,8 @@
               href={roomMessagePathForSegment(
                 serverIdToSegment(getActiveServer()),
                 currentRoomSegment,
-                event.id
+                event.id,
+                currentRoomRouteKind
               )}
               onclick={copyMessageLink}
               oncontextmenu={(e) => e.stopPropagation()}

@@ -622,10 +622,11 @@ export class NotificationStore {
     if (!roomSegment) {
       return resolve('/chat/[serverId]', { serverId: seg });
     }
+    const routeKind = t.isDM ? 'legacy-id' : 'name';
     if (t.threadRootId) {
-      return roomThreadPathForSegment(seg, roomSegment, t.threadRootId);
+      return roomThreadPathForSegment(seg, roomSegment, t.threadRootId, routeKind);
     }
-    return roomPathForSegment(seg, roomSegment);
+    return roomPathForSegment(seg, roomSegment, routeKind);
   }
 
   /**
@@ -653,15 +654,16 @@ export class NotificationStore {
       return resolve('/chat/[serverId]', { serverId: seg });
     }
 
+    const routeKind = t.isDM ? 'legacy-id' : 'name';
     if (t.threadRootId && t.eventId) {
       return (
-        roomThreadPathForSegment(seg, roomSegment, t.threadRootId) +
+        roomThreadPathForSegment(seg, roomSegment, t.threadRootId, routeKind) +
         '?highlight=' +
         t.eventId
       ) as ResolvedPathname;
     }
 
-    const roomPath = roomPathForSegment(seg, roomSegment);
+    const roomPath = roomPathForSegment(seg, roomSegment, routeKind);
     return t.eventId ? (`${roomPath}?highlight=${t.eventId}` as ResolvedPathname) : roomPath;
   }
 }

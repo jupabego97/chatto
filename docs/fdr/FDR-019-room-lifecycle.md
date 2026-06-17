@@ -9,22 +9,22 @@ A channel room goes through a lifecycle of create, edit, archive, unarchive, and
 
 ## Behavior
 
-- **Create** — server admins (or anyone with `room.create` in the target group) create a channel room by giving it a name (1–30 chars, alphanumeric / hyphen / underscore, case-insensitive unique across the server and not equal to any current room ID), an optional description, and a room group.
+- **Create** — server admins (or anyone with `room.create` in the target group) create a channel room by giving it a name (1–30 chars, alphanumeric / hyphen / underscore, case-insensitive unique across the server), an optional description, and a room group.
 - **Edit** — `room.manage` holders can change the name, description, and group of an existing room.
 - **Archive** — `room.manage` toggles an `archived` flag on the room. Archived rooms vanish from the sidebar, the Browse Rooms page, and search results, but members stay joined and history is intact. The owner can still navigate to the room directly.
 - **Unarchive** — same permission, flips the flag back. The room reappears in the sidebar and discovery surfaces.
 - **Ban member** — `room.ban-member` holders can ban a user from a channel room with a required reason and optional expiry. The banned user loses room read/write/live access immediately and cannot rejoin until the ban is removed or expires.
 - **Delete** — `room.manage` appends `RoomDeletedEvent` to `EVT`, releases the room from its group layout, and causes projections to remove the room, its name claim, and its memberships.
-- **Room URLs** — channel rooms use their current room name as the canonical URL segment. Old room IDs and historical names still resolve when possible and redirect to the current name URL. DM rooms keep ID-based URLs because their GraphQL `name` is intentionally empty.
+- **Room URLs** — channel rooms use `/chat/{server}/r/{currentName}` as the canonical URL. Old room IDs and historical names still resolve when possible and redirect to the current name URL. DM rooms keep ID-based URLs because their GraphQL `name` is intentionally empty.
 - Moving a room between groups requires `room.manage` in both groups (see FDR-017).
 
 ## Design Decisions
 
 ### 1. Room name uniqueness via EVT projection and OCC
 
-**Decision:** Room names are unique server-wide (case-insensitive), and current room IDs are reserved in the same name-claim namespace. Uniqueness is enforced by checking a room catalog projection snapshot and appending name-changing room events with wildcard OCC against the room aggregate event set.
+**Decision:** Room names are unique server-wide (case-insensitive). Uniqueness is enforced by checking a room catalog projection snapshot and appending name-changing room events with wildcard OCC against the room aggregate event set.
 **Why:** Race-tolerant name claiming is the only way to safely handle two operators creating the same-named room at the same moment. EVT OCC lets the event log remain the source of truth without maintaining a legacy KV name mirror.
-**Tradeoff:** Renames must coordinate through the event log and projection readiness instead of a single KV claim. The snapshot carries the matching `evt.room.>` sequence so stale projections conflict and retry instead of committing a duplicate claim. Reserving room IDs slightly reduces the valid name space but prevents ambiguous room-name URLs. The payoff is no dual-write divergence.
+**Tradeoff:** Renames must coordinate through the event log and projection readiness instead of a single KV claim. The snapshot carries the matching `evt.room.>` sequence so stale projections conflict and retry instead of committing a duplicate claim. Room IDs are not reserved as names because named room URLs live under the dedicated `/r/` route namespace.
 
 ### 2. Every channel room belongs to exactly one group
 
@@ -32,10 +32,10 @@ A channel room goes through a lifecycle of create, edit, archive, unarchive, and
 **Why:** Optional grouping means an "unsorted" branch in the permission resolver and sidebar layout — extra cases that nobody actually wants. Requiring a group simplifies the resolver and gives operators a consistent unit of permission scope. See ADR-031 and FDR-017.
 **Tradeoff:** Bulk room creation tools need to know which group to drop rooms into. The API surfaces a clear error if `groupID` is missing.
 
-### 3. Room names are canonical URL segments
+### 3. Room names are canonical `/r/` URL segments
 
-**Decision:** Channel room URLs use the room's current stored name, preserving casing. The room catalog projection also records historical channel names from `RoomCreatedEvent` and `RoomUpdatedEvent`, and GraphQL exposes that derived index through `roomByName(name)`, so old name links can resolve and redirect to the current URL. URL consumers decide when to call the existing `room(roomId)` field for legacy ID links; the web client only tries that path for `R...` segments because room IDs always start with capital `R`. Current room IDs are reserved by the name-claim check, so a channel cannot be created or renamed to a segment that would collide with an ID URL. If a name is reused, the current owner of that name wins; historical aliases only apply when no current room holds the segment. Deleted rooms are removed from URL alias resolution. DM rooms remain ID-addressed.
-**Why:** Room names are already URL-safe and unique across channel rooms, so exposing them improves readability without adding a second durable naming system. The alias index is derived from `EVT`, so redirects replay consistently and do not require KV mirrors.
+**Decision:** Channel room URLs use `/chat/{server}/r/{roomName}`, preserving the current stored room-name casing in generated links. The room catalog projection also records historical channel names from `RoomCreatedEvent` and `RoomUpdatedEvent`, and GraphQL exposes that derived index through `roomByName(name)`, so old `/r/{oldName}` links can resolve and redirect to `/r/{currentName}`. Legacy `/chat/{server}/{roomId}` ID links still resolve through `room(roomId)` and redirect to the canonical `/r/{currentName}` for channel rooms. If a name is reused, the current owner of that name wins; historical aliases only apply when no current room holds the segment. Deleted rooms are removed from URL alias resolution. DM rooms remain ID-addressed.
+**Why:** Room names are already URL-safe and unique across channel rooms, so exposing them improves readability without adding a second durable naming system. The dedicated `/r/` namespace avoids collisions with static chat pages and legacy ID links. The alias index is derived from `EVT`, so redirects replay consistently and do not require KV mirrors.
 **Tradeoff:** Historical aliases are best-effort when a name has been reused by multiple active rooms; the resolver chooses a deterministic active owner, with current names taking precedence. Old remote servers that do not expose the alias resolver still support ID URLs through the legacy `room(roomId)` query.
 
 ### 4. Archive is a flag, not a state machine

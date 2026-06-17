@@ -374,7 +374,8 @@ describe('RoomsStore - resolveLoadedURLSegment', () => {
 
     expect(store.resolveLoadedURLSegment('R1')).toMatchObject({
       roomId: 'R1',
-      canonicalSegment: 'General'
+      canonicalSegment: 'General',
+      canonicalRouteKind: 'name'
     });
   });
 
@@ -383,9 +384,10 @@ describe('RoomsStore - resolveLoadedURLSegment', () => {
     const store = makeStore(client);
     store.rooms = [makeListRoom('R1', { name: 'General', type: RoomType.Channel })];
 
-    expect(store.resolveLoadedURLSegment('general')).toMatchObject({
+    expect(store.resolveLoadedURLSegment('general', 'name')).toMatchObject({
       roomId: 'R1',
-      canonicalSegment: 'General'
+      canonicalSegment: 'General',
+      canonicalRouteKind: 'name'
     });
   });
 
@@ -396,8 +398,9 @@ describe('RoomsStore - resolveLoadedURLSegment', () => {
 
     expect(store.resolveLoadedURLSegment('deadbeef123456')).toMatchObject({
       roomId: 'deadbeef123456',
-      canonicalSegment: 'deadbeef123456'
+      canonicalSegment: 'deadbeef123456',
+      canonicalRouteKind: 'legacy-id'
     });
-    expect(store.resolveLoadedURLSegment('')).toBeNull();
+    expect(store.resolveLoadedURLSegment('', 'name')).toBeNull();
   });
 });

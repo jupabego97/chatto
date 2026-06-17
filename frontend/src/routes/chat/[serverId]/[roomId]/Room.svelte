@@ -33,6 +33,7 @@
   import {
     roomPathForSegment,
     roomThreadPathForSegment,
+    roomURLRouteKind,
     roomURLSegment
   } from '$lib/roomUrls';
   import { getActiveServer } from '$lib/state/activeServer.svelte';
@@ -66,11 +67,18 @@
 
   function openThread(threadRootEventId: string, highlightEventId?: string) {
     pendingThreadHighlight = highlightEventId ?? null;
-    goto(roomThreadPathForSegment(serverSegment, currentRoomURLSegment, threadRootEventId));
+    goto(
+      roomThreadPathForSegment(
+        serverSegment,
+        currentRoomURLSegment,
+        threadRootEventId,
+        currentRoomURLRouteKind
+      )
+    );
   }
 
   function closeThread() {
-    goto(roomPathForSegment(serverSegment, currentRoomURLSegment));
+    goto(roomPathForSegment(serverSegment, currentRoomURLSegment, currentRoomURLRouteKind));
   }
 
   // Create context-based state (must be synchronous, before children render)
@@ -83,6 +91,9 @@
   // --- Extracted hooks ---
   const room = useRoomData(() => ({ roomId }));
   const currentRoomURLSegment = $derived(room.roomData ? roomURLSegment(room.roomData.room) : roomId);
+  const currentRoomURLRouteKind = $derived(
+    room.roomData ? roomURLRouteKind(room.roomData.room) : 'legacy-id'
+  );
 
   const RoomMentionRolesQuery = graphql(`
     query RoomMentionRoles {
@@ -241,11 +252,16 @@
 
     if (threadId) {
       replaceState(
-        roomThreadPathForSegment(serverSegment, currentRoomURLSegment, threadId),
+        roomThreadPathForSegment(
+          serverSegment,
+          currentRoomURLSegment,
+          threadId,
+          currentRoomURLRouteKind
+        ),
         {}
       );
     } else {
-      replaceState(roomPathForSegment(serverSegment, currentRoomURLSegment), {});
+      replaceState(roomPathForSegment(serverSegment, currentRoomURLSegment, currentRoomURLRouteKind), {});
     }
     applyHighlight(fromUrl);
   });

@@ -187,7 +187,7 @@ test.describe('Cross-instance dots', () => {
     await remoteSpaceBadge.click();
 
     await page.waitForURL(
-      (url) => url.pathname === `/chat/${remoteHostSegment}/general/${remoteRootEventId}`
+      (url) => url.pathname === `/chat/${remoteHostSegment}/r/general/${remoteRootEventId}`
     );
     await expect(page.getByRole('heading', { name: '# general' })).toBeVisible();
     await roomPage.expectThreadPaneVisible();
@@ -250,7 +250,7 @@ test.describe('Cross-instance dots', () => {
     const remoteGeneralLink = chatPage.roomList.getByRole('link', { name: '# general' });
     await expect(remoteGeneralLink).toBeVisible({ timeout: TIMEOUTS.UI_STANDARD });
     await remoteGeneralLink.click();
-    await page.waitForURL((url) => url.pathname === `/chat/${remoteHostSegment}/general`);
+    await page.waitForURL((url) => url.pathname === `/chat/${remoteHostSegment}/r/general`);
     await expect(page.getByRole('heading', { name: '# general' })).toBeVisible();
 
     const mainRoomTimeline = page.locator('[data-testid="messages-container"]').first();

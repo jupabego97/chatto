@@ -200,23 +200,20 @@ func TestRoomCatalogProjection_NameClaimSnapshotTracksRoomSeq(t *testing.T) {
 	require.Equal(t, uint64(12), snapshot.Seq)
 }
 
-func TestRoomCatalogProjection_NameClaimSnapshotReservesRoomIDs(t *testing.T) {
+func TestRoomCatalogProjection_NameClaimSnapshotDoesNotReserveRoomIDs(t *testing.T) {
 	p := NewRoomCatalogProjection()
 	require.NoError(t, p.Apply(roomCreatedEvent("R7gUDvZNyvHkk4K", "general", "", corev1.RoomKind_ROOM_KIND_CHANNEL), 10))
 	require.NoError(t, p.Apply(roomCreatedEvent("DM1", "", "", corev1.RoomKind_ROOM_KIND_DM), 11))
 
 	snapshot := p.NameClaimSnapshot("R7gUDvZNyvHkk4K")
-	require.Equal(t, "R7gUDvZNyvHkk4K", snapshot.OwnerRoomID)
-	require.True(t, snapshot.OwnerIsRoomID)
+	require.Empty(t, snapshot.OwnerRoomID)
 	require.Equal(t, uint64(11), snapshot.Seq)
 
 	snapshot = p.NameClaimSnapshot("r7gudvznyvhkk4k")
-	require.Equal(t, "R7gUDvZNyvHkk4K", snapshot.OwnerRoomID)
-	require.True(t, snapshot.OwnerIsRoomID)
+	require.Empty(t, snapshot.OwnerRoomID)
 
 	snapshot = p.NameClaimSnapshot("DM1")
-	require.Equal(t, "DM1", snapshot.OwnerRoomID)
-	require.True(t, snapshot.OwnerIsRoomID)
+	require.Empty(t, snapshot.OwnerRoomID)
 }
 
 func TestRoomCatalogProjection_ResolveName(t *testing.T) {

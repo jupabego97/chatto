@@ -178,7 +178,7 @@ unknown instance) the component renders nothing.
         let resolvedRoom = null;
         let serverName: string | null = null;
 
-        if (looksLikeRoomIDSegment(roomId)) {
+        if ((link.roomRouteKind ?? 'legacy-id') === 'legacy-id' && looksLikeRoomIDSegment(roomId)) {
           const idResult = await client
             .query(MessagePreviewQuery, { roomId, eventId: messageId })
             .toPromise();
@@ -258,6 +258,7 @@ unknown instance) the component renders nothing.
       : ''
   );
   const previewRoomSegment = $derived(preview ? preview.roomName?.trim() || preview.roomId : '');
+  const previewRoomRouteKind = $derived(preview?.roomName?.trim() ? 'name' : 'legacy-id');
 
   function attachmentLabel(contentType: string): string {
     if (contentType.startsWith('image/')) return 'Image';
@@ -379,7 +380,8 @@ unknown instance) the component renders nothing.
     href={roomMessagePathForSegment(
       serverIdToSegment(preview.serverId),
       previewRoomSegment,
-      preview.eventId
+      preview.eventId,
+      previewRoomRouteKind
     )}
     data-testid="message-preview-card"
     class="group/preview relative flex w-full max-w-md cursor-pointer flex-col embed-frame bg-surface-100 group-hover/msg:bg-surface-200 hover:bg-surface-300"

@@ -92,7 +92,7 @@ describe('RoomDirectory', () => {
     // Joined row: name is rendered inside an <a> pointing at the room route.
     const link = joinedItem.querySelector('a');
     expect(link).not.toBeNull();
-    expect(link!.getAttribute('href')).toBe('/chat/-/r1');
+    expect(link!.getAttribute('href')).toBe('/chat/-/r/r1');
     expect(link!.textContent).toContain('r1');
 
     // Non-joined row: no link wrapping the label.

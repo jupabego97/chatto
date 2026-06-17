@@ -213,8 +213,7 @@ func (c *ChattoCore) CreateRoom(ctx context.Context, actorID string, kind RoomKi
 //
 // The flow per attempt:
 //  1. Read the catalog name-claim snapshot for the desired `name`;
-//     if any other room holds it, or any room uses it as an ID, return
-//     ErrRoomNameExists immediately.
+//     if any other room holds it, return ErrRoomNameExists immediately.
 //  2. Publish the event with the snapshot's applied evt.room.> seq.
 //     The projected state and OCC token describe the same observed
 //     event-log prefix.
@@ -224,9 +223,7 @@ func (c *ChattoCore) CreateRoom(ctx context.Context, actorID string, kind RoomKi
 //
 // excludeRoomID is the ID to exclude from name-owner checks — used by
 // UpdateRoom so a room can keep a name it already holds (e.g. case-only
-// changes, or no-op renames). Room IDs are still reserved even when
-// excludeRoomID matches, because ID-shaped names would make URL
-// resolution ambiguous.
+// changes, or no-op renames).
 func (c *ChattoCore) publishRoomEventWithNameOCC(ctx context.Context, name string, event *corev1.Event, excludeRoomID string) (uint64, error) {
 	// Determine publish subject from the event payload. Room events
 	// all target the per-room aggregate subject; this doesn't change
@@ -240,15 +237,12 @@ func (c *ChattoCore) publishRoomEventWithNameOCC(ctx context.Context, name strin
 	default:
 		return 0, fmt.Errorf("publishRoomEventWithNameOCC: unsupported event type %T", e)
 	}
-	if normalizeRoomName(name) == normalizeRoomName(roomID) {
-		return 0, ErrRoomNameExists
-	}
 	publishSubject := events.RoomAggregate(roomID).SubjectFor(event)
 	occFilter := events.RoomSubjectFilter()
 
 	for attempt := 0; attempt < maxRoomNameClaimRetries; attempt++ {
 		snapshot := c.rooms().nameClaimSnapshot(name)
-		if owner := snapshot.OwnerRoomID; owner != "" && (owner != excludeRoomID || snapshot.OwnerIsRoomID) {
+		if owner := snapshot.OwnerRoomID; owner != "" && owner != excludeRoomID {
 			return 0, ErrRoomNameExists
 		}
 
@@ -611,17 +605,14 @@ func (c *ChattoCore) ListMemberRooms(ctx context.Context, kind RoomKind, userID 
 }
 
 // RoomNameExists reports whether a channel room with the given name
-// (case-insensitive, whitespace-trimmed) currently exists, or whether
-// the value is reserved by a current room ID. ADR-035 phase 6: served
-// from RoomCatalog's name-claim snapshot.
+// (case-insensitive, whitespace-trimmed) currently exists.
 func (c *ChattoCore) RoomNameExists(_ context.Context, _ RoomKind, name string) (bool, error) {
 	return c.rooms().nameClaimSnapshot(name).OwnerRoomID != "", nil
 }
 
 // RoomNameExistsExcluding is like RoomNameExists but treats
-// excludeRoomID as "free" for current name ownership. Current room IDs
-// remain reserved even when they match excludeRoomID.
+// excludeRoomID as "free" for current name ownership.
 func (c *ChattoCore) RoomNameExistsExcluding(_ context.Context, _ RoomKind, name, excludeRoomID string) (bool, error) {
 	snapshot := c.rooms().nameClaimSnapshot(name)
-	return snapshot.OwnerRoomID != "" && (snapshot.OwnerRoomID != excludeRoomID || snapshot.OwnerIsRoomID), nil
+	return snapshot.OwnerRoomID != "" && snapshot.OwnerRoomID != excludeRoomID, nil
 }

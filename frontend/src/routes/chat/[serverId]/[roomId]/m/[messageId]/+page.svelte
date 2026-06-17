@@ -9,7 +9,8 @@
   import { goto } from '$app/navigation';
   import {
     roomPathForSegment,
-    roomThreadPathForSegment
+    roomThreadPathForSegment,
+    type RoomRouteKind
   } from '$lib/roomUrls';
   import type { Client } from '@urql/svelte';
   import type { PendingHighlightStore } from '$lib/state/server/pendingHighlight.svelte';
@@ -41,6 +42,7 @@
     serverSegment: string,
     roomId: string,
     canonicalRoomSegment: string,
+    canonicalRouteKind: RoomRouteKind,
     messageId: string
   ): Promise<void> {
     try {
@@ -51,7 +53,7 @@
       const event = result.data?.room?.event;
       if (!event) {
         pendingHighlights.set(roomId, null, messageId);
-        goto(roomPathForSegment(serverSegment, canonicalRoomSegment), { replaceState: true });
+        goto(roomPathForSegment(serverSegment, canonicalRoomSegment, canonicalRouteKind), { replaceState: true });
         return;
       }
 
@@ -62,16 +64,16 @@
       if (threadRoot) {
         pendingHighlights.set(roomId, threadRoot, messageId);
         goto(
-          roomThreadPathForSegment(serverSegment, canonicalRoomSegment, threadRoot),
+          roomThreadPathForSegment(serverSegment, canonicalRoomSegment, threadRoot, canonicalRouteKind),
           { replaceState: true }
         );
         return;
       }
 
       pendingHighlights.set(roomId, null, messageId);
-      goto(roomPathForSegment(serverSegment, canonicalRoomSegment), { replaceState: true });
+      goto(roomPathForSegment(serverSegment, canonicalRoomSegment, canonicalRouteKind), { replaceState: true });
     } catch {
-      goto(roomPathForSegment(serverSegment, canonicalRoomSegment), { replaceState: true });
+      goto(roomPathForSegment(serverSegment, canonicalRoomSegment, canonicalRouteKind), { replaceState: true });
     }
   }
 </script>
@@ -94,7 +96,8 @@
   $effect(() => {
     if (roomsStore.isInitialLoading) return;
     const request = ++resolveRequest;
-    stores.roomRoutes.resolve(page.params.roomId!).then((resolved) => {
+    const routeKind = page.route?.id?.includes('/r/[roomId]') ? 'name' : 'legacy-id';
+    stores.roomRoutes.resolve(page.params.roomId!, routeKind).then((resolved) => {
       if (request !== resolveRequest || !resolved) return;
       resolveAndRedirect(
         connection().client,
@@ -102,6 +105,7 @@
         page.params.serverId!,
         resolved.roomId,
         resolved.canonicalSegment,
+        resolved.canonicalRouteKind,
         page.params.messageId!
       );
     });

@@ -195,7 +195,7 @@ registry.
   -->
   {@const joinedGhost = `btn border-border bg-background text-muted hover:!border-danger hover:!bg-danger hover:!text-white ${sizing}`}
   {@const restrictedSoft = `btn border-border bg-background text-muted/70 !cursor-default opacity-80 ${sizing}`}
-  {@const roomHref = roomPathForSegment(serverSegment, room.name)}
+  {@const roomHref = roomPathForSegment(serverSegment, room.name, 'name')}
   <li
     class="flex items-center gap-3 rounded px-3 py-1.5 transition-colors {joined
       ? 'hover:bg-surface-200'

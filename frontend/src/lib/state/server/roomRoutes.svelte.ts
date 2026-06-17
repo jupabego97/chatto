@@ -1,7 +1,13 @@
 import type { Client } from '@urql/svelte';
 import { graphql } from '$lib/gql';
 import { isUnsupportedGraphQLFieldError } from '$lib/gql/compatibility';
-import { looksLikeRoomIDSegment, roomURLSegment, type RoomURLTarget } from '$lib/roomUrls';
+import {
+  looksLikeRoomIDSegment,
+  roomURLRouteKind,
+  roomURLSegment,
+  type RoomRouteKind,
+  type RoomURLTarget
+} from '$lib/roomUrls';
 import type { ResolvedLoadedRoomSegment, RoomsStore } from './rooms.svelte';
 
 const ResolveRoomByNameQuery = graphql(`
@@ -37,7 +43,8 @@ function resolvedRoom(room: RoomURLTarget): ResolvedRoomRoute {
       members: []
     },
     roomId: room.id,
-    canonicalSegment: roomURLSegment(room)
+    canonicalSegment: roomURLSegment(room),
+    canonicalRouteKind: roomURLRouteKind(room)
   };
 }
 
@@ -47,13 +54,15 @@ export class RoomRouteResolverStore {
     private readonly rooms: RoomsStore
   ) {}
 
-  async resolve(segment: string): Promise<ResolvedRoomRoute | null> {
-    const loaded = this.rooms.resolveLoadedURLSegment(segment);
+  async resolve(
+    segment: string,
+    routeKind: RoomRouteKind = 'legacy-id'
+  ): Promise<ResolvedRoomRoute | null> {
+    const loaded = this.rooms.resolveLoadedURLSegment(segment, routeKind);
     if (loaded) return loaded;
 
-    if (looksLikeRoomIDSegment(segment)) {
-      const byID = await this.resolveLegacyID(segment);
-      if (byID) return byID;
+    if (routeKind === 'legacy-id') {
+      return this.resolveLegacyID(segment);
     }
 
     const result = await this.client
@@ -70,7 +79,7 @@ export class RoomRouteResolverStore {
   }
 
   private async resolveLegacyID(segment: string): Promise<ResolvedRoomRoute | null> {
-    const loaded = this.rooms.resolveLoadedURLSegment(segment);
+    const loaded = this.rooms.resolveLoadedURLSegment(segment, 'legacy-id');
     if (loaded) return loaded;
     if (!looksLikeRoomIDSegment(segment)) return null;
 

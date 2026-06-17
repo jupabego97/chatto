@@ -33,7 +33,7 @@ rooms are organized into collapsible sections. Otherwise, rooms display alphabet
     type RoomsListGroup,
     type RoomsListGroupItem
   } from '$lib/state/server/rooms.svelte';
-  import { roomPathForSegment, roomURLSegment } from '$lib/roomUrls';
+  import { roomPathForSegment, roomPathForTarget } from '$lib/roomUrls';
 
   // No props — RoomList reads everything from the active server's stores.
   // All store references go through `stores` ($derived), so when the active
@@ -52,7 +52,10 @@ rooms are organized into collapsible sections. Otherwise, rooms display alphabet
   const roomsStore = $derived(stores.rooms);
 
   let activeRoomId = $derived(
-    roomsStore.resolveLoadedURLSegment(page.params.roomId ?? '')?.roomId ?? page.params.roomId
+    roomsStore.resolveLoadedURLSegment(
+      page.params.roomId ?? '',
+      page.route?.id?.includes('/r/[roomId]') ? 'name' : 'legacy-id'
+    )?.roomId ?? page.params.roomId
   );
 
   // Load active call room IDs whenever the active server has a LiveKit URL.
@@ -246,7 +249,7 @@ rooms are organized into collapsible sections. Otherwise, rooms display alphabet
     }
 
     const room = roomsStore.rooms.find((r) => r.id === roomId);
-    goto(room ? roomPathForSegment(serverSegment, roomURLSegment(room)) : roomPathForSegment(serverSegment, roomId));
+    goto(room ? roomPathForTarget(serverSegment, room) : roomPathForSegment(serverSegment, roomId));
   }
 
   // Handle click on room notification badge - navigate to notification source and dismiss
@@ -333,7 +336,7 @@ rooms are organized into collapsible sections. Otherwise, rooms display alphabet
   {@const hasActiveCall = activeCallRooms.has(room.id)}
   {@const callParticipants = hasActiveCall ? activeCallRooms.getParticipants(room.id) : []}
   <a
-    href={roomPathForSegment(serverSegment, roomURLSegment(room))}
+    href={roomPathForTarget(serverSegment, room)}
     class={[
       'sidebar-item group/badges',
       hasActiveCall ? 'flex-wrap gap-y-1' : '',
@@ -381,7 +384,7 @@ rooms are organized into collapsible sections. Otherwise, rooms display alphabet
   {@const hasActiveCall = activeCallRooms.has(room.id)}
   {@const callParticipants = hasActiveCall ? activeCallRooms.getParticipants(room.id) : []}
   <a
-    href={roomPathForSegment(serverSegment, roomURLSegment(room))}
+    href={roomPathForTarget(serverSegment, room)}
     class={[
       'sidebar-item group/badges',
       hasActiveCall ? 'flex-wrap gap-y-1' : '',

@@ -27,9 +27,8 @@ type RoomCatalogProjection struct {
 }
 
 type RoomNameClaimSnapshot struct {
-	OwnerRoomID   string
-	OwnerIsRoomID bool
-	Seq           uint64
+	OwnerRoomID string
+	Seq         uint64
 }
 
 // roomCatalogEntry is the in-memory shape held per room. Not exposed
@@ -148,17 +147,15 @@ func (p *RoomCatalogProjection) Count() int {
 	return len(p.rooms)
 }
 
-// FindByName returns the ID of the channel room currently holding
-// the given name, or any room currently holding that value as its ID
-// (case-insensitive, ignoring leading/trailing whitespace), or "" if
-// no such claim exists. Used by CreateRoom / UpdateRoom for the
+// FindByName returns the ID of the channel room currently holding the
+// given name (case-insensitive, ignoring leading/trailing whitespace), or
+// "" if no such claim exists. Used by CreateRoom / UpdateRoom for the
 // pre-publish uniqueness check.
 //
 // Name ownership is channel-room only: DM rooms have empty names by
-// convention. ID ownership includes all current rooms because both
-// channel and DM IDs are valid legacy URL segments. Archived channel
-// rooms still hold their names — operators must rename them before
-// reclaiming the slot, matching the previous KV-index semantics.
+// convention. Archived channel rooms still hold their names — operators
+// must rename them before reclaiming the slot, matching the previous
+// KV-index semantics.
 func (p *RoomCatalogProjection) FindByName(name string) string {
 	return p.NameClaimSnapshot(name).OwnerRoomID
 }
@@ -201,11 +198,6 @@ func (p *RoomCatalogProjection) NameClaimSnapshot(name string) RoomNameClaimSnap
 	snapshot := RoomNameClaimSnapshot{Seq: p.seq}
 	if roomID := p.currentRoomIDByNameLocked(target); roomID != "" {
 		snapshot.OwnerRoomID = roomID
-		return snapshot
-	}
-	if roomID := p.currentRoomIDByNormalizedIDLocked(target); roomID != "" {
-		snapshot.OwnerRoomID = roomID
-		snapshot.OwnerIsRoomID = true
 	}
 	return snapshot
 }
@@ -216,15 +208,6 @@ func (p *RoomCatalogProjection) currentRoomIDByNameLocked(normalized string) str
 			continue
 		}
 		if normalizeRoomName(entry.name) == normalized {
-			return id
-		}
-	}
-	return ""
-}
-
-func (p *RoomCatalogProjection) currentRoomIDByNormalizedIDLocked(normalized string) string {
-	for id := range p.rooms {
-		if normalizeRoomName(id) == normalized {
 			return id
 		}
 	}
