@@ -4,4 +4,4 @@
   let { data, children } = $props();
 </script>
 
-<RoomRouteLayout {data} {children} routeKind="legacy-id" />
+<RoomRouteLayout {data} {children} />

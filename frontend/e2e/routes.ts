@@ -15,12 +15,9 @@
 /** URL segment for the home (local) instance. */
 const HOME = '-';
 const ROOM_SEGMENT_PATTERN = `[a-zA-Z0-9_-]+`;
-const ROOM_ID_PATTERN = /^(?:R[A-Za-z0-9_-]{1,30}|[a-f0-9]{14})$/;
 
 function roomRoute(serverSegment: string, roomSegment: string): string {
-  return ROOM_ID_PATTERN.test(roomSegment)
-    ? `/chat/${serverSegment}/${roomSegment}`
-    : `/chat/${serverSegment}/r/${roomSegment}`;
+  return `/chat/${serverSegment}/${roomSegment}`;
 }
 
 // --- Root routes ---
@@ -125,24 +122,22 @@ export const notifications = '/chat/notifications';
 export const patterns = {
   /** Any chat route after login redirect (home instance routes or instance-agnostic pages) */
   chatRedirect: /\/chat\/(-|notifications)/,
-  /** Any room page: /chat/-/{roomId} or /chat/-/r/{roomName}. */
-  anyRoom: new RegExp(`/chat/-(?:/${ROOM_SEGMENT_PATTERN}|/r/${ROOM_SEGMENT_PATTERN})$`),
-  /** Any thread page: /chat/-/{roomId}/{threadId} or /chat/-/r/{roomName}/{threadId}. */
-  anyThread: new RegExp(
-    `/chat/-(?:/(?!r/)${ROOM_SEGMENT_PATTERN}|/r/${ROOM_SEGMENT_PATTERN})/[a-zA-Z0-9]+$`
-  ),
+  /** Any room page: /chat/-/{roomId} or /chat/-/{roomId}-{roomName}. */
+  anyRoom: new RegExp(`/chat/-/${ROOM_SEGMENT_PATTERN}$`),
+  /** Any thread page: /chat/-/{roomId}/{threadId} or /chat/-/{roomId}-{roomName}/{threadId}. */
+  anyThread: new RegExp(`/chat/-/${ROOM_SEGMENT_PATTERN}/[a-zA-Z0-9]+$`),
   /** Any admin user page: /chat/-/server-admin/members/{id} */
   anyAdminUser: /\/chat\/-\/server-admin\/members\/[a-zA-Z0-9]+/,
   /** Any non-admin chat route (home instance or instance-agnostic) */
   nonAdmin: /\/chat\/(?:-(?:\/(?!server-admin)|$)|notifications)/,
   /** Chat root or any room (used after redirects) */
-  chatRootOrRoom: new RegExp(`/chat/-(?:(?:/${ROOM_SEGMENT_PATTERN})|(?:/r/${ROOM_SEGMENT_PATTERN}))?$`),
+  chatRootOrRoom: new RegExp(`/chat/-(?:/${ROOM_SEGMENT_PATTERN})?$`),
   /** Chat root or any room, allowing query params */
   chatRootOrRoomWithQuery: new RegExp(
-    `/chat/-(?:(?:/${ROOM_SEGMENT_PATTERN})|(?:/r/${ROOM_SEGMENT_PATTERN}))?(?:\\?.*)?$`
+    `/chat/-(?:/${ROOM_SEGMENT_PATTERN})?(?:\\?.*)?$`
   ),
   /** Any room with query params (e.g. ?highlight=) */
-  anyRoomWithQuery: new RegExp(`/chat/-(?:/${ROOM_SEGMENT_PATTERN}|/r/${ROOM_SEGMENT_PATTERN})`),
+  anyRoomWithQuery: new RegExp(`/chat/-/${ROOM_SEGMENT_PATTERN}`),
   /** Browse rooms — folded into the server overview at /chat/-/overview */
   browseRooms: /\/chat\/-\/overview$/,
   /** Email verified redirect */

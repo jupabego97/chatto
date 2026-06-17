@@ -210,8 +210,6 @@ export function getRoomUrlSegmentFromUrl(rawUrl: string): string | null {
   const { pathname } = new URL(rawUrl, 'http://localhost');
   const parts = pathname.split('/').filter(Boolean);
   if (parts[0] !== 'chat' || parts.length < 3) return null;
-
-  if (parts[2] === 'r') return parts[3] ?? null;
   return parts[2] ?? null;
 }
 
@@ -222,6 +220,8 @@ export function getRoomUrlSegmentFromUrl(rawUrl: string): string | null {
  */
 export async function getRoomIdForUrlSegment(page: Page, segment: string): Promise<string> {
   const decodedSegment = decodeURIComponent(segment);
+  const separator = decodedSegment.indexOf('-');
+  const roomId = separator > 0 ? decodedSegment.slice(0, separator) : decodedSegment;
   const data = await graphqlQuery<{
     viewer: { user: { rooms: Array<{ id: string; name: string }> } };
   }>(
@@ -239,9 +239,9 @@ export async function getRoomIdForUrlSegment(page: Page, segment: string): Promi
   );
 
   const room = data.viewer.user.rooms.find(
-    (candidate) => candidate.id === decodedSegment || candidate.name === decodedSegment
+    (candidate) => candidate.id === roomId || candidate.name === decodedSegment
   );
-  return room?.id ?? decodedSegment;
+  return room?.id ?? roomId;
 }
 
 export async function getIdsFromUrl(

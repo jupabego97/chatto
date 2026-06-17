@@ -43,7 +43,7 @@
   import { toast } from '$lib/ui/toast';
   import { buildMessageLinkURL, parseMessageLink, type MessageLink } from '$lib/messageLinks';
   import { serverIdToSegment } from '$lib/navigation';
-  import { roomMessagePathForSegment, roomURLRouteKind, roomURLSegment } from '$lib/roomUrls';
+  import { roomMessagePathForSegment } from '$lib/roomUrls';
   import { extractURLs } from '$lib/linkPreview';
   import MessagePreviewCard from '$lib/components/MessagePreviewCard.svelte';
   import { shouldHighlightCurrentUserMention } from './messageMentionHighlight';
@@ -68,9 +68,6 @@
 
   const connection = useConnection();
   const currentUser = $derived(serverRegistry.getStore(getActiveServer()).currentUser);
-  const currentRoom = $derived(stores.rooms.rooms.find((room) => room.id === roomId));
-  const currentRoomSegment = $derived(currentRoom ? roomURLSegment(currentRoom) : roomId);
-  const currentRoomRouteKind = $derived(currentRoom ? roomURLRouteKind(currentRoom) : 'legacy-id');
   const roomPermissions = $derived(getRoomPermissions());
   const composerContext = getComposerContext();
   const replyState = composerContext.replyState;
@@ -576,12 +573,7 @@
       {#if compact}
         <div class="flex w-11 shrink-0 items-center justify-center">
           <a
-            href={roomMessagePathForSegment(
-              serverIdToSegment(getActiveServer()),
-              currentRoomSegment,
-              event.id,
-              currentRoomRouteKind
-            )}
+            href={roomMessagePathForSegment(serverIdToSegment(getActiveServer()), roomId, event.id)}
             onclick={copyMessageLink}
             oncontextmenu={(e) => e.stopPropagation()}
             title="Click to copy link to this message"
@@ -646,12 +638,7 @@
               <strong class="shrink-0 leading-none font-semibold text-muted">{displayName}</strong>
             {/if}
             <a
-              href={roomMessagePathForSegment(
-                serverIdToSegment(getActiveServer()),
-                currentRoomSegment,
-                event.id,
-                currentRoomRouteKind
-              )}
+              href={roomMessagePathForSegment(serverIdToSegment(getActiveServer()), roomId, event.id)}
               onclick={copyMessageLink}
               oncontextmenu={(e) => e.stopPropagation()}
               title="Click to copy link to this message"

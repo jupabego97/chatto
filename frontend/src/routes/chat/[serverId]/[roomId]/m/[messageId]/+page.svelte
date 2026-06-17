@@ -8,9 +8,10 @@
   import { graphql } from '$lib/gql';
   import { goto } from '$app/navigation';
   import {
+    roomIDFromURLSegment,
     roomPathForSegment,
     roomThreadPathForSegment,
-    type RoomRouteKind
+    roomURLSegment
   } from '$lib/roomUrls';
   import type { Client } from '@urql/svelte';
   import type { PendingHighlightStore } from '$lib/state/server/pendingHighlight.svelte';
@@ -18,6 +19,9 @@
   const ResolveMessageLinkQuery = graphql(`
     query ResolveMessageLink($roomId: ID!, $eventId: ID!) {
       room(roomId: $roomId) {
+        id
+        name
+        type
         event(eventId: $eventId) {
           id
           event {
@@ -41,8 +45,6 @@
     pendingHighlights: PendingHighlightStore,
     serverSegment: string,
     roomId: string,
-    canonicalRoomSegment: string,
-    canonicalRouteKind: RoomRouteKind,
     messageId: string
   ): Promise<void> {
     try {
@@ -50,10 +52,13 @@
         .query(ResolveMessageLinkQuery, { roomId, eventId: messageId }, { requestPolicy: 'network-only' })
         .toPromise();
 
+      const canonicalRoomSegment = result.data?.room
+        ? roomURLSegment(result.data.room)
+        : roomId;
       const event = result.data?.room?.event;
       if (!event) {
         pendingHighlights.set(roomId, null, messageId);
-        goto(roomPathForSegment(serverSegment, canonicalRoomSegment, canonicalRouteKind), { replaceState: true });
+        goto(roomPathForSegment(serverSegment, canonicalRoomSegment), { replaceState: true });
         return;
       }
 
@@ -64,16 +69,16 @@
       if (threadRoot) {
         pendingHighlights.set(roomId, threadRoot, messageId);
         goto(
-          roomThreadPathForSegment(serverSegment, canonicalRoomSegment, threadRoot, canonicalRouteKind),
+          roomThreadPathForSegment(serverSegment, canonicalRoomSegment, threadRoot),
           { replaceState: true }
         );
         return;
       }
 
       pendingHighlights.set(roomId, null, messageId);
-      goto(roomPathForSegment(serverSegment, canonicalRoomSegment, canonicalRouteKind), { replaceState: true });
+      goto(roomPathForSegment(serverSegment, canonicalRoomSegment), { replaceState: true });
     } catch {
-      goto(roomPathForSegment(serverSegment, canonicalRoomSegment, canonicalRouteKind), { replaceState: true });
+      goto(roomPathForSegment(serverSegment, roomId), { replaceState: true });
     }
   }
 </script>
@@ -86,7 +91,6 @@
 
   const connection = useConnection();
   const stores = $derived(serverRegistry.getStore(getActiveServer()));
-  let resolveRequest = 0;
 
   // Wait for the active server's rooms store to settle before redirecting,
   // so a deep-link to a DM doesn't briefly resolve as a missing channel
@@ -95,19 +99,13 @@
 
   $effect(() => {
     if (roomsStore.isInitialLoading) return;
-    const request = ++resolveRequest;
-    const routeKind = page.route?.id?.includes('/r/[roomId]') ? 'name' : 'legacy-id';
-    stores.roomRoutes.resolve(page.params.roomId!, routeKind).then((resolved) => {
-      if (request !== resolveRequest || !resolved) return;
-      resolveAndRedirect(
-        connection().client,
-        stores.pendingHighlights,
-        page.params.serverId!,
-        resolved.roomId,
-        resolved.canonicalSegment,
-        resolved.canonicalRouteKind,
-        page.params.messageId!
-      );
-    });
+    const roomId = roomIDFromURLSegment(page.params.roomId!);
+    void resolveAndRedirect(
+      connection().client,
+      stores.pendingHighlights,
+      page.params.serverId!,
+      roomId,
+      page.params.messageId!
+    );
   });
 </script>

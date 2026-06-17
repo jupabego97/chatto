@@ -1,14 +1,14 @@
 /**
  * Message link URL formats:
- * - legacy ID: `/chat/<serverSegment>/<roomId>/m/<messageId>`
- * - named channel: `/chat/<serverSegment>/r/<roomName>/m/<messageId>`
+ * - `/chat/<serverSegment>/<roomId>/m/<messageId>`
+ * - `/chat/<serverSegment>/<roomId>-<roomName>/m/<messageId>`
  * The `m/` prefix distinguishes message URLs from the `[threadId]` route that sits
  * at the same level (thread IDs and message IDs share the same ID space).
  */
 
 import { serverRegistry } from '$lib/state/server/registry.svelte';
 import { serverIdToSegment, segmentToServerId } from '$lib/navigation';
-import { roomMessagePathForSegment, type RoomRouteKind } from '$lib/roomUrls';
+import { roomIDFromURLSegment, roomMessagePathForSegment } from '$lib/roomUrls';
 import type { ResolvedPathname } from '$app/types';
 
 export interface MessageLink {
@@ -17,7 +17,6 @@ export interface MessageLink {
   /** Resolved server ID, or null if the segment doesn't match a registered server. */
   serverId: string | null;
   roomId: string;
-  roomRouteKind?: RoomRouteKind;
   messageId: string;
 }
 
@@ -81,14 +80,9 @@ export function parseMessageLink(input: string): MessageLink | null {
   let serverSegment: string;
   let roomId: string;
   let messageId: string;
-  let roomRouteKind: RoomRouteKind;
 
   if (parts.length === 5 && parts[3] === 'm') {
     [, serverSegment, roomId, , messageId] = parts;
-    roomRouteKind = 'legacy-id';
-  } else if (parts.length === 6 && parts[2] === 'r' && parts[4] === 'm') {
-    [, serverSegment, , roomId, , messageId] = parts;
-    roomRouteKind = 'name';
   } else {
     return null;
   }
@@ -98,8 +92,7 @@ export function parseMessageLink(input: string): MessageLink | null {
   return {
     serverSegment: effectiveSegment,
     serverId: segmentToServerId(effectiveSegment),
-    roomId,
-    roomRouteKind,
+    roomId: roomIDFromURLSegment(roomId),
     messageId
   };
 }

@@ -63,8 +63,7 @@ const (
 	RoomDescriptionMaxLength = 500
 )
 
-// ErrRoomNameExists is returned when a room with the same name (case-insensitive) already exists,
-// or when the requested name is already reserved by any current room ID.
+// ErrRoomNameExists is returned when a room with the same name (case-insensitive) already exists.
 var ErrRoomNameExists = errors.New("a room with this name already exists in this space")
 
 // ValidateRoomName validates a room name and returns an error if invalid.
@@ -504,20 +503,6 @@ func (c *ChattoCore) FindRoomByID(ctx context.Context, room_id string) (*corev1.
 		return nil, ErrNotFound
 	}
 	if gid := c.RoomGroups.GroupForRoom(room_id); gid != "" {
-		room.GroupId = gid
-	}
-	return room, nil
-}
-
-// FindRoomByName resolves a current or historical channel-room name. The
-// catalog projection owns the replay-derived alias index; this method only
-// composes group_id onto the returned room like the other room read helpers.
-func (c *ChattoCore) FindRoomByName(ctx context.Context, name string) (*corev1.Room, error) {
-	room, ok := c.rooms().roomByName(name)
-	if !ok {
-		return nil, ErrNotFound
-	}
-	if gid := c.RoomGroups.GroupForRoom(room.Id); gid != "" {
 		room.GroupId = gid
 	}
 	return room, nil

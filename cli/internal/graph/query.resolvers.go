@@ -35,30 +35,6 @@ func (r *queryResolver) Room(ctx context.Context, roomID string) (*corev1.Room, 
 	return r.core.GetRoom(ctx, kind, roomID)
 }
 
-// RoomByName is the resolver for the roomByName field.
-func (r *queryResolver) RoomByName(ctx context.Context, name string) (*corev1.Room, error) {
-	user, err := requireAuth(ctx)
-	if err != nil {
-		return nil, err
-	}
-	room, err := r.core.FindRoomByName(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-	kind := core.KindOfRoom(room)
-
-	// Authorization: require room membership, matching room(roomId).
-	isMember, err := r.core.RoomMembershipExists(ctx, kind, user.Id, room.Id)
-	if err != nil {
-		return nil, err
-	}
-	if !isMember {
-		return nil, core.ErrNotRoomMember
-	}
-
-	return room, nil
-}
-
 // User is the resolver for the user field.
 // User profiles are visible to authenticated server users.
 func (r *queryResolver) User(ctx context.Context, userID string) (*corev1.User, error) {

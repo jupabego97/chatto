@@ -30,12 +30,7 @@
   import { serverRegistry } from '$lib/state/server/registry.svelte';
   import { getLiveDisplayName } from '$lib/state/userProfiles.svelte';
   import { serverIdToSegment } from '$lib/navigation';
-  import {
-    roomPathForSegment,
-    roomThreadPathForSegment,
-    roomURLRouteKind,
-    roomURLSegment
-  } from '$lib/roomUrls';
+  import { roomPathForSegment, roomThreadPathForSegment, roomURLSegment } from '$lib/roomUrls';
   import { getActiveServer } from '$lib/state/activeServer.svelte';
   import { clearLastRoom, setLastRoom } from '$lib/storage/lastRoom';
   import PageTitle from '$lib/ui/PageTitle.svelte';
@@ -67,18 +62,11 @@
 
   function openThread(threadRootEventId: string, highlightEventId?: string) {
     pendingThreadHighlight = highlightEventId ?? null;
-    goto(
-      roomThreadPathForSegment(
-        serverSegment,
-        currentRoomURLSegment,
-        threadRootEventId,
-        currentRoomURLRouteKind
-      )
-    );
+    goto(roomThreadPathForSegment(serverSegment, roomId, threadRootEventId));
   }
 
   function closeThread() {
-    goto(roomPathForSegment(serverSegment, currentRoomURLSegment, currentRoomURLRouteKind));
+    goto(roomPathForSegment(serverSegment, roomId));
   }
 
   // Create context-based state (must be synchronous, before children render)
@@ -91,9 +79,6 @@
   // --- Extracted hooks ---
   const room = useRoomData(() => ({ roomId }));
   const currentRoomURLSegment = $derived(room.roomData ? roomURLSegment(room.roomData.room) : roomId);
-  const currentRoomURLRouteKind = $derived(
-    room.roomData ? roomURLRouteKind(room.roomData.room) : 'legacy-id'
-  );
 
   const RoomMentionRolesQuery = graphql(`
     query RoomMentionRoles {
@@ -229,6 +214,36 @@
     }
   });
 
+  $effect(() => {
+    if (!room.roomData) return;
+    if (room.roomData.room.id !== roomId) return;
+    if (page.params.roomId === currentRoomURLSegment) return;
+
+    const fromUrl = page.url.searchParams.get('highlight');
+    if (fromUrl) {
+      stores.pendingHighlights.set(roomId, threadId ?? null, fromUrl);
+    }
+
+    if (threadId) {
+      replaceState(
+        resolve('/chat/[serverId]/[roomId]/[threadId]', {
+          serverId: serverSegment,
+          roomId: currentRoomURLSegment,
+          threadId
+        }),
+        page.state
+      );
+    } else {
+      replaceState(
+        resolve('/chat/[serverId]/[roomId]', {
+          serverId: serverSegment,
+          roomId: currentRoomURLSegment
+        }),
+        page.state
+      );
+    }
+  });
+
   // Resolve the pending highlight once room data has loaded for the
   // current roomId. Two sources, in priority order:
   //   1. PendingHighlightStore — set by in-app navigations (notification
@@ -251,17 +266,9 @@
     if (!fromUrl) return;
 
     if (threadId) {
-      replaceState(
-        roomThreadPathForSegment(
-          serverSegment,
-          currentRoomURLSegment,
-          threadId,
-          currentRoomURLRouteKind
-        ),
-        {}
-      );
+      replaceState(roomThreadPathForSegment(serverSegment, currentRoomURLSegment, threadId), {});
     } else {
-      replaceState(roomPathForSegment(serverSegment, currentRoomURLSegment, currentRoomURLRouteKind), {});
+      replaceState(roomPathForSegment(serverSegment, currentRoomURLSegment), {});
     }
     applyHighlight(fromUrl);
   });

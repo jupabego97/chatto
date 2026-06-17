@@ -612,7 +612,7 @@ export class NotificationStore {
   getCleanPath(serverId: string, notification: NotificationItem): ResolvedPathname {
     const seg = serverIdToSegment(serverId);
     const t = notificationTarget(notification);
-    const roomSegment = t.isDM ? t.roomId : (t.roomName ?? t.roomId);
+    const roomSegment = t.roomId;
 
     if (t.isDM && roomSegment) {
       // DMs are now rooms on the Server (#330 phase 3) — use the standard
@@ -622,11 +622,10 @@ export class NotificationStore {
     if (!roomSegment) {
       return resolve('/chat/[serverId]', { serverId: seg });
     }
-    const routeKind = t.isDM ? 'legacy-id' : 'name';
     if (t.threadRootId) {
-      return roomThreadPathForSegment(seg, roomSegment, t.threadRootId, routeKind);
+      return roomThreadPathForSegment(seg, roomSegment, t.threadRootId);
     }
-    return roomPathForSegment(seg, roomSegment, routeKind);
+    return roomPathForSegment(seg, roomSegment);
   }
 
   /**
@@ -642,7 +641,7 @@ export class NotificationStore {
   getNavigationPath(serverId: string, notification: NotificationItem): ResolvedPathname {
     const seg = serverIdToSegment(serverId);
     const t = notificationTarget(notification);
-    const roomSegment = t.isDM ? t.roomId : (t.roomName ?? t.roomId);
+    const roomSegment = t.roomId;
 
     if (t.isDM && roomSegment) {
       // DMs are now rooms on the Server (#330 phase 3) — use the standard
@@ -654,16 +653,15 @@ export class NotificationStore {
       return resolve('/chat/[serverId]', { serverId: seg });
     }
 
-    const routeKind = t.isDM ? 'legacy-id' : 'name';
     if (t.threadRootId && t.eventId) {
       return (
-        roomThreadPathForSegment(seg, roomSegment, t.threadRootId, routeKind) +
+        roomThreadPathForSegment(seg, roomSegment, t.threadRootId) +
         '?highlight=' +
         t.eventId
       ) as ResolvedPathname;
     }
 
-    const roomPath = roomPathForSegment(seg, roomSegment, routeKind);
+    const roomPath = roomPathForSegment(seg, roomSegment);
     return t.eventId ? (`${roomPath}?highlight=${t.eventId}` as ResolvedPathname) : roomPath;
   }
 }

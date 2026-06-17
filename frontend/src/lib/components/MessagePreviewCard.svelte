@@ -51,41 +51,6 @@ unknown instance) the component renders nothing.
     }
   `);
 
-  export const MessagePreviewByNameQuery = graphql(`
-    query MessagePreviewByName($name: String!, $eventId: ID!) {
-      server {
-        profile {
-          name
-        }
-      }
-      roomByName(name: $name) {
-        id
-        name
-        event(eventId: $eventId) {
-          id
-          createdAt
-          actor {
-            ...UserAvatarUser
-          }
-          event {
-            __typename
-            ... on MessagePostedEvent {
-              body
-              attachments {
-                id
-                filename
-                contentType
-                thumbnailAssetUrl(width: 120, height: 120, fit: COVER) {
-                  url
-                  expiresAt
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  `);
 </script>
 
 <script lang="ts">
@@ -94,8 +59,7 @@ unknown instance) the component renders nothing.
   import { useFragment } from '$lib/gql';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import { serverIdToSegment } from '$lib/navigation';
-  import { looksLikeRoomIDSegment, roomMessagePathForSegment } from '$lib/roomUrls';
-  import { isUnsupportedGraphQLFieldError } from '$lib/gql/compatibility';
+  import { roomMessagePathForSegment } from '$lib/roomUrls';
   import { graphqlClientManager } from '$lib/state/server/graphqlClient.svelte';
   import { getLiveDisplayName } from '$lib/state/userProfiles.svelte';
   import {
@@ -175,32 +139,11 @@ unknown instance) the component renders nothing.
     (async () => {
       try {
         const client = graphqlClientManager.getClient(serverId).client;
-        let resolvedRoom = null;
-        let serverName: string | null = null;
-
-        if ((link.roomRouteKind ?? 'legacy-id') === 'legacy-id' && looksLikeRoomIDSegment(roomId)) {
-          const idResult = await client
-            .query(MessagePreviewQuery, { roomId, eventId: messageId })
-            .toPromise();
-          resolvedRoom = idResult.data?.room;
-          serverName = idResult.data?.server.profile.name ?? null;
-        }
-
-        if (!resolvedRoom) {
-          const nameResult = await client
-            .query(MessagePreviewByNameQuery, { name: roomId, eventId: messageId })
-            .toPromise();
-
-          resolvedRoom = nameResult.data?.roomByName;
-          serverName = nameResult.data?.server.profile.name ?? serverName;
-
-          if (
-            nameResult.error &&
-            !isUnsupportedGraphQLFieldError(nameResult.error, 'roomByName')
-          ) {
-            return;
-          }
-        }
+        const result = await client
+          .query(MessagePreviewQuery, { roomId, eventId: messageId })
+          .toPromise();
+        const resolvedRoom = result.data?.room;
+        const serverName = result.data?.server.profile.name ?? null;
 
         if (cancelled) return;
 
@@ -257,8 +200,7 @@ unknown instance) the component renders nothing.
         : preview.body
       : ''
   );
-  const previewRoomSegment = $derived(preview ? preview.roomName?.trim() || preview.roomId : '');
-  const previewRoomRouteKind = $derived(preview?.roomName?.trim() ? 'name' : 'legacy-id');
+  const previewRoomSegment = $derived(preview?.roomId ?? '');
 
   function attachmentLabel(contentType: string): string {
     if (contentType.startsWith('image/')) return 'Image';
@@ -380,8 +322,7 @@ unknown instance) the component renders nothing.
     href={roomMessagePathForSegment(
       serverIdToSegment(preview.serverId),
       previewRoomSegment,
-      preview.eventId,
-      previewRoomRouteKind
+      preview.eventId
     )}
     data-testid="message-preview-card"
     class="group/preview relative flex w-full max-w-md cursor-pointer flex-col embed-frame bg-surface-100 group-hover/msg:bg-surface-200 hover:bg-surface-300"

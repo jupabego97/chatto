@@ -47,7 +47,7 @@ async function renameRoom(page: import('@playwright/test').Page, roomId: string,
   }
 }
 
-test('room URLs use names and canonicalize legacy or stale segments', async ({ page }) => {
+test('room URLs canonicalize ID routes with the current room name suffix', async ({ page }) => {
   await createAndLoginTestUser(page);
   await page.goto(routes.chat);
 
@@ -55,22 +55,24 @@ test('room URLs use names and canonicalize legacy or stale segments', async ({ p
   const initialName = `urlroom${stamp}`;
   const currentName = `urlroomcurrent${stamp}`;
   const room = await createJoinedRoom(page, initialName);
+  const initialCanonical = routes.room(`${room.id}-${initialName}`);
+  const currentCanonical = routes.room(`${room.id}-${currentName}`);
 
   await page.goto(routes.room(room.id));
-  await page.waitForURL((url) => url.pathname === routes.room(initialName), {
+  await page.waitForURL((url) => url.pathname === initialCanonical, {
     timeout: TIMEOUTS.REALTIME_EVENT
   });
   await expect(page.getByRole('heading', { name: `# ${initialName}` })).toBeVisible();
 
   await renameRoom(page, room.id, currentName);
 
-  await page.goto(routes.room(initialName));
-  await page.waitForURL((url) => url.pathname === routes.room(currentName), {
+  await page.goto(initialCanonical);
+  await page.waitForURL((url) => url.pathname === currentCanonical, {
     timeout: TIMEOUTS.REALTIME_EVENT
   });
   await expect(page.getByRole('heading', { name: `# ${currentName}` })).toBeVisible();
 
-  await page.goto(routes.room(`missing${stamp}`));
+  await page.goto(routes.room(`Rmissing${stamp}-whatever`));
   await page.waitForURL((url) => url.pathname === routes.chat, {
     timeout: TIMEOUTS.REALTIME_EVENT
   });

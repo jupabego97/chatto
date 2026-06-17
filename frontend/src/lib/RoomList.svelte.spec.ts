@@ -208,8 +208,8 @@ describe('RoomList', () => {
 
     const { container } = render(RoomList);
 
-    await expect.element(q(container, '[href="/chat/-/r/general"]')).toBeInTheDocument();
-    const channelRow = q(container, '[href="/chat/-/r/general"]');
+    await expect.element(q(container, '[href="/chat/-/channel-1"]')).toBeInTheDocument();
+    const channelRow = q(container, '[href="/chat/-/channel-1"]');
     expect(channelRow?.querySelector('[data-testid="room-call-badge"]')).not.toBeNull();
     expect(channelRow?.querySelector('.uil--phone')).not.toBeNull();
   });

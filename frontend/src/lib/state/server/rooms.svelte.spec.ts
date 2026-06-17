@@ -367,28 +367,22 @@ describe('RoomsStore - ingestServerEvent', () => {
 });
 
 describe('RoomsStore - resolveLoadedURLSegment', () => {
-  it('resolves room IDs and canonicalizes channel IDs to names', () => {
+  it('resolves loaded room IDs', () => {
     const { client } = makeClient([]);
     const store = makeStore(client);
     store.rooms = [makeListRoom('R1', { name: 'General', type: RoomType.Channel })];
 
     expect(store.resolveLoadedURLSegment('R1')).toMatchObject({
-      roomId: 'R1',
-      canonicalSegment: 'General',
-      canonicalRouteKind: 'name'
+      roomId: 'R1'
     });
   });
 
-  it('resolves current channel names case insensitively', () => {
+  it('does not resolve room names', () => {
     const { client } = makeClient([]);
     const store = makeStore(client);
     store.rooms = [makeListRoom('R1', { name: 'General', type: RoomType.Channel })];
 
-    expect(store.resolveLoadedURLSegment('general', 'name')).toMatchObject({
-      roomId: 'R1',
-      canonicalSegment: 'General',
-      canonicalRouteKind: 'name'
-    });
+    expect(store.resolveLoadedURLSegment('general')).toBeNull();
   });
 
   it('keeps DM URLs ID based', () => {
@@ -397,10 +391,8 @@ describe('RoomsStore - resolveLoadedURLSegment', () => {
     store.rooms = [makeListRoom('deadbeef123456', { name: '', type: RoomType.Dm })];
 
     expect(store.resolveLoadedURLSegment('deadbeef123456')).toMatchObject({
-      roomId: 'deadbeef123456',
-      canonicalSegment: 'deadbeef123456',
-      canonicalRouteKind: 'legacy-id'
+      roomId: 'deadbeef123456'
     });
-    expect(store.resolveLoadedURLSegment('', 'name')).toBeNull();
+    expect(store.resolveLoadedURLSegment('')).toBeNull();
   });
 });

@@ -21,9 +21,8 @@ import (
 // "single consumer per filter" out-of-scope note in ADR-033.
 type RoomCatalogProjection struct {
 	events.MemoryProjection
-	rooms       map[string]*roomCatalogEntry
-	nameAliases map[string][]string
-	seq         uint64
+	rooms map[string]*roomCatalogEntry
+	seq   uint64
 }
 
 type RoomNameClaimSnapshot struct {
@@ -44,8 +43,7 @@ type roomCatalogEntry struct {
 // NewRoomCatalogProjection returns an empty projection.
 func NewRoomCatalogProjection() *RoomCatalogProjection {
 	return &RoomCatalogProjection{
-		rooms:       make(map[string]*roomCatalogEntry),
-		nameAliases: make(map[string][]string),
+		rooms: make(map[string]*roomCatalogEntry),
 	}
 }
 
@@ -79,13 +77,11 @@ func (p *RoomCatalogProjection) Apply(event *corev1.Event, seq uint64) error {
 			description: c.GetDescription(),
 			kind:        c.GetKind(),
 		}
-		p.recordNameAliasLocked(c.GetName(), c.GetRoomId(), c.GetKind())
 	case *corev1.Event_RoomUpdated:
 		u := e.RoomUpdated
 		if entry := p.rooms[u.GetRoomId()]; entry != nil {
 			entry.name = u.GetName()
 			entry.description = u.GetDescription()
-			p.recordNameAliasLocked(u.GetName(), u.GetRoomId(), entry.kind)
 		}
 	case *corev1.Event_RoomArchived:
 		if entry := p.rooms[e.RoomArchived.GetRoomId()]; entry != nil {
@@ -96,9 +92,7 @@ func (p *RoomCatalogProjection) Apply(event *corev1.Event, seq uint64) error {
 			entry.archived = false
 		}
 	case *corev1.Event_RoomDeleted:
-		roomID := e.RoomDeleted.GetRoomId()
-		delete(p.rooms, roomID)
-		p.removeNameAliasesLocked(roomID)
+		delete(p.rooms, e.RoomDeleted.GetRoomId())
 	}
 	return nil
 }
@@ -160,34 +154,6 @@ func (p *RoomCatalogProjection) FindByName(name string) string {
 	return p.NameClaimSnapshot(name).OwnerRoomID
 }
 
-// ResolveName returns the channel room currently addressed by a room name.
-// Current channel-room names win first, followed by historical channel-room
-// names replay-derived from room create/update facts. Aliases owned only by
-// deleted rooms are ignored.
-func (p *RoomCatalogProjection) ResolveName(name string) (*corev1.Room, bool) {
-	normalized := normalizeRoomName(name)
-	if normalized == "" {
-		return nil, false
-	}
-
-	p.RLock()
-	defer p.RUnlock()
-
-	if roomID := p.currentRoomIDByNameLocked(normalized); roomID != "" {
-		return entryToRoom(roomID, p.rooms[roomID]), true
-	}
-
-	for _, roomID := range reverseStrings(p.nameAliases[normalized]) {
-		entry := p.rooms[roomID]
-		if entry == nil || entry.kind != corev1.RoomKind_ROOM_KIND_CHANNEL {
-			continue
-		}
-		return entryToRoom(roomID, entry), true
-	}
-
-	return nil, false
-}
-
 func (p *RoomCatalogProjection) NameClaimSnapshot(name string) RoomNameClaimSnapshot {
 	target := normalizeRoomName(name)
 	if target == "" {
@@ -214,49 +180,8 @@ func (p *RoomCatalogProjection) currentRoomIDByNameLocked(normalized string) str
 	return ""
 }
 
-func (p *RoomCatalogProjection) recordNameAliasLocked(name, roomID string, kind corev1.RoomKind) {
-	if kind != corev1.RoomKind_ROOM_KIND_CHANNEL {
-		return
-	}
-	normalized := normalizeRoomName(name)
-	if normalized == "" {
-		return
-	}
-	owners := p.nameAliases[normalized]
-	for _, owner := range owners {
-		if owner == roomID {
-			return
-		}
-	}
-	p.nameAliases[normalized] = append(owners, roomID)
-}
-
-func (p *RoomCatalogProjection) removeNameAliasesLocked(roomID string) {
-	for name, owners := range p.nameAliases {
-		filtered := owners[:0]
-		for _, owner := range owners {
-			if owner != roomID {
-				filtered = append(filtered, owner)
-			}
-		}
-		if len(filtered) == 0 {
-			delete(p.nameAliases, name)
-			continue
-		}
-		p.nameAliases[name] = filtered
-	}
-}
-
 func normalizeRoomName(name string) string {
 	return strings.ToLower(strings.TrimSpace(name))
-}
-
-func reverseStrings(in []string) []string {
-	out := make([]string, len(in))
-	for i := range in {
-		out[i] = in[len(in)-1-i]
-	}
-	return out
 }
 
 // entryToRoom converts a private catalog entry into the public

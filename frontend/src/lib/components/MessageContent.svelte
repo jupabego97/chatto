@@ -98,8 +98,7 @@
           roomMessagePathForSegment(
             messageLink.serverSegment,
             messageLink.roomId,
-            messageLink.messageId,
-            messageLink.roomRouteKind ?? 'legacy-id'
+            messageLink.messageId
           )
         );
         return;

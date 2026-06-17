@@ -33,7 +33,7 @@ rooms are organized into collapsible sections. Otherwise, rooms display alphabet
     type RoomsListGroup,
     type RoomsListGroupItem
   } from '$lib/state/server/rooms.svelte';
-  import { roomPathForSegment, roomPathForTarget } from '$lib/roomUrls';
+  import { roomIDFromURLSegment, roomPathForSegment, roomPathForTarget } from '$lib/roomUrls';
 
   // No props — RoomList reads everything from the active server's stores.
   // All store references go through `stores` ($derived), so when the active
@@ -52,10 +52,7 @@ rooms are organized into collapsible sections. Otherwise, rooms display alphabet
   const roomsStore = $derived(stores.rooms);
 
   let activeRoomId = $derived(
-    roomsStore.resolveLoadedURLSegment(
-      page.params.roomId ?? '',
-      page.route?.id?.includes('/r/[roomId]') ? 'name' : 'legacy-id'
-    )?.roomId ?? page.params.roomId
+    page.params.roomId ? roomIDFromURLSegment(page.params.roomId) : undefined
   );
 
   // Load active call room IDs whenever the active server has a LiveKit URL.

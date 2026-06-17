@@ -9,13 +9,16 @@ export type RoomURLTarget = {
   type?: RoomType | string | null;
 };
 
-export type RoomRouteKind = 'legacy-id' | 'name';
-
 export function looksLikeRoomIDSegment(segment: string): boolean {
   return (
-    (segment.startsWith('R') && /^[A-Za-z0-9_-]{1,30}$/.test(segment)) ||
+    (segment.startsWith('R') && /^[A-Za-z0-9]{1,30}$/.test(segment)) ||
     /^[a-f0-9]{14}$/.test(segment)
   );
+}
+
+export function roomIDFromURLSegment(segment: string): string {
+  const separator = segment.indexOf('-');
+  return separator > 0 ? segment.slice(0, separator) : segment;
 }
 
 export function roomURLSegment(room: RoomURLTarget): string {
@@ -23,21 +26,14 @@ export function roomURLSegment(room: RoomURLTarget): string {
     return room.id;
   }
   const name = room.name.trim();
-  return name || room.id;
-}
-
-export function roomURLRouteKind(room: RoomURLTarget): RoomRouteKind {
-  if (room.type === RoomType.Dm || room.type === 'DM') {
-    return 'legacy-id';
-  }
-  return room.name.trim() ? 'name' : 'legacy-id';
+  return name ? `${room.id}-${name}` : room.id;
 }
 
 export function roomPathForTarget(
   serverSegment: string,
   room: RoomURLTarget
 ): ResolvedPathname {
-  return roomPathForSegment(serverSegment, roomURLSegment(room), roomURLRouteKind(room));
+  return roomPathForSegment(serverSegment, room.id);
 }
 
 export function roomPath(serverId: string, room: RoomURLTarget): ResolvedPathname {
@@ -49,12 +45,7 @@ export function roomThreadPath(
   room: RoomURLTarget,
   threadId: string
 ): ResolvedPathname {
-  return roomThreadPathForSegment(
-    serverIdToSegment(serverId),
-    roomURLSegment(room),
-    threadId,
-    roomURLRouteKind(room)
-  );
+  return roomThreadPathForSegment(serverIdToSegment(serverId), room.id, threadId);
 }
 
 export function roomMessagePath(
@@ -62,25 +53,13 @@ export function roomMessagePath(
   room: RoomURLTarget,
   messageId: string
 ): ResolvedPathname {
-  return roomMessagePathForSegment(
-    serverIdToSegment(serverId),
-    roomURLSegment(room),
-    messageId,
-    roomURLRouteKind(room)
-  );
+  return roomMessagePathForSegment(serverIdToSegment(serverId), room.id, messageId);
 }
 
 export function roomPathForSegment(
   serverSegment: string,
-  roomSegment: string,
-  routeKind: RoomRouteKind = 'legacy-id'
+  roomSegment: string
 ): ResolvedPathname {
-  if (routeKind === 'name') {
-    return resolve('/chat/[serverId]/r/[roomId]', {
-      serverId: serverSegment,
-      roomId: roomSegment
-    });
-  }
   return resolve('/chat/[serverId]/[roomId]', {
     serverId: serverSegment,
     roomId: roomSegment
@@ -90,16 +69,8 @@ export function roomPathForSegment(
 export function roomThreadPathForSegment(
   serverSegment: string,
   roomSegment: string,
-  threadId: string,
-  routeKind: RoomRouteKind = 'legacy-id'
+  threadId: string
 ): ResolvedPathname {
-  if (routeKind === 'name') {
-    return resolve('/chat/[serverId]/r/[roomId]/[threadId]', {
-      serverId: serverSegment,
-      roomId: roomSegment,
-      threadId
-    });
-  }
   return resolve('/chat/[serverId]/[roomId]/[threadId]', {
     serverId: serverSegment,
     roomId: roomSegment,
@@ -110,16 +81,8 @@ export function roomThreadPathForSegment(
 export function roomMessagePathForSegment(
   serverSegment: string,
   roomSegment: string,
-  messageId: string,
-  routeKind: RoomRouteKind = 'legacy-id'
+  messageId: string
 ): ResolvedPathname {
-  if (routeKind === 'name') {
-    return resolve('/chat/[serverId]/r/[roomId]/m/[messageId]', {
-      serverId: serverSegment,
-      roomId: roomSegment,
-      messageId
-    });
-  }
   return resolve('/chat/[serverId]/[roomId]/m/[messageId]', {
     serverId: serverSegment,
     roomId: roomSegment,

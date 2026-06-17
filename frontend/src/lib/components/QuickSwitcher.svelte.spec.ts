@@ -348,9 +348,9 @@ describe('QuickSwitcher', () => {
     );
 
     await vi.waitFor(() => {
-      expect(mocks.goto).toHaveBeenCalledWith('/chat/-/xylophone-chat');
+      expect(mocks.goto).toHaveBeenCalledWith('/chat/-/room-xylophone');
     });
-    expect(mocks.recents.record).toHaveBeenCalledWith('/chat/-/xylophone-chat');
+    expect(mocks.recents.record).toHaveBeenCalledWith('/chat/-/room-xylophone');
     expect(dialog(container).hasAttribute('open')).toBe(false);
   });
 

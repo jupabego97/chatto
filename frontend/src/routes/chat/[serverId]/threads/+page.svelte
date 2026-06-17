@@ -182,9 +182,8 @@
     goto(
       roomThreadPathForSegment(
         serverIdToSegment(getActiveServer()),
-        thread.roomName || thread.roomId,
-        thread.threadRootEventId,
-        thread.roomName ? 'name' : 'legacy-id'
+        thread.roomId,
+        thread.threadRootEventId
       )
     );
   }

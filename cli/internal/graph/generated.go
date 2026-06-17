@@ -547,7 +547,6 @@ type ComplexityRoot struct {
 		Admin             func(childComplexity int) int
 		LinkPreview       func(childComplexity int, url string) int
 		Room              func(childComplexity int, roomID string) int
-		RoomByName        func(childComplexity int, name string) int
 		Server            func(childComplexity int) int
 		User              func(childComplexity int, userID string) int
 		UserByLogin       func(childComplexity int, login string) int
@@ -1220,7 +1219,6 @@ type PresenceChangedEventResolver interface {
 }
 type QueryResolver interface {
 	Room(ctx context.Context, roomID string) (*corev1.Room, error)
-	RoomByName(ctx context.Context, name string) (*corev1.Room, error)
 	User(ctx context.Context, userID string) (*corev1.User, error)
 	UserByLogin(ctx context.Context, login string) (*corev1.User, error)
 	Admin(ctx context.Context) (*model.AdminQueries, error)
@@ -3785,17 +3783,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Room(childComplexity, args["roomId"].(string)), true
-	case "Query.roomByName":
-		if e.ComplexityRoot.Query.RoomByName == nil {
-			break
-		}
-
-		args, err := ec.field_Query_roomByName_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.ComplexityRoot.Query.RoomByName(childComplexity, args["name"].(string)), true
 	case "Query.server":
 		if e.ComplexityRoot.Query.Server == nil {
 			break
@@ -8613,20 +8600,6 @@ func (ec *executionContext) field_Query_linkPreview_argsURL(
 		var zeroVal string
 		return zeroVal, graphql.ErrorOnPath(ctx, fmt.Errorf(`unexpected type %T from directive, should be string`, tmp))
 	}
-}
-
-func (ec *executionContext) field_Query_roomByName_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "name",
-		func(ctx context.Context, v any) (string, error) {
-			return ec.unmarshalNString2string(ctx, v)
-		})
-	if err != nil {
-		return nil, err
-	}
-	args["name"] = arg0
-	return args, nil
 }
 
 func (ec *executionContext) field_Query_room_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
@@ -18489,50 +18462,6 @@ func (ec *executionContext) fieldContext_Query_room(ctx context.Context, field g
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_room_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Query_roomByName(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_Query_roomByName(ctx, field)
-		},
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().RoomByName(ctx, fc.Args["name"].(string))
-		},
-		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v *corev1.Room) graphql.Marshaler {
-			return ec.marshalORoom2ᚖhmansᚗdeᚋchattoᚋinternalᚋpbᚋchattoᚋcoreᚋv1ᚐRoom(ctx, selections, v)
-		},
-		true,
-		false,
-	)
-}
-func (ec *executionContext) fieldContext_Query_roomByName(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Query",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.childFields_Room(ctx, field)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Query_roomByName_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -36785,25 +36714,6 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_room(ctx, field)
-				return res
-			}
-
-			rrm := func(ctx context.Context) graphql.Marshaler {
-				return ec.OperationContext.RootResolverMiddleware(ctx,
-					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
-		case "roomByName":
-			field := field
-
-			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Query_roomByName(ctx, field)
 				return res
 			}
 

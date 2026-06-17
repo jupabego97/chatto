@@ -8,7 +8,6 @@ import {
   UserAvatarUserFragmentDoc,
   type UserAvatarUserFragment
 } from '$lib/gql/graphql';
-import { roomURLRouteKind, roomURLSegment, type RoomRouteKind } from '$lib/roomUrls';
 import type { NotificationLevelStore } from '$lib/state/server/notificationLevel.svelte';
 import type { RoomUnreadStore } from '$lib/state/server/roomUnread.svelte';
 
@@ -32,8 +31,6 @@ export type RoomsListGroup = {
 export type ResolvedLoadedRoomSegment = {
   room: RoomsListItem;
   roomId: string;
-  canonicalSegment: string;
-  canonicalRouteKind: RoomRouteKind;
 };
 
 export type SidebarLinkListItem = {
@@ -334,42 +331,16 @@ export class RoomsStore {
     });
   }
 
-  resolveLoadedURLSegment(
-    segment: string,
-    routeKind: RoomRouteKind = 'legacy-id'
-  ): ResolvedLoadedRoomSegment | null {
-    if (routeKind === 'name') {
-      return this.resolveLoadedRoomName(segment);
-    }
-
+  resolveLoadedURLSegment(segment: string): ResolvedLoadedRoomSegment | null {
     const byId = this.rooms.find((room) => room.id === segment);
     if (byId) {
       return {
         room: byId,
-        roomId: byId.id,
-        canonicalSegment: roomURLSegment(byId),
-        canonicalRouteKind: roomURLRouteKind(byId)
+        roomId: byId.id
       };
     }
 
     return null;
-  }
-
-  private resolveLoadedRoomName(segment: string): ResolvedLoadedRoomSegment | null {
-    const normalized = segment.trim().toLowerCase();
-    if (!normalized) return null;
-
-    const byName = this.rooms.find(
-      (room) => room.type === RoomType.Channel && room.name.trim().toLowerCase() === normalized
-    );
-    if (!byName) return null;
-
-    return {
-      room: byName,
-      roomId: byName.id,
-      canonicalSegment: roomURLSegment(byName),
-      canonicalRouteKind: roomURLRouteKind(byName)
-    };
   }
 
   /**

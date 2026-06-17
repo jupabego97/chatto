@@ -15,7 +15,6 @@ import { CallParticipantsState } from './callParticipants.svelte';
 import { ActiveCallRoomsState } from './activeCallRooms.svelte';
 import { RoomsStore } from './rooms.svelte';
 import { RoomDirectoryStore } from './roomDirectory.svelte';
-import { RoomRouteResolverStore } from './roomRoutes.svelte';
 import { AdminRoomLayoutStore } from './adminRoomLayout.svelte';
 import { eventBusManager } from './eventBus.svelte';
 import type { EventBusCatchUpReason, EventHandler } from '$lib/eventBus.svelte';
@@ -56,7 +55,6 @@ export class ServerStateStore {
   readonly callParticipants: CallParticipantsState;
   readonly activeCallRooms: ActiveCallRoomsState;
   readonly rooms: RoomsStore;
-  readonly roomRoutes: RoomRouteResolverStore;
   readonly roomDirectory: RoomDirectoryStore;
   readonly adminRoomLayout: AdminRoomLayoutStore;
 
@@ -92,7 +90,6 @@ export class ServerStateStore {
     this.callParticipants = new CallParticipantsState(client);
     this.activeCallRooms = new ActiveCallRoomsState(client, this.voiceCall);
     this.rooms = new RoomsStore(client, this.notificationLevels, this.roomUnread);
-    this.roomRoutes = new RoomRouteResolverStore(client, this.rooms);
     this.roomDirectory = new RoomDirectoryStore(client);
     this.adminRoomLayout = new AdminRoomLayoutStore(client);
 
