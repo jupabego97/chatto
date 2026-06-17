@@ -1,10 +1,9 @@
 import { expect } from '@playwright/test';
-import { createAndLoginTestUser, joinSpace } from './fixtures/testUser';
+import { createAndLoginTestUser } from './fixtures/testUser';
+import { withServerUser } from './fixtures/serverUser';
 import { waitForRoomReady } from './fixtures/realtimeSync';
 import { test } from './setup';
-import { ChatPage, RoomPage } from './pages';
 import { TIMEOUTS } from './constants';
-import * as routes from './routes';
 
 test.describe('Thread Following', () => {
   test('follow bell is visible on messages with thread replies', async ({
@@ -14,7 +13,6 @@ test.describe('Thread Following', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post root message and open thread
@@ -33,7 +31,6 @@ test.describe('Thread Following', () => {
   test('clicking follow bell toggles follow state', async ({ page, chatPage, roomPage }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Create a thread
@@ -62,7 +59,6 @@ test.describe('Thread Following', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post root message and open thread
@@ -80,7 +76,6 @@ test.describe('Thread Following', () => {
   test('thread pane follow button toggles follow state', async ({ page, chatPage, roomPage }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Create a thread and stay in the pane
@@ -108,7 +103,6 @@ test.describe('Thread Following', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Create a second room to navigate to
@@ -150,37 +144,26 @@ test.describe('Thread Following', () => {
     // User A (Alice) posts a root message
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
-
-    const spaceId = await chatPage.getSpaceId();
 
     const rootText = `Root ${Date.now()}`;
     const rootMsg = await roomPage.sendMessage(rootText);
 
-    // User B (Bob) joins the space and replies to Alice's message in a thread
-    const context2 = await browser!.newContext({ baseURL: serverURL });
-    const page2 = await context2.newPage();
+    // User B (Bob) opens the server and replies to Alice's message in a thread
+    await withServerUser(
+      browser!,
+      serverURL,
+      async ({ page: page2, chatPage: chatPage2, roomPage: roomPage2 }) => {
+        await chatPage2.enterRoom('general');
+        await waitForRoomReady(page2, 'general');
 
-    try {
-      await createAndLoginTestUser(page2);
-      await joinSpace(page2);
-      await page2.goto(routes.space());
-
-      const chatPage2 = new ChatPage(page2);
-      const roomPage2 = new RoomPage(page2);
-
-      await chatPage2.enterRoom('general');
-      await waitForRoomReady(page2, 'general');
-
-      // Bob opens a thread on Alice's message and posts a reply
-      const rootMsg2 = roomPage2.getMessage(rootText);
-      await rootMsg2.openThread();
-      await roomPage2.expectThreadPaneVisible();
-      await roomPage2.postThreadReply(`Reply from Bob ${Date.now()}`);
-    } finally {
-      await context2.close();
-    }
+        // Bob opens a thread on Alice's message and posts a reply
+        const rootMsg2 = roomPage2.getMessage(rootText);
+        await rootMsg2.openThread();
+        await roomPage2.expectThreadPaneVisible();
+        await roomPage2.postThreadReply(`Reply from Bob ${Date.now()}`);
+      }
+    );
 
     // Alice should see the thread reply count appear
     await expect(page.getByText('1 reply')).toBeVisible({
@@ -202,44 +185,33 @@ test.describe('Thread Following', () => {
     // User A (Alice) posts a root message
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
-
-    const spaceId = await chatPage.getSpaceId();
 
     const rootText = `Root ${Date.now()}`;
     await roomPage.sendMessage(rootText);
 
-    // User B (Bob) joins the space
-    const context2 = await browser!.newContext({ baseURL: serverURL });
-    const page2 = await context2.newPage();
+    // User B (Bob) opens the server
+    await withServerUser(
+      browser!,
+      serverURL,
+      async ({ page: page2, chatPage: chatPage2, roomPage: roomPage2 }) => {
+        await chatPage2.enterRoom('general');
+        await waitForRoomReady(page2, 'general');
 
-    try {
-      await createAndLoginTestUser(page2);
-      await joinSpace(page2);
-      await page2.goto(routes.space());
+        // Bob opens a thread on Alice's message and posts a reply
+        const rootMsg2 = roomPage2.getMessage(rootText);
+        await rootMsg2.openThread();
+        await roomPage2.expectThreadPaneVisible();
+        await roomPage2.postThreadReply(`Reply from Bob ${Date.now()}`);
 
-      const chatPage2 = new ChatPage(page2);
-      const roomPage2 = new RoomPage(page2);
+        // Close the thread pane to see the room view
+        await roomPage2.closeThread();
 
-      await chatPage2.enterRoom('general');
-      await waitForRoomReady(page2, 'general');
-
-      // Bob opens a thread on Alice's message and posts a reply
-      const rootMsg2 = roomPage2.getMessage(rootText);
-      await rootMsg2.openThread();
-      await roomPage2.expectThreadPaneVisible();
-      await roomPage2.postThreadReply(`Reply from Bob ${Date.now()}`);
-
-      // Close the thread pane to see the room view
-      await roomPage2.closeThread();
-
-      // Bob should see the follow bell as ACTIVE in the room view
-      // (auto-followed as the replier who started the thread)
-      await rootMsg2.expectFollowingThread();
-    } finally {
-      await context2.close();
-    }
+        // Bob should see the follow bell as ACTIVE in the room view
+        // (auto-followed as the replier who started the thread)
+        await rootMsg2.expectFollowingThread();
+      }
+    );
   });
 
   test('unfollow persists when another user replies', async ({
@@ -251,10 +223,7 @@ test.describe('Thread Following', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
-
-    const spaceId = await chatPage.getSpaceId();
 
     // User A posts root message and creates a thread
     const rootText = `Root ${Date.now()}`;
@@ -269,28 +238,20 @@ test.describe('Thread Following', () => {
     await roomPage.closeThread();
 
     // User B joins and replies to the same thread
-    const context2 = await browser!.newContext({ baseURL: serverURL });
-    const page2 = await context2.newPage();
+    await withServerUser(
+      browser!,
+      serverURL,
+      async ({ page: page2, chatPage: chatPage2, roomPage: roomPage2 }) => {
+        await chatPage2.enterRoom('general');
+        await waitForRoomReady(page2, 'general');
 
-    try {
-      await createAndLoginTestUser(page2);
-      await joinSpace(page2);
-      await page2.goto(routes.space());
-
-      const chatPage2 = new ChatPage(page2);
-      const roomPage2 = new RoomPage(page2);
-
-      await chatPage2.enterRoom('general');
-      await waitForRoomReady(page2, 'general');
-
-      // User B opens the thread and replies
-      const rootMsg2 = roomPage2.getMessage(rootText);
-      await rootMsg2.openThread();
-      await roomPage2.expectThreadPaneVisible();
-      await roomPage2.postThreadReply(`Reply from B ${Date.now()}`);
-    } finally {
-      await context2.close();
-    }
+        // User B opens the thread and replies
+        const rootMsg2 = roomPage2.getMessage(rootText);
+        await rootMsg2.openThread();
+        await roomPage2.expectThreadPaneVisible();
+        await roomPage2.postThreadReply(`Reply from B ${Date.now()}`);
+      }
+    );
 
     // Wait for User B's reply to arrive — reply count on root message should increase to 2
     await expect(page.getByText('2 replies')).toBeVisible({
@@ -312,10 +273,7 @@ test.describe('Thread Following', () => {
     // User A posts two messages: a root and a reply-attributed reply (inReplyTo set)
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
-
-    const spaceId = await chatPage.getSpaceId();
 
     const firstMsg = await roomPage.sendMessage(`First ${Date.now()}`);
 
@@ -325,28 +283,20 @@ test.describe('Thread Following', () => {
     const replyText = `Reply-attributed ${Date.now()}`;
     await roomPage.sendMessage(replyText);
 
-    // User B joins the space and starts a thread on User A's reply-attributed message
-    const context2 = await browser!.newContext({ baseURL: serverURL });
-    const page2 = await context2.newPage();
+    // User B opens the server and starts a thread on User A's reply-attributed message
+    await withServerUser(
+      browser!,
+      serverURL,
+      async ({ page: page2, chatPage: chatPage2, roomPage: roomPage2 }) => {
+        await chatPage2.enterRoom('general');
+        await waitForRoomReady(page2, 'general');
 
-    try {
-      await createAndLoginTestUser(page2);
-      await joinSpace(page2);
-      await page2.goto(routes.space());
-
-      const chatPage2 = new ChatPage(page2);
-      const roomPage2 = new RoomPage(page2);
-
-      await chatPage2.enterRoom('general');
-      await waitForRoomReady(page2, 'general');
-
-      const targetMsg = roomPage2.getMessage(replyText);
-      await targetMsg.openThread();
-      await roomPage2.expectThreadPaneVisible();
-      await roomPage2.postThreadReply(`Thread reply from B ${Date.now()}`);
-    } finally {
-      await context2.close();
-    }
+        const targetMsg = roomPage2.getMessage(replyText);
+        await targetMsg.openThread();
+        await roomPage2.expectThreadPaneVisible();
+        await roomPage2.postThreadReply(`Thread reply from B ${Date.now()}`);
+      }
+    );
 
     // User A: wait for the thread reply count to appear via subscription
     await expect(page.getByText('1 reply')).toBeVisible({

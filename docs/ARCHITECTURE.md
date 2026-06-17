@@ -115,7 +115,7 @@ Projections are in-memory read models rebuilt from `EVT`. `NewChattoCore` regist
 | ------------------ | -------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | Room directory     | Room Directory       | `evt.room.>`                                               | `RoomCatalogProjection`, `RoomMembershipProjection`, `RoomBanProjection`; room details including Room Information, member queries, and room authorization |
 | Room organization  | Room Group Layout    | `evt.group.>`, `evt.layout.>`                              | `RoomGroupProjection`, `RoomLayoutProjection`; sidebar groups and room ordering            |
-| Room timeline      | Room Timeline        | `evt.room.>`                                               | Raw room log, visible timeline index, latest message bodies, hidden echoes, and message asset references |
+| Room timeline      | Room Timeline        | `evt.room.>`                                               | Raw room log, visible timeline index, latest message bodies, hidden echoes, current attachment-bearing message index, and message asset references |
 | Assets             | Assets               | `evt.asset.>`, legacy `evt.room.*.asset_*`                 | Asset creation metadata, room scope, processing manifests, derivative graph, deletion state, and legacy room-asset compatibility |
 | Threads            | Threads              | `evt.room.>`, `evt.user.*.user_key_shredded`               | Per-thread reply logs, summaries, participants, reply counts                               |
 | Reactions          | Reactions            | `evt.room.>`                                               | Current per-message reaction sets and room-scoped snapshot OCC positions                   |
@@ -140,12 +140,12 @@ The schema is modular: each feature area lives in its own `.graphqls` file and e
 
 **Server & identity** ([`server.graphqls`](../cli/internal/graph/server.graphqls), [`server_rbac.graphqls`](../cli/internal/graph/server_rbac.graphqls))
 
-| Query                                | Description                                                                    |
-| ------------------------------------ | ------------------------------------------------------------------------------ |
-| `server`                             | Information about this Chatto server (name, branding, member counts). Public. |
+| Query                                | Description                                                                                                     |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `server`                             | Information about this Chatto server (name, branding, member counts, viewer unread notification count). Public. |
 | `viewer`                             | Nullable current-user scope: authenticated identity, permissions, follows, notifications; `null` for unauthenticated callers. |
 
-Note: there is no top-level `me` query — viewer-scoped state hangs off the `viewer` field (which is extended by several feature files, e.g. `threads.graphqls` adds `viewer.followedThreads`, `notifications.graphqls` adds `viewer.notifications` / `viewer.hasNotifications`).
+Note: there is no top-level `me` query — viewer-scoped state hangs off the `viewer` field (which is extended by several feature files, e.g. `threads.graphqls` adds `viewer.followedThreads`, `notifications.graphqls` adds `viewer.notifications` / `viewer.hasNotifications`). Notification badges use scoped `Server.viewerNotifications` and `Room.viewerNotifications` connections and read their `totalCount`.
 
 **Users** ([`query.graphqls`](../cli/internal/graph/query.graphqls))
 
@@ -159,7 +159,7 @@ Note: there is no top-level `me` query — viewer-scoped state hangs off the `vi
 
 | Query                              | Description                                                                            |
 | ---------------------------------- | -------------------------------------------------------------------------------------- |
-| `room(roomId)`                     | Get a room by ID for room members. Room-scoped reads (`information`, `members`, `events`, `event(eventId)`, `eventsAround`, `voiceCallToken`, `viewerCan*` flags) live as fields on the returned `Room`; `members` is offset-paginated. `information` returns Markdown source only to room members or callers with `room.manage` for that room. `events` is the visible room timeline. Folded durable facts such as reactions are reflected in projected room reads; the web client refreshes the current room window after wake/reconnect to catch up without a full document reload. |
+| `room(roomId)`                     | Get a room by ID for room members. Room-scoped reads (`information`, `members`, `events`, `event(eventId)`, `eventsAround`, `voiceCallToken`, `viewerCan*` flags, `viewerNotifications`) live as fields on the returned `Room`; `members` and `viewerNotifications` are offset-paginated. `information` returns Markdown source only to room members or callers with `room.manage` for that room. `events` is the visible room timeline. Folded durable facts such as reactions are reflected in projected room reads; the web client refreshes the current room window after wake/reconnect to catch up without a full document reload. |
 
 **RBAC tooling** ([`rbac.graphqls`](../cli/internal/graph/rbac.graphqls), [`role_permissions.graphqls`](../cli/internal/graph/role_permissions.graphqls), [`role_permission_matrix.graphqls`](../cli/internal/graph/role_permission_matrix.graphqls), [`user_permissions.graphqls`](../cli/internal/graph/user_permissions.graphqls), [`permission_inspector.graphqls`](../cli/internal/graph/permission_inspector.graphqls))
 
@@ -224,6 +224,10 @@ Admin queries are nested under a single `admin: AdminQueries` field that returns
 | `sendTypingIndicator`     | Publish a transient "user is typing" live event.                                             |
 | `markThreadAsRead`        | Update viewer's last-seen marker for a thread (drives unread separators).                    |
 | `followThread` / `unfollowThread` | Subscribe / unsubscribe to thread reply notifications.                              |
+
+| Room read                  | Description                                                                                  |
+| -------------------------- | -------------------------------------------------------------------------------------------- |
+| `Room.attachments`         | Paginated current attachment list for root messages and thread replies, authorized like `Room.events`. |
 
 **User profile & account** ([`mutation.graphqls`](../cli/internal/graph/mutation.graphqls), [`user_preferences.graphqls`](../cli/internal/graph/user_preferences.graphqls))
 
@@ -351,7 +355,7 @@ auth workflow audit facts.
 - `EVT` is the source of truth.
 - Fresh deployments seed current invariants such as default RBAC roles and the default room group.
 - Reads come from in-memory projections rebuilt from `EVT`.
-- Room timeline reads use `RoomTimelineProjection`'s derived visible-room index for initial loads, forward/backward pagination, and around-message windows. The raw room log still preserves folded room facts such as edits, retractions, reactions, and thread replies; visible readers skip or fold those facts before serving the room timeline. Asset lifecycle facts live in `AssetProjection`, which also consumes legacy beta `evt.room.{roomId}.asset_*` facts. Live `Subscription.myEvents` delivery reads the committed EVT feed, waits for projection readiness, and emits authorized events without exposing folded facts as standalone timeline rows in `Room.events`.
+- Room timeline reads use `RoomTimelineProjection`'s derived visible-room index for initial loads, forward/backward pagination, and around-message windows; `Room.attachments` uses the projection's current attachment-bearing message index so it does not decrypt unrelated message bodies. The raw room log still preserves folded room facts such as edits, retractions, reactions, and thread replies; visible readers skip or fold those facts before serving the room timeline. Asset lifecycle facts live in `AssetProjection`, which also consumes legacy beta `evt.room.{roomId}.asset_*` facts. Live `Subscription.myEvents` delivery reads the committed EVT feed, waits for projection readiness, and emits authorized events without exposing folded facts as standalone timeline rows in `Room.events`.
 - Writes append to `EVT` only for durable domain facts; legacy KV/stream data is not maintained as a mirror.
 - Mutations whose decision comes from a projection use a snapshot that carries both derived state and the applied stream sequence for the same OCC subject/filter. On conflict, writers wait for the owning projection to the latest matching tail and retry from a fresh snapshot.
 - Read-your-writes is provided by waiting for the local projector to reach the append sequence.
@@ -828,7 +832,7 @@ Messages are persisted as durable `EVT` facts. Public timeline facts (`MessagePo
 - Mention handles are resolved in the posting room; direct user handles only notify current room members, and invalid/non-member handles are silently ignored.
 - `MessagePostedEvent.mentioned_user_ids` contains resolved user IDs
 - Mention resolution is post-time only; later `MessageEditedEvent` facts update body content but do not add, remove, dismiss, or re-send mention notifications
-- Pending mention state is a notification record in `RUNTIME_STATE` (`notification.{userId}.{notificationId}`); sidebar orange dots derive from pending notifications, not a separate mention flag.
+- Pending mention state is a notification record in `RUNTIME_STATE` (`notification.{userId}.{notificationId}`); sidebar notification count badges derive from pending notifications, not a separate mention flag.
 - Live notification published to `live.sync.user.{userId}.mentioned` for toast display
 - Mention notifications are dismissed when the user views the relevant room or thread, or explicitly dismisses them from the notification center.
 - Self-mentions are filtered out (no notification to message author)

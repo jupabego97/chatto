@@ -88,8 +88,12 @@ func (r *roomResolver) Members(ctx context.Context, obj *corev1.Room, limit *int
 	}
 	users := make([]*corev1.User, 0, len(memberships))
 	for _, m := range memberships {
-		u, err := r.core.GetUser(ctx, m.UserId)
+		u, err := r.core.GetUserReference(ctx, m.UserId)
 		if err != nil {
+			if errors.Is(err, core.ErrNotFound) {
+				users = append(users, core.DeletedUserReference(m.UserId))
+				continue
+			}
 			return nil, err
 		}
 		if u != nil {
@@ -115,6 +119,52 @@ func (r *roomResolver) Members(ctx context.Context, obj *corev1.Room, limit *int
 	}, nil
 }
 
+// Attachments is the resolver for the attachments field.
+func (r *roomResolver) Attachments(ctx context.Context, obj *corev1.Room, limit *int32, offset *int32) (*model.RoomAttachmentsConnection, error) {
+	user, err := requireAuth(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	kind := core.KindOfRoom(obj)
+	isMember, err := r.core.RoomMembershipExists(ctx, kind, user.Id, obj.Id)
+	if err != nil {
+		return nil, err
+	}
+	if !isMember {
+		return nil, core.ErrNotRoomMember
+	}
+
+	limitVal, offsetVal := paginationArgs(limit, offset, 50, 100)
+	result, err := r.core.GetRoomAttachments(ctx, kind, obj.Id, limitVal, offsetVal)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]*model.RoomAttachmentItem, 0, len(result.Items))
+	for _, item := range result.Items {
+		if item == nil {
+			continue
+		}
+		var threadRootEventID *string
+		if item.ThreadRootEventID != "" {
+			threadRootEventID = &item.ThreadRootEventID
+		}
+		items = append(items, &model.RoomAttachmentItem{
+			Attachment:        item.Attachment,
+			MessageEventID:    item.MessageEventID,
+			ThreadRootEventID: threadRootEventID,
+			CreatedAt:         item.CreatedAt,
+		})
+	}
+
+	return &model.RoomAttachmentsConnection{
+		Items:      items,
+		TotalCount: int32(result.TotalCount),
+		HasMore:    result.HasMore,
+	}, nil
+}
+
 // HasUnread is the resolver for the hasUnread field.
 func (r *roomResolver) HasUnread(ctx context.Context, obj *corev1.Room) (bool, error) {
 	user := auth.ForContext(ctx)
@@ -132,6 +182,26 @@ func (r *roomResolver) HasUnread(ctx context.Context, obj *corev1.Room) (bool, e
 	}
 
 	return r.core.HasUnread(ctx, core.KindOfRoom(obj), user.Id, obj.Id)
+}
+
+// ViewerNotifications is the resolver for the viewerNotifications field.
+func (r *roomResolver) ViewerNotifications(ctx context.Context, obj *corev1.Room, limit *int32, offset *int32) (*model.NotificationsConnection, error) {
+	user := auth.ForContext(ctx)
+	if user == nil {
+		return emptyNotificationsConnection(), nil
+	}
+
+	isMember, err := r.core.RoomMembershipExists(ctx, core.KindOfRoom(obj), user.Id, obj.Id)
+	if err != nil {
+		return emptyNotificationsConnection(), nil
+	}
+	if !isMember {
+		return emptyNotificationsConnection(), nil
+	}
+
+	return r.resolveNotificationsConnection(ctx, user.Id, limit, offset, func(notif *corev1.Notification) bool {
+		return notificationTargetRoomID(notif) == obj.Id
+	})
 }
 
 // ViewerCanPostMessage is the resolver for the viewerCanPostMessage field.

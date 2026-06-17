@@ -616,6 +616,7 @@ type ComplexityRoot struct {
 
 	Room struct {
 		Archived                     func(childComplexity int) int
+		Attachments                  func(childComplexity int, limit *int32, offset *int32) int
 		AvailableRoomPermissions     func(childComplexity int) int
 		CallParticipants             func(childComplexity int) int
 		Description                  func(childComplexity int) int
@@ -640,11 +641,25 @@ type ComplexityRoot struct {
 		ViewerCanPostMessage         func(childComplexity int) int
 		ViewerCanReact               func(childComplexity int) int
 		ViewerNotificationPreference func(childComplexity int) int
+		ViewerNotifications          func(childComplexity int, limit *int32, offset *int32) int
 		VoiceCallToken               func(childComplexity int) int
 	}
 
 	RoomArchivedEvent struct {
 		RoomId func(childComplexity int) int
+	}
+
+	RoomAttachmentItem struct {
+		Attachment        func(childComplexity int) int
+		CreatedAt         func(childComplexity int) int
+		MessageEventID    func(childComplexity int) int
+		ThreadRootEventID func(childComplexity int) int
+	}
+
+	RoomAttachmentsConnection struct {
+		HasMore    func(childComplexity int) int
+		Items      func(childComplexity int) int
+		TotalCount func(childComplexity int) int
 	}
 
 	RoomBan struct {
@@ -796,6 +811,7 @@ type ComplexityRoot struct {
 		ViewerHasAnyAdminPermission    func(childComplexity int) int
 		ViewerHasUnreadRooms           func(childComplexity int) int
 		ViewerNotificationPreference   func(childComplexity int) int
+		ViewerNotifications            func(childComplexity int, limit *int32, offset *int32) int
 		ViewerPermissions              func(childComplexity int) int
 	}
 
@@ -886,6 +902,7 @@ type ComplexityRoot struct {
 	User struct {
 		AvatarURL                   func(childComplexity int, width *int32, height *int32, fit *model.FitMode) int
 		CreatedAt                   func(childComplexity int) int
+		Deleted                     func(childComplexity int) int
 		DisplayName                 func(childComplexity int) int
 		HasVerifiedEmail            func(childComplexity int) int
 		Id                          func(childComplexity int) int
@@ -1220,7 +1237,9 @@ type RoomResolver interface {
 
 	Information(ctx context.Context, obj *corev1.Room) (*string, error)
 	Members(ctx context.Context, obj *corev1.Room, limit *int32, offset *int32) (*model.RoomMembersConnection, error)
+	Attachments(ctx context.Context, obj *corev1.Room, limit *int32, offset *int32) (*model.RoomAttachmentsConnection, error)
 	HasUnread(ctx context.Context, obj *corev1.Room) (bool, error)
+	ViewerNotifications(ctx context.Context, obj *corev1.Room, limit *int32, offset *int32) (*model.NotificationsConnection, error)
 	ViewerCanPostMessage(ctx context.Context, obj *corev1.Room) (bool, error)
 	ViewerCanPostInThread(ctx context.Context, obj *corev1.Room) (bool, error)
 	ViewerCanReact(ctx context.Context, obj *corev1.Room) (bool, error)
@@ -1285,6 +1304,7 @@ type ServerResolver interface {
 	ViewerCanCreateRoom(ctx context.Context, obj *model.Server) (bool, error)
 	ViewerCanManageRooms(ctx context.Context, obj *model.Server) (bool, error)
 	ViewerHasUnreadRooms(ctx context.Context, obj *model.Server) (bool, error)
+	ViewerNotifications(ctx context.Context, obj *model.Server, limit *int32, offset *int32) (*model.NotificationsConnection, error)
 	ViewerNotificationPreference(ctx context.Context, obj *model.Server) (*model.ViewerNotificationPreference, error)
 	Member(ctx context.Context, obj *model.Server, userID string) (*corev1.User, error)
 	Members(ctx context.Context, obj *model.Server, search *string, limit *int32, offset *int32) (*model.ServerMembersConnection, error)
@@ -4029,6 +4049,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Room.Archived(childComplexity), true
+	case "Room.attachments":
+		if e.ComplexityRoot.Room.Attachments == nil {
+			break
+		}
+
+		args, err := ec.field_Room_attachments_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Room.Attachments(childComplexity, args["limit"].(*int32), args["offset"].(*int32)), true
 	case "Room.availableRoomPermissions":
 		if e.ComplexityRoot.Room.AvailableRoomPermissions == nil {
 			break
@@ -4193,6 +4224,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Room.ViewerNotificationPreference(childComplexity), true
+	case "Room.viewerNotifications":
+		if e.ComplexityRoot.Room.ViewerNotifications == nil {
+			break
+		}
+
+		args, err := ec.field_Room_viewerNotifications_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Room.ViewerNotifications(childComplexity, args["limit"].(*int32), args["offset"].(*int32)), true
 	case "Room.voiceCallToken":
 		if e.ComplexityRoot.Room.VoiceCallToken == nil {
 			break
@@ -4206,6 +4248,50 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.RoomArchivedEvent.RoomId(childComplexity), true
+
+	case "RoomAttachmentItem.attachment":
+		if e.ComplexityRoot.RoomAttachmentItem.Attachment == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoomAttachmentItem.Attachment(childComplexity), true
+	case "RoomAttachmentItem.createdAt":
+		if e.ComplexityRoot.RoomAttachmentItem.CreatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoomAttachmentItem.CreatedAt(childComplexity), true
+	case "RoomAttachmentItem.messageEventId":
+		if e.ComplexityRoot.RoomAttachmentItem.MessageEventID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoomAttachmentItem.MessageEventID(childComplexity), true
+	case "RoomAttachmentItem.threadRootEventId":
+		if e.ComplexityRoot.RoomAttachmentItem.ThreadRootEventID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoomAttachmentItem.ThreadRootEventID(childComplexity), true
+
+	case "RoomAttachmentsConnection.hasMore":
+		if e.ComplexityRoot.RoomAttachmentsConnection.HasMore == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoomAttachmentsConnection.HasMore(childComplexity), true
+	case "RoomAttachmentsConnection.items":
+		if e.ComplexityRoot.RoomAttachmentsConnection.Items == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoomAttachmentsConnection.Items(childComplexity), true
+	case "RoomAttachmentsConnection.totalCount":
+		if e.ComplexityRoot.RoomAttachmentsConnection.TotalCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoomAttachmentsConnection.TotalCount(childComplexity), true
 
 	case "RoomBan.createdAt":
 		if e.ComplexityRoot.RoomBan.CreatedAt == nil {
@@ -4829,6 +4915,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Server.ViewerNotificationPreference(childComplexity), true
+	case "Server.viewerNotifications":
+		if e.ComplexityRoot.Server.ViewerNotifications == nil {
+			break
+		}
+
+		args, err := ec.field_Server_viewerNotifications_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Server.ViewerNotifications(childComplexity, args["limit"].(*int32), args["offset"].(*int32)), true
 	case "Server.viewerPermissions":
 		if e.ComplexityRoot.Server.ViewerPermissions == nil {
 			break
@@ -5119,6 +5216,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.User.CreatedAt(childComplexity), true
+	case "User.deleted":
+		if e.ComplexityRoot.User.Deleted == nil {
+			break
+		}
+
+		return e.ComplexityRoot.User.Deleted(childComplexity), true
 	case "User.displayName":
 		if e.ComplexityRoot.User.DisplayName == nil {
 			break
@@ -6323,8 +6426,12 @@ func (ec *executionContext) childFields_Room(ctx context.Context, field graphql.
 		return ec.fieldContext_Room_information(ctx, field)
 	case "members":
 		return ec.fieldContext_Room_members(ctx, field)
+	case "attachments":
+		return ec.fieldContext_Room_attachments(ctx, field)
 	case "hasUnread":
 		return ec.fieldContext_Room_hasUnread(ctx, field)
+	case "viewerNotifications":
+		return ec.fieldContext_Room_viewerNotifications(ctx, field)
 	case "viewerCanPostMessage":
 		return ec.fieldContext_Room_viewerCanPostMessage(ctx, field)
 	case "viewerCanPostInThread":
@@ -6365,6 +6472,32 @@ func (ec *executionContext) childFields_Room(ctx context.Context, field graphql.
 		return ec.fieldContext_Room_availableRoomPermissions(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type Room", field.Name)
+}
+
+func (ec *executionContext) childFields_RoomAttachmentItem(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "attachment":
+		return ec.fieldContext_RoomAttachmentItem_attachment(ctx, field)
+	case "messageEventId":
+		return ec.fieldContext_RoomAttachmentItem_messageEventId(ctx, field)
+	case "threadRootEventId":
+		return ec.fieldContext_RoomAttachmentItem_threadRootEventId(ctx, field)
+	case "createdAt":
+		return ec.fieldContext_RoomAttachmentItem_createdAt(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RoomAttachmentItem", field.Name)
+}
+
+func (ec *executionContext) childFields_RoomAttachmentsConnection(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "items":
+		return ec.fieldContext_RoomAttachmentsConnection_items(ctx, field)
+	case "totalCount":
+		return ec.fieldContext_RoomAttachmentsConnection_totalCount(ctx, field)
+	case "hasMore":
+		return ec.fieldContext_RoomAttachmentsConnection_hasMore(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RoomAttachmentsConnection", field.Name)
 }
 
 func (ec *executionContext) childFields_RoomBan(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -6537,6 +6670,8 @@ func (ec *executionContext) childFields_Server(ctx context.Context, field graphq
 		return ec.fieldContext_Server_viewerCanManageRooms(ctx, field)
 	case "viewerHasUnreadRooms":
 		return ec.fieldContext_Server_viewerHasUnreadRooms(ctx, field)
+	case "viewerNotifications":
+		return ec.fieldContext_Server_viewerNotifications(ctx, field)
 	case "viewerNotificationPreference":
 		return ec.fieldContext_Server_viewerNotificationPreference(ctx, field)
 	case "member":
@@ -6677,6 +6812,8 @@ func (ec *executionContext) childFields_User(ctx context.Context, field graphql.
 		return ec.fieldContext_User_displayName(ctx, field)
 	case "createdAt":
 		return ec.fieldContext_User_createdAt(ctx, field)
+	case "deleted":
+		return ec.fieldContext_User_deleted(ctx, field)
 	case "avatarUrl":
 		return ec.fieldContext_User_avatarUrl(ctx, field)
 	case "hasVerifiedEmail":
@@ -8437,6 +8574,28 @@ func (ec *executionContext) field_ReactionSummary_users_args(ctx context.Context
 	return args, nil
 }
 
+func (ec *executionContext) field_Room_attachments_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "limit",
+		func(ctx context.Context, v any) (*int32, error) {
+			return ec.unmarshalOInt2ᚖint32(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "offset",
+		func(ctx context.Context, v any) (*int32, error) {
+			return ec.unmarshalOInt2ᚖint32(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["offset"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Room_event_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -8504,6 +8663,28 @@ func (ec *executionContext) field_Room_events_args(ctx context.Context, rawArgs 
 }
 
 func (ec *executionContext) field_Room_members_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "limit",
+		func(ctx context.Context, v any) (*int32, error) {
+			return ec.unmarshalOInt2ᚖint32(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "offset",
+		func(ctx context.Context, v any) (*int32, error) {
+			return ec.unmarshalOInt2ᚖint32(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["offset"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Room_viewerNotifications_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "limit",
@@ -8650,6 +8831,28 @@ func (ec *executionContext) field_Server_viewerCanManageUser_args(ctx context.Co
 		return nil, err
 	}
 	args["userId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Server_viewerNotifications_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "limit",
+		func(ctx context.Context, v any) (*int32, error) {
+			return ec.unmarshalOInt2ᚖint32(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "offset",
+		func(ctx context.Context, v any) (*int32, error) {
+			return ec.unmarshalOInt2ᚖint32(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["offset"] = arg1
 	return args, nil
 }
 
@@ -19550,6 +19753,50 @@ func (ec *executionContext) fieldContext_Room_members(ctx context.Context, field
 	return fc, nil
 }
 
+func (ec *executionContext) _Room_attachments(ctx context.Context, field graphql.CollectedField, obj *corev1.Room) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Room_attachments(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Room().Attachments(ctx, obj, fc.Args["limit"].(*int32), fc.Args["offset"].(*int32))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RoomAttachmentsConnection) graphql.Marshaler {
+			return ec.marshalNRoomAttachmentsConnection2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomAttachmentsConnection(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Room_attachments(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Room",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RoomAttachmentsConnection(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Room_attachments_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Room_hasUnread(ctx context.Context, field graphql.CollectedField, obj *corev1.Room) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -19571,6 +19818,50 @@ func (ec *executionContext) _Room_hasUnread(ctx context.Context, field graphql.C
 }
 func (ec *executionContext) fieldContext_Room_hasUnread(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("Room", field, true, true, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _Room_viewerNotifications(ctx context.Context, field graphql.CollectedField, obj *corev1.Room) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Room_viewerNotifications(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Room().ViewerNotifications(ctx, obj, fc.Args["limit"].(*int32), fc.Args["offset"].(*int32))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.NotificationsConnection) graphql.Marshaler {
+			return ec.marshalNNotificationsConnection2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐNotificationsConnection(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Room_viewerNotifications(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Room",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_NotificationsConnection(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Room_viewerNotifications_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
 }
 
 func (ec *executionContext) _Room_viewerCanPostMessage(ctx context.Context, field graphql.CollectedField, obj *corev1.Room) (ret graphql.Marshaler) {
@@ -20130,6 +20421,185 @@ func (ec *executionContext) _RoomArchivedEvent_roomId(ctx context.Context, field
 }
 func (ec *executionContext) fieldContext_RoomArchivedEvent_roomId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("RoomArchivedEvent", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _RoomAttachmentItem_attachment(ctx context.Context, field graphql.CollectedField, obj *model.RoomAttachmentItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoomAttachmentItem_attachment(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Attachment, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *corev1.Attachment) graphql.Marshaler {
+			return ec.marshalNAttachment2ᚖhmansᚗdeᚋchattoᚋinternalᚋpbᚋchattoᚋcoreᚋv1ᚐAttachment(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RoomAttachmentItem_attachment(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RoomAttachmentItem",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Attachment(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RoomAttachmentItem_messageEventId(ctx context.Context, field graphql.CollectedField, obj *model.RoomAttachmentItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoomAttachmentItem_messageEventId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.MessageEventID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RoomAttachmentItem_messageEventId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RoomAttachmentItem", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _RoomAttachmentItem_threadRootEventId(ctx context.Context, field graphql.CollectedField, obj *model.RoomAttachmentItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoomAttachmentItem_threadRootEventId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ThreadRootEventID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOID2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RoomAttachmentItem_threadRootEventId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RoomAttachmentItem", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _RoomAttachmentItem_createdAt(ctx context.Context, field graphql.CollectedField, obj *model.RoomAttachmentItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoomAttachmentItem_createdAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *timestamppb.Timestamp) graphql.Marshaler {
+			return ec.marshalNTime2ᚖgoogleᚗgolangᚗorgᚋprotobufᚋtypesᚋknownᚋtimestamppbᚐTimestamp(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RoomAttachmentItem_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RoomAttachmentItem", field, false, false, errors.New("field of type Time does not have child fields"))
+}
+
+func (ec *executionContext) _RoomAttachmentsConnection_items(ctx context.Context, field graphql.CollectedField, obj *model.RoomAttachmentsConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoomAttachmentsConnection_items(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Items, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*model.RoomAttachmentItem) graphql.Marshaler {
+			return ec.marshalNRoomAttachmentItem2ᚕᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomAttachmentItemᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RoomAttachmentsConnection_items(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RoomAttachmentsConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RoomAttachmentItem(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RoomAttachmentsConnection_totalCount(ctx context.Context, field graphql.CollectedField, obj *model.RoomAttachmentsConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoomAttachmentsConnection_totalCount(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TotalCount, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int32) graphql.Marshaler {
+			return ec.marshalNInt2int32(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RoomAttachmentsConnection_totalCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RoomAttachmentsConnection", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _RoomAttachmentsConnection_hasMore(ctx context.Context, field graphql.CollectedField, obj *model.RoomAttachmentsConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoomAttachmentsConnection_hasMore(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.HasMore, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RoomAttachmentsConnection_hasMore(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RoomAttachmentsConnection", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
 func (ec *executionContext) _RoomBan_id(ctx context.Context, field graphql.CollectedField, obj *model.RoomBan) (ret graphql.Marshaler) {
@@ -22176,6 +22646,50 @@ func (ec *executionContext) fieldContext_Server_viewerHasUnreadRooms(_ context.C
 	return graphql.NewScalarFieldContext("Server", field, true, true, errors.New("field of type Boolean does not have child fields"))
 }
 
+func (ec *executionContext) _Server_viewerNotifications(ctx context.Context, field graphql.CollectedField, obj *model.Server) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Server_viewerNotifications(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Server().ViewerNotifications(ctx, obj, fc.Args["limit"].(*int32), fc.Args["offset"].(*int32))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.NotificationsConnection) graphql.Marshaler {
+			return ec.marshalNNotificationsConnection2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐNotificationsConnection(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Server_viewerNotifications(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Server",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_NotificationsConnection(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Server_viewerNotifications_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Server_viewerNotificationPreference(ctx context.Context, field graphql.CollectedField, obj *model.Server) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -23856,6 +24370,29 @@ func (ec *executionContext) _User_createdAt(ctx context.Context, field graphql.C
 }
 func (ec *executionContext) fieldContext_User_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("User", field, false, false, errors.New("field of type Time does not have child fields"))
+}
+
+func (ec *executionContext) _User_deleted(ctx context.Context, field graphql.CollectedField, obj *corev1.User) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_User_deleted(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Deleted, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_User_deleted(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("User", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
 func (ec *executionContext) _User_avatarUrl(ctx context.Context, field graphql.CollectedField, obj *corev1.User) (ret graphql.Marshaler) {
@@ -36620,6 +37157,42 @@ func (ec *executionContext) _Room(ctx context.Context, sel ast.SelectionSet, obj
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "attachments":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Room_attachments(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "hasUnread":
 			field := field
 
@@ -36630,6 +37203,42 @@ func (ec *executionContext) _Room(ctx context.Context, sel ast.SelectionSet, obj
 					}
 				}()
 				res = ec._Room_hasUnread(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "viewerNotifications":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Room_viewerNotifications(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -37333,6 +37942,106 @@ func (ec *executionContext) _RoomArchivedEvent(ctx context.Context, sel ast.Sele
 			out.Values[i] = graphql.MarshalString("RoomArchivedEvent")
 		case "roomId":
 			out.Values[i] = ec._RoomArchivedEvent_roomId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var roomAttachmentItemImplementors = []string{"RoomAttachmentItem"}
+
+func (ec *executionContext) _RoomAttachmentItem(ctx context.Context, sel ast.SelectionSet, obj *model.RoomAttachmentItem) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, roomAttachmentItemImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RoomAttachmentItem")
+		case "attachment":
+			out.Values[i] = ec._RoomAttachmentItem_attachment(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "messageEventId":
+			out.Values[i] = ec._RoomAttachmentItem_messageEventId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "threadRootEventId":
+			out.Values[i] = ec._RoomAttachmentItem_threadRootEventId(ctx, field, obj)
+		case "createdAt":
+			out.Values[i] = ec._RoomAttachmentItem_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var roomAttachmentsConnectionImplementors = []string{"RoomAttachmentsConnection"}
+
+func (ec *executionContext) _RoomAttachmentsConnection(ctx context.Context, sel ast.SelectionSet, obj *model.RoomAttachmentsConnection) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, roomAttachmentsConnectionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RoomAttachmentsConnection")
+		case "items":
+			out.Values[i] = ec._RoomAttachmentsConnection_items(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalCount":
+			out.Values[i] = ec._RoomAttachmentsConnection_totalCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "hasMore":
+			out.Values[i] = ec._RoomAttachmentsConnection_hasMore(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -39247,6 +39956,42 @@ func (ec *executionContext) _Server(ctx context.Context, sel ast.SelectionSet, o
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "viewerNotifications":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Server_viewerNotifications(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "viewerNotificationPreference":
 			field := field
 
@@ -40774,6 +41519,11 @@ func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj
 			}
 		case "createdAt":
 			out.Values[i] = ec._User_createdAt(ctx, field, obj)
+		case "deleted":
+			out.Values[i] = ec._User_deleted(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		case "avatarUrl":
 			field := field
 
@@ -43753,6 +44503,46 @@ func (ec *executionContext) marshalNRoom2ᚖhmansᚗdeᚋchattoᚋinternalᚋpb�
 		return graphql.Null
 	}
 	return ec._Room(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNRoomAttachmentItem2ᚕᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomAttachmentItemᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.RoomAttachmentItem) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNRoomAttachmentItem2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomAttachmentItem(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNRoomAttachmentItem2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomAttachmentItem(ctx context.Context, sel ast.SelectionSet, v *model.RoomAttachmentItem) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._RoomAttachmentItem(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNRoomAttachmentsConnection2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomAttachmentsConnection(ctx context.Context, sel ast.SelectionSet, v model.RoomAttachmentsConnection) graphql.Marshaler {
+	return ec._RoomAttachmentsConnection(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNRoomAttachmentsConnection2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomAttachmentsConnection(ctx context.Context, sel ast.SelectionSet, v *model.RoomAttachmentsConnection) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._RoomAttachmentsConnection(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNRoomBan2ᚕᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomBanᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.RoomBan) graphql.Marshaler {

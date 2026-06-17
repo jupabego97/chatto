@@ -6,6 +6,7 @@ import {
   verifyAdminEmail,
   type TestUser
 } from './fixtures/testUser';
+import { withServerUser } from './fixtures/serverUser';
 import { AdminPage } from './pages/AdminPage';
 import * as routes from './routes';
 import { TIMEOUTS } from './constants';
@@ -21,18 +22,18 @@ async function createAndLoginAdminUser(page: Page): Promise<TestUser> {
 }
 
 test.describe('Page titles', () => {
-  test('room page has room and space name in title', async ({ page, chatPage }) => {
+  test('room page has room and server name in title', async ({ page, chatPage }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    const spaceName = await chatPage.createSpace();
+    const serverName = await chatPage.getServerName();
     await chatPage.enterRoom('general');
 
     // Wait for room header to be visible (indicates room data is loaded)
     await expect(chatPage.getRoomHeader('general')).toBeVisible();
 
-    // Title: "#room - <space> | <instance>". Post-PR(a) instance name falls
-    // back to the space name when no runtime override is configured.
-    await expect(page).toHaveTitle(`#general - ${spaceName} | ${spaceName}`);
+    // Title: "#room - <server> | <instance>". Post-PR(a) instance name falls
+    // back to the server name when no runtime override is configured.
+    await expect(page).toHaveTitle(`#general - ${serverName} | ${serverName}`);
   });
 
   test('room page title uses custom instance name', async ({ page, chatPage }) => {
@@ -44,19 +45,23 @@ test.describe('Page titles', () => {
     await adminPage.fillServerSettings({ serverName: 'Test Server' });
     await adminPage.saveServerSettings();
 
-    // Create space and enter room
+    // Create account and enter room
     await chatPage.goto();
-    const spaceName = await chatPage.createSpace();
+    const serverName = await chatPage.getServerName();
     await chatPage.enterRoom('general');
 
     // Wait for room header to be visible
     await expect(chatPage.getRoomHeader('general')).toBeVisible();
 
     // Title should use custom instance name
-    await expect(page).toHaveTitle(`#general - ${spaceName} | Test Server`);
+    await expect(page).toHaveTitle(`#general - ${serverName} | Test Server`);
   });
 
-  test('page title updates in real-time when instance name changes', async ({ page, browser }) => {
+  test('page title updates in real-time when instance name changes', async ({
+    page,
+    browser,
+    serverURL
+  }) => {
     // Setup: Admin in first browser, regular user in second browser
     await createAndLoginAdminUser(page);
     const adminPage = new AdminPage(page);
@@ -66,25 +71,23 @@ test.describe('Page titles', () => {
     await adminPage.fillServerSettings({ serverName: 'Initial Server' });
     await adminPage.saveServerSettings();
 
-    // Create a second browser context for a regular user
-    const context2 = await browser.newContext();
-    const page2 = await context2.newPage();
-    await createAndLoginTestUser(page2);
+    await withServerUser(browser, serverURL, async ({ page: page2 }) => {
+      // Navigate second user to Browse Rooms (accessible to all users)
+      await page2.goto(routes.browseRooms);
+      // The instance name is fetched asynchronously via /api/server, so wait for it
+      await expect(page2).toHaveTitle('Overview | Initial Server', {
+        timeout: TIMEOUTS.UI_STANDARD
+      });
 
-    // Navigate second user to Browse Rooms (accessible to all users)
-    await page2.goto(routes.browseRooms);
-    // The instance name is fetched asynchronously via /api/server, so wait for it
-    await expect(page2).toHaveTitle('Overview | Initial Server', { timeout: TIMEOUTS.UI_STANDARD });
+      // Admin changes instance name
+      await adminPage.gotoServerSettings();
+      await adminPage.fillServerSettings({ serverName: 'Updated Server' });
+      await adminPage.saveServerSettings();
 
-    // Admin changes instance name
-    await adminPage.gotoServerSettings();
-    await adminPage.fillServerSettings({ serverName: 'Updated Server' });
-    await adminPage.saveServerSettings();
-
-    // Second user's page title should update via live events
-    await expect(page2).toHaveTitle('Overview | Updated Server', { timeout: TIMEOUTS.UI_STANDARD });
-
-    // Clean up
-    await context2.close();
+      // Second user's page title should update via live events
+      await expect(page2).toHaveTitle('Overview | Updated Server', {
+        timeout: TIMEOUTS.UI_STANDARD
+      });
+    });
   });
 });
