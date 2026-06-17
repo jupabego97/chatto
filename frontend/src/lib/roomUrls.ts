@@ -9,13 +9,6 @@ export type RoomURLTarget = {
   type?: RoomType | string | null;
 };
 
-export function looksLikeRoomIDSegment(segment: string): boolean {
-  return (
-    (segment.startsWith('R') && /^[A-Za-z0-9]{1,30}$/.test(segment)) ||
-    /^[a-f0-9]{14}$/.test(segment)
-  );
-}
-
 export function roomIDFromURLSegment(segment: string): string {
   const separator = segment.indexOf('-');
   return separator > 0 ? segment.slice(0, separator) : segment;

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { RoomType } from '$lib/gql/graphql';
 import {
-  looksLikeRoomIDSegment,
   roomIDFromURLSegment,
   roomMessagePathForSegment,
   roomPath,
@@ -17,13 +16,7 @@ describe('room URL helpers', () => {
     );
   });
 
-  it('recognizes legacy room ID segments for fallback lookup', () => {
-    expect(looksLikeRoomIDSegment('R7gUDvZNyvHkk4K')).toBe(true);
-    expect(looksLikeRoomIDSegment('deadbeef123456')).toBe(true);
-    expect(looksLikeRoomIDSegment('general')).toBe(false);
-  });
-
-  it('keeps ordinary capital-R channel names as name URLs', () => {
+  it('keeps ordinary capital-R channel names in the cosmetic suffix', () => {
     expect(roomURLSegment({ id: 'R1', name: 'Random', type: RoomType.Channel })).toBe('R1-Random');
   });
 
