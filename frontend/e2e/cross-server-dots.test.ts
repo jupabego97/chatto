@@ -142,7 +142,6 @@ test.describe('Cross-instance dots', () => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.enterRoom('general');
-    const homeGeneralRoomId = await getRoomIdByName(page, 'general');
     const homeBody = `Home room before remote dot ${Date.now()}`;
     await roomPage.sendMessage(homeBody);
 
@@ -163,7 +162,7 @@ test.describe('Cross-instance dots', () => {
     );
 
     await connectRemoteInstance(page, { ...remoteServer, baseURL }, viewer.userId);
-    await page.goto(routes.room(homeGeneralRoomId));
+    await page.goto(routes.room('general'));
     await waitForRoomReady(page, 'general');
     await expect(page.getByText(homeBody)).toBeVisible({ timeout: TIMEOUTS.REALTIME_EVENT });
 
@@ -188,8 +187,7 @@ test.describe('Cross-instance dots', () => {
     await remoteSpaceBadge.click();
 
     await page.waitForURL(
-      (url) =>
-        url.pathname === `/chat/${remoteHostSegment}/${remoteGeneralRoomId}/${remoteRootEventId}`
+      (url) => url.pathname === `/chat/${remoteHostSegment}/general/${remoteRootEventId}`
     );
     await expect(page.getByRole('heading', { name: '# general' })).toBeVisible();
     await roomPage.expectThreadPaneVisible();
@@ -210,7 +208,6 @@ test.describe('Cross-instance dots', () => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.enterRoom('general');
-    const homeGeneralRoomId = await getRoomIdByName(page, 'general');
     const homeBody = `Home room before remote DM switch ${Date.now()}`;
     await roomPage.sendMessage(homeBody);
 
@@ -233,7 +230,7 @@ test.describe('Cross-instance dots', () => {
     await postMessageOnRemote(baseURL, sender.token, remoteGeneralRoomId, remoteRoomBody);
 
     await connectRemoteInstance(page, { ...remoteServer, baseURL }, viewer.userId);
-    await page.goto(routes.room(homeGeneralRoomId));
+    await page.goto(routes.room('general'));
     await waitForRoomReady(page, 'general');
     await expect(page.getByText(homeBody)).toBeVisible({ timeout: TIMEOUTS.REALTIME_EVENT });
 
@@ -253,9 +250,7 @@ test.describe('Cross-instance dots', () => {
     const remoteGeneralLink = chatPage.roomList.getByRole('link', { name: '# general' });
     await expect(remoteGeneralLink).toBeVisible({ timeout: TIMEOUTS.UI_STANDARD });
     await remoteGeneralLink.click();
-    await page.waitForURL(
-      (url) => url.pathname === `/chat/${remoteHostSegment}/${remoteGeneralRoomId}`
-    );
+    await page.waitForURL((url) => url.pathname === `/chat/${remoteHostSegment}/general`);
     await expect(page.getByRole('heading', { name: '# general' })).toBeVisible();
 
     const mainRoomTimeline = page.locator('[data-testid="messages-container"]').first();
