@@ -62,11 +62,12 @@ describe('MarkdownEditor', () => {
     await vi.waitFor(() => expect(updates.at(-1)).toBe('!First paragraph\n\nSecond paragraph'));
   });
 
-  it('preserves visual empty paragraphs when editing restored markdown', async () => {
+  it('normalizes repeated blank markdown lines in document mode', async () => {
     const updates: string[] = [];
     let api: MarkdownEditorApi | null = null;
     const { container } = render(MarkdownEditor, {
       props: {
+        variant: 'document',
         testid: 'markdown-editor',
         onUpdate: (markdown) => updates.push(markdown),
         onReady: (editorApi) => {
@@ -78,23 +79,24 @@ describe('MarkdownEditor', () => {
     const editor = await findEditor(container);
 
     await vi.waitFor(() => expect(api).toBeTruthy());
-    await vi.waitFor(() => expect(editor.querySelectorAll('p')).toHaveLength(3));
+    await vi.waitFor(() => expect(editor.querySelectorAll('p')).toHaveLength(2));
     editor.focus();
     await insertText(editor, '!');
 
-    await vi.waitFor(() => expect(updates.at(-1)).toBe('!Stuff\n\n\n\nNo Stuff'));
+    await vi.waitFor(() => expect(updates.at(-1)).toBe('!Stuff\n\nNo Stuff'));
   });
 
-  it('preserves visual empty paragraphs after restored markdown headings', async () => {
+  it('restores markdown headings without synthetic empty paragraphs in document mode', async () => {
     const updates: string[] = [];
     let api: MarkdownEditorApi | null = null;
     const { container } = render(MarkdownEditor, {
       props: {
+        variant: 'document',
         testid: 'markdown-editor',
         onUpdate: (markdown) => updates.push(markdown),
         onReady: (editorApi) => {
           api = editorApi;
-          editorApi.setContent('## title\n\n\n\ntext\n\n\n\n## another title\n\n\n\nanother text');
+          editorApi.setContent('## title\n\ntext\n\n## another title\n\nanother text');
         }
       }
     });
@@ -103,16 +105,14 @@ describe('MarkdownEditor', () => {
     await vi.waitFor(() => expect(api).toBeTruthy());
     await vi.waitFor(() => {
       const blocks = Array.from(editor.children).map((element) => element.tagName);
-      expect(blocks).toEqual(['H2', 'P', 'P', 'P', 'H2', 'P', 'P']);
+      expect(blocks).toEqual(['H2', 'P', 'H2', 'P']);
     });
 
     editor.focus();
     await insertText(editor, '!');
 
     await vi.waitFor(() =>
-      expect(updates.at(-1)).toBe(
-        '## !title\n\n\n\ntext\n\n\n\n## another title\n\n\n\nanother text'
-      )
+      expect(updates.at(-1)).toBe('## !title\n\ntext\n\n## another title\n\nanother text')
     );
   });
 
@@ -160,10 +160,11 @@ describe('MarkdownEditor', () => {
     );
   });
 
-  it('serializes visual empty paragraphs between typed markdown headings and paragraphs', async () => {
+  it('serializes markdown headings with canonical separators in document mode', async () => {
     const updates: string[] = [];
     const { container } = render(MarkdownEditor, {
       props: {
+        variant: 'document',
         testid: 'markdown-editor',
         onUpdate: (markdown) => updates.push(markdown)
       }
@@ -173,9 +174,7 @@ describe('MarkdownEditor', () => {
     await insertText(editor, '## title\n\ntext\n\n## another title\n\nanother text');
 
     await vi.waitFor(() =>
-      expect(updates.at(-1)).toBe(
-        '## title\n\n\n\ntext\n\n\n\n## another title\n\n\n\nanother text'
-      )
+      expect(updates.at(-1)).toBe('## title\n\ntext\n\n## another title\n\nanother text')
     );
   });
 

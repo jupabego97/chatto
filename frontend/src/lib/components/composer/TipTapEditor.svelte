@@ -627,53 +627,6 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
     });
   }
 
-  function markRestoredExplicitBlankParagraphs(markdown: string): string {
-    const lines = markdown.split('\n');
-    const output: string[] = [];
-    let inFence: { marker: '`' | '~'; length: number } | null = null;
-    let pendingBlankLines = 0;
-
-    const flushPendingBlankLines = () => {
-      if (pendingBlankLines === 0) return;
-
-      output.push('');
-      for (let i = 1; i < pendingBlankLines; i += 2) {
-        output.push(RESTORED_EMPTY_PARAGRAPH_MARKER, '');
-      }
-      pendingBlankLines = 0;
-    };
-
-    for (const line of lines) {
-      const fenceMatch = line.match(/^[ \t]{0,3}(`{3,}|~{3,})/);
-
-      if (fenceMatch) {
-        flushPendingBlankLines();
-        const markerRun = fenceMatch[1];
-        const marker = markerRun[0] as '`' | '~';
-
-        if (inFence && inFence.marker === marker && markerRun.length >= inFence.length) {
-          inFence = null;
-        } else if (!inFence) {
-          inFence = { marker, length: markerRun.length };
-        }
-
-        output.push(line);
-        continue;
-      }
-
-      if (!inFence && line.trim() === '') {
-        pendingBlankLines += 1;
-        continue;
-      }
-
-      flushPendingBlankLines();
-      output.push(line);
-    }
-
-    flushPendingBlankLines();
-    return output.join('\n');
-  }
-
   function decodeSerializedMarkdownText(markdown: string): string {
     return transformMarkdownOutsideCode(markdown, decodeSerializedTextEntities);
   }
@@ -693,7 +646,10 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
     return markdown.replace(/ {2,}(\n\s*\n\s*(?:[-+*]|\d{1,9}[.)])\s)/g, '$1');
   }
 
-  function normalizeSerializedHardBreakArtifacts(markdown: string): string {
+  function normalizeSerializedHardBreakArtifacts(
+    markdown: string,
+    preserveVisualEmptyParagraphs: boolean
+  ): string {
     const lines = markdown.split('\n');
     let inFence: { marker: '`' | '~'; length: number } | null = null;
 
@@ -722,7 +678,10 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
       }
 
       if (/^(?:[ \t]|\u00a0|&nbsp;)+$/.test(line)) {
-        output.push('', '', '');
+        output.push('');
+        if (preserveVisualEmptyParagraphs) {
+          output.push('', '');
+        }
         continue;
       }
 
@@ -732,17 +691,25 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
     return output.join('\n');
   }
 
+  function normalizeDocumentMarkdown(markdown: string): string {
+    return markdown.replace(/\n{3,}/g, '\n\n');
+  }
+
   function trimSerializedTrailingBlankLines(markdown: string): string {
     return markdown.replace(/\n+$/g, '');
   }
 
   function getSerializedMarkdown(e: Editor): string {
+    const preserveVisualEmptyParagraphs = variant !== 'document';
+    const markdown = normalizeSerializedHardBreakArtifacts(
+      normalizeSerializedHardBreaksBeforeLists(
+        trimSerializedTrailingEmptyParagraph(decodeSerializedMarkdownText(e.getMarkdown()), e)
+      ),
+      preserveVisualEmptyParagraphs
+    );
+
     return trimSerializedTrailingBlankLines(
-      normalizeSerializedHardBreakArtifacts(
-        normalizeSerializedHardBreaksBeforeLists(
-          trimSerializedTrailingEmptyParagraph(decodeSerializedMarkdownText(e.getMarkdown()), e)
-        )
-      )
+      preserveVisualEmptyParagraphs ? markdown : normalizeDocumentMarkdown(markdown)
     );
   }
 
@@ -771,6 +738,7 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
     placeholder = 'Type a message...',
     editable = true,
     autofocus = false,
+    variant = 'compact',
     testid,
     editorClass,
     onUpdate,
@@ -781,6 +749,7 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
     placeholder?: string;
     editable?: boolean;
     autofocus?: boolean;
+    variant?: 'compact' | 'document';
     testid?: string;
     editorClass?: string;
     onUpdate?: (text: string) => void;
@@ -799,7 +768,6 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
   let linkHrefDraft = $state('');
   let linkDraftInitializedFor = $state<string | null>(null);
   let codeLanguageLoadToken = 0;
-  const RESTORED_EMPTY_PARAGRAPH_MARKER = '\u00a0';
 
   let hasLinkControls = $derived(activeLinkHref !== null);
   let activeCodeBlockLanguageLabel = $derived(
@@ -1026,7 +994,8 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
 
       setContent: (markdown: string) => {
         if (e.isDestroyed) return;
-        e.commands.setContent(escapeMarkdownHtml(markRestoredExplicitBlankParagraphs(markdown)), {
+        const content = variant === 'document' ? normalizeDocumentMarkdown(markdown) : markdown;
+        e.commands.setContent(escapeMarkdownHtml(content), {
           contentType: 'markdown',
           emitUpdate: false
         });
@@ -1209,6 +1178,7 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
     onscroll={() => editor && updateActiveControls(editor)}
     class={[
       'tiptap-editor max-h-50 min-h-8 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-transparent py-1 text-text',
+      variant === 'document' && 'tiptap-editor-document',
       editorClass,
       !editable && 'cursor-not-allowed'
     ]}
@@ -1429,6 +1399,54 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
     font-size: inherit;
     font-weight: 600;
     text-decoration: underline;
+  }
+
+  :global(.tiptap-editor-document .ProseMirror) {
+    line-height: 1.6;
+  }
+
+  :global(.tiptap-editor-document .ProseMirror > * + *) {
+    margin-top: 0.85em;
+  }
+
+  :global(.tiptap-editor-document .ProseMirror > * + h1),
+  :global(.tiptap-editor-document .ProseMirror > * + h2),
+  :global(.tiptap-editor-document .ProseMirror > * + h3),
+  :global(.tiptap-editor-document .ProseMirror > * + h4),
+  :global(.tiptap-editor-document .ProseMirror > * + h5),
+  :global(.tiptap-editor-document .ProseMirror > * + h6) {
+    margin-top: 1.25em;
+  }
+
+  :global(.tiptap-editor-document .ProseMirror > h1 + *),
+  :global(.tiptap-editor-document .ProseMirror > h2 + *),
+  :global(.tiptap-editor-document .ProseMirror > h3 + *),
+  :global(.tiptap-editor-document .ProseMirror > h4 + *),
+  :global(.tiptap-editor-document .ProseMirror > h5 + *),
+  :global(.tiptap-editor-document .ProseMirror > h6 + *) {
+    margin-top: 0.65em;
+  }
+
+  :global(.tiptap-editor-document .ProseMirror h1),
+  :global(.tiptap-editor-document .ProseMirror h2),
+  :global(.tiptap-editor-document .ProseMirror h3),
+  :global(.tiptap-editor-document .ProseMirror h4),
+  :global(.tiptap-editor-document .ProseMirror h5),
+  :global(.tiptap-editor-document .ProseMirror h6) {
+    line-height: 1.25;
+    text-decoration: none;
+  }
+
+  :global(.tiptap-editor-document .ProseMirror h1) {
+    font-size: 1.25em;
+  }
+
+  :global(.tiptap-editor-document .ProseMirror h2) {
+    font-size: 1.15em;
+  }
+
+  :global(.tiptap-editor-document .ProseMirror h3) {
+    font-size: 1.05em;
   }
 
   /* Placeholder styling via the Placeholder extension */

@@ -250,6 +250,7 @@
           <MarkdownEditor
             placeholder="Add Markdown-formatted room information..."
             editable={!savingInformation}
+            variant="document"
             testid="room-information-editor"
             editorClass="max-h-120 min-h-72"
             onUpdate={(value) => (information = value)}

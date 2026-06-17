@@ -16,14 +16,14 @@
     members = [],
     roleHandles = [],
     edited = false,
-    preserveBlankLines = false,
+    variant = 'message',
     onMentionClick
   }: {
     body: string;
     members?: RoomMember[];
     roleHandles?: string[];
     edited?: boolean;
-    preserveBlankLines?: boolean;
+    variant?: 'message' | 'document';
     onMentionClick?: (userId: string, anchorRect: DOMRect) => void;
   } = $props();
 
@@ -64,10 +64,9 @@
     members: RoomMember[],
     roleHandles: string[],
     edited: boolean,
-    viewerLogin: string | undefined,
-    preserveBlankLines: boolean
+    viewerLogin: string | undefined
   ): Promise<string> {
-    const html = await renderMd(body, { preserveBlankLines });
+    const html = await renderMd(body);
     const wrapped = wrapValidMentions(html, members, viewerLogin, roleHandles);
     return edited ? injectEditedMarker(wrapped) : wrapped;
   }
@@ -109,8 +108,12 @@
   }
 </script>
 
-<div class="prose max-w-none min-w-0" role="presentation" onclick={handleContentClick}>
-  {#await render(body, members, roleHandles, edited, viewerLogin, preserveBlankLines)}
+<div
+  class={['prose max-w-none min-w-0', variant === 'document' && 'prose-document']}
+  role="presentation"
+  onclick={handleContentClick}
+>
+  {#await render(body, members, roleHandles, edited, viewerLogin)}
     <!-- Show escaped body while loading -->
     <!-- eslint-disable-next-line svelte/no-at-html-tags -->
     {@html body.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}

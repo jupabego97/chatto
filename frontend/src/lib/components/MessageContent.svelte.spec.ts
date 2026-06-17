@@ -87,38 +87,24 @@ describe('renderMarkdown', () => {
       expect(html).toContain('<br>');
     });
 
-    it('can preserve blank markdown lines as visible rows', async () => {
-      const html = await renderMarkdown('Stuff\n\n\n\nNo Stuff\n\n\n\n- item', {
-        preserveBlankLines: true
-      });
+    it('renders repeated blank markdown lines with normal Markdown block semantics', async () => {
+      const html = await renderMarkdown('Stuff\n\n\n\nNo Stuff\n\n\n\n- item');
 
-      expect(html.match(/class="preserved-blank-line"/g)).toHaveLength(2);
+      expect(html).not.toContain('preserved-blank-line');
+      expect(html).toContain('<p>Stuff</p>');
+      expect(html).toContain('<p>No Stuff</p>');
       expect(html).toContain('<ul>');
       expect(html).toContain('item');
     });
 
-    it('can preserve blank markdown lines after headings as visible rows', async () => {
-      const html = await renderMarkdown('## title\n\n\n\ntext\n\n\n\n## another title\n\n\n\nanother text', {
-        preserveBlankLines: true
-      });
+    it('renders headings and paragraphs as semantic Markdown blocks', async () => {
+      const html = await renderMarkdown('## title\n\ntext\n\n## another title\n\nanother text');
 
-      expect(html.match(/class="preserved-blank-line"/g)).toHaveLength(3);
+      expect(html).not.toContain('preserved-blank-line');
       expect(html).toContain('<h2>title</h2>');
       expect(html).toContain('<p>text</p>');
       expect(html).toContain('<h2>another title</h2>');
       expect(html).toContain('<p>another text</p>');
-    });
-
-    it('does not preserve blank markdown lines by default', async () => {
-      const html = await renderMarkdown('Stuff\n\n\n\nNo Stuff');
-      expect(html).not.toContain('preserved-blank-line');
-    });
-
-    it('does not preserve ordinary paragraph separators as visible rows', async () => {
-      const html = await renderMarkdown('Stuff\n\nNo Stuff', {
-        preserveBlankLines: true
-      });
-      expect(html).not.toContain('preserved-blank-line');
     });
 
     it('auto-links plain https URLs', async () => {

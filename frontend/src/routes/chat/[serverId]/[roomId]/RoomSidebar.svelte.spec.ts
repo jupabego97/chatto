@@ -362,7 +362,7 @@ describe('RoomSidebar', () => {
     expect(container.querySelector('[aria-label="Members"]')).toBeFalsy();
   });
 
-  it('preserves blank lines in room information rendering', async () => {
+  it('renders room information with document prose', async () => {
     const { container } = render(RoomSidebarTestHarness, {
       props: {
         activePanel: 'information',
@@ -376,23 +376,31 @@ describe('RoomSidebar', () => {
     });
 
     await vi.waitFor(() => {
-      expect(container.querySelectorAll('.preserved-blank-line')).toHaveLength(3);
+      expect(container.querySelector('.prose-document')).toBeTruthy();
+      expect(container.querySelectorAll('.preserved-blank-line')).toHaveLength(0);
       expect(container.querySelector('.prose li')?.textContent).toBe(
         'Office Hours Fridays 11-13 CEST'
       );
     });
   });
 
-  it('does not preserve ordinary paragraph separators as blank lines in room information', async () => {
+  it('renders room information headings as semantic Markdown blocks', async () => {
     const { container } = render(RoomSidebarTestHarness, {
       props: {
         activePanel: 'information',
-        roomData: roomData([member(1)], 1, false, 'title\n\ncontent')
+        roomData: roomData(
+          [member(1)],
+          1,
+          false,
+          '## title\n\ntext\n\n## another title\n\nanother text'
+        )
       }
     });
 
     await vi.waitFor(() => {
-      expect(container.querySelector('.prose p')?.textContent).toBe('title');
+      expect(container.querySelectorAll('.prose h2')).toHaveLength(2);
+      expect(container.querySelector('.prose h2')?.textContent).toBe('title');
+      expect(container.querySelector('.prose p')?.textContent).toBe('text');
     });
     expect(container.querySelectorAll('.preserved-blank-line')).toHaveLength(0);
   });
