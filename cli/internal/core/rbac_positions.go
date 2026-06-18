@@ -1,9 +1,8 @@
 package core
 
-// Position constants for role hierarchy.
-// Higher position = higher rank (more power).
+// Position constants for role display/order and legacy event compatibility.
 const (
-	// Position numbering: higher = more power.
+	// Position numbering: higher sorts before lower.
 	//   suspended  = -100  (virtual policy role for active suspensions)
 	//   everyone   = 0     (always; the implicit role every user holds)
 	//   custom     = 1..99 (operator-defined roles slot in here)
@@ -12,8 +11,8 @@ const (
 	//   owner      = 1000
 	//
 	// Wide gaps between system roles leave room for new system roles in the
-	// future and let custom roles be positioned at any rank without
-	// renumbering existing ones.
+	// future and let custom roles be positioned without renumbering existing
+	// ones.
 	PositionSuspended   int32 = -100
 	PositionEveryone    int32 = 0
 	PositionCustomFirst int32 = 1

@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { TIMEOUTS } from '../constants';
+import { csrfHeaders } from '../fixtures/csrf';
 import * as routes from '../routes';
 
 /**
@@ -311,7 +312,7 @@ export class AuthPage {
    */
   async submitLogin(): Promise<void> {
     await this.signInButton.click();
-    // Users may be redirected to /chat/spaces, their last space, or /chat depending on history
+    // Users may be redirected to /chat/spaces, their last chat route, or /chat depending on history.
     await this.page.waitForURL(routes.patterns.chatRedirect);
   }
 
@@ -382,7 +383,6 @@ export class AuthPage {
 
   // --- Email Verification Methods ---
 
-
   /**
    * Get the last verification email from the test endpoint.
    * Returns the email data including body.
@@ -412,7 +412,7 @@ export class AuthPage {
     const emailData = await this.getLastVerificationEmail();
     const code = this.extractVerificationCode(emailData.body);
     const response = await this.page.request.post('/auth/verify-email/confirm-code', {
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(await csrfHeaders(this.page)) },
       data: { email, code }
     });
     expect(response.ok()).toBeTruthy();
@@ -588,7 +588,6 @@ export class AuthPage {
     // Use a generous timeout — auth failure → redirect → re-render can take time.
     await expect(this.signInHeading).toBeVisible({ timeout: TIMEOUTS.UI_STANDARD });
   }
-
 
   /**
    * Assert that an error message is visible.

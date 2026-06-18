@@ -3,6 +3,201 @@
 All notable changes to Chatto. Maintained by release-please from the
 conventional-commit messages on `main` — do not edit by hand.
 
+## [0.3.1](https://github.com/chattocorp/chatto/compare/v0.3.0...v0.3.1) (2026-06-18)
+
+
+### Features
+
+* quote selected text when replying ([#978](https://github.com/chattocorp/chatto/issues/978)) ([4844e89](https://github.com/chattocorp/chatto/commit/4844e89d62c3ca569960c3817236abe4d29699ce))
+
+
+### Bug Fixes
+
+* correct push notification deep links ([#982](https://github.com/chattocorp/chatto/issues/982)) ([d6bfe9f](https://github.com/chattocorp/chatto/commit/d6bfe9fa9cff5d9522ef9120a5a452bbb93248f6))
+* **frontend:** add embed frame vertical spacing ([#976](https://github.com/chattocorp/chatto/issues/976)) ([4137f7f](https://github.com/chattocorp/chatto/commit/4137f7fa4d6310032363e4c75e6659b7babedbac))
+* **frontend:** echo local room posts after send ([#980](https://github.com/chattocorp/chatto/issues/980)) ([33f0f46](https://github.com/chattocorp/chatto/commit/33f0f46135318ee916c8acda68d6c0debf8af53f))
+* **frontend:** remove server name from room header ([#979](https://github.com/chattocorp/chatto/issues/979)) ([5e58bd5](https://github.com/chattocorp/chatto/commit/5e58bd5ee07d7c3a882feaeb8ba7eefab4e6931f))
+* **frontend:** tighten mobile message action sheet ([#981](https://github.com/chattocorp/chatto/issues/981)) ([e30a153](https://github.com/chattocorp/chatto/commit/e30a15301181f5387b917af9bd6dd94e5246a0ce))
+
+## [0.3.0](https://github.com/chattocorp/chatto/compare/v0.2.3...v0.3.0) (2026-06-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* **sidebar:** list rooms visible via room.list ([#961](https://github.com/chattocorp/chatto/issues/961))
+
+### Features
+
+* add simple and rich composer modes ([#974](https://github.com/chattocorp/chatto/issues/974)) ([ec5bcea](https://github.com/chattocorp/chatto/commit/ec5bceaaba4f87c162366ed1a98b95b622041f95))
+* gate message attachments with message.attach ([#966](https://github.com/chattocorp/chatto/issues/966)) ([2870f0f](https://github.com/chattocorp/chatto/commit/2870f0faa0b12c0d8b618a7bacaf4f2a8fce2e49))
+* improve linked message previews ([#970](https://github.com/chattocorp/chatto/issues/970)) ([aecdb1b](https://github.com/chattocorp/chatto/commit/aecdb1b3b1762b44ac21e9a62fab0d1a462a2b99))
+* improve room member loading and search ([#963](https://github.com/chattocorp/chatto/issues/963)) ([33bd45a](https://github.com/chattocorp/chatto/commit/33bd45a75949fa2c448d3c8625f375c855233e7f))
+* **messages:** add copy link menu action ([#969](https://github.com/chattocorp/chatto/issues/969)) ([2afdee2](https://github.com/chattocorp/chatto/commit/2afdee20780d30aee9a6c8018c4f77e6f3d388dd))
+* **sidebar:** list rooms visible via room.list ([#961](https://github.com/chattocorp/chatto/issues/961)) ([fe27c06](https://github.com/chattocorp/chatto/commit/fe27c068a834762f79c61e6a480907345ba89b58))
+* simplify web push opt-in ([#971](https://github.com/chattocorp/chatto/issues/971)) ([6abb0ce](https://github.com/chattocorp/chatto/commit/6abb0ce1993618c39fc3d85ba3639e9be5348998))
+
+
+### Bug Fixes
+
+* **composer:** preserve trailing hashes in headings ([#967](https://github.com/chattocorp/chatto/issues/967)) ([3028cb2](https://github.com/chattocorp/chatto/commit/3028cb215a09d15f2ac5ed2216377f4d20ed9484))
+* **frontend:** align chat control border radii ([#968](https://github.com/chattocorp/chatto/issues/968)) ([5bc44df](https://github.com/chattocorp/chatto/commit/5bc44df8e4316d57437088bc988de11b8d7d8692))
+* **frontend:** improve blockquote styling ([#973](https://github.com/chattocorp/chatto/issues/973)) ([441706c](https://github.com/chattocorp/chatto/commit/441706c0385a84cb6df6cb4657f2572088e5f798))
+* **frontend:** route room badges from scoped notifications ([#972](https://github.com/chattocorp/chatto/issues/972)) ([8bb1cc1](https://github.com/chattocorp/chatto/commit/8bb1cc1c6e5d44f1954b6e1532312ca03000b072))
+* tighten sidebar item spacing ([#975](https://github.com/chattocorp/chatto/issues/975)) ([8aab581](https://github.com/chattocorp/chatto/commit/8aab581c698e6468d2071bbae2c862d50b8a649b))
+
+## [0.2.3](https://github.com/chattocorp/chatto/compare/v0.2.2...v0.2.3) (2026-06-18)
+
+
+### Features
+
+* add notification sound shaping controls ([#962](https://github.com/chattocorp/chatto/issues/962)) ([585fa4b](https://github.com/chattocorp/chatto/commit/585fa4b48b058e8b0c411306815ec567a4a421b9))
+* **composer:** submit with Ctrl/Cmd+Enter ([#960](https://github.com/chattocorp/chatto/issues/960)) ([461f911](https://github.com/chattocorp/chatto/commit/461f9114e33fca7bae13ac324925a928594a5d08))
+
+
+### Bug Fixes
+
+* **composer:** keep autolink boundaries editable ([#964](https://github.com/chattocorp/chatto/issues/964)) ([2170f5f](https://github.com/chattocorp/chatto/commit/2170f5f1781396a7a24defa83f667a112f6d4a52))
+* **frontend:** restore push notification routing ([#957](https://github.com/chattocorp/chatto/issues/957)) ([b000610](https://github.com/chattocorp/chatto/commit/b000610da536dc26cdb5861226c6f025c1ef9647))
+* support configurable Docker runtime user ([#959](https://github.com/chattocorp/chatto/issues/959)) ([edb4595](https://github.com/chattocorp/chatto/commit/edb459508b7458b08c295ac30016f000f74a3e7d))
+
+## [0.2.2](https://github.com/chattocorp/chatto/compare/v0.2.1...v0.2.2) (2026-06-17)
+
+
+### Features
+
+* group room files by date ([#937](https://github.com/chattocorp/chatto/issues/937)) ([b13674b](https://github.com/chattocorp/chatto/commit/b13674b8a13492ae361c870b886e2fccb2456edf))
+* **sidebar:** add group sidebar links ([#915](https://github.com/chattocorp/chatto/issues/915)) ([aea26da](https://github.com/chattocorp/chatto/commit/aea26da20ef0ee7afc86021e3671eaafcd67be7f))
+
+
+### Bug Fixes
+
+* log graphql errors ([#955](https://github.com/chattocorp/chatto/issues/955)) ([692bfc9](https://github.com/chattocorp/chatto/commit/692bfc95c5179ddcc869d0f154094ef226c6718c))
+* represent deleted room members ([#934](https://github.com/chattocorp/chatto/issues/934)) ([91ad1dc](https://github.com/chattocorp/chatto/commit/91ad1dc2047b572df6097296ac533dc22e02b285))
+
+## [0.2.1](https://github.com/chattocorp/chatto/compare/v0.2.0...v0.2.1) (2026-06-17)
+
+
+### Features
+
+* add room files sidebar ([#920](https://github.com/chattocorp/chatto/issues/920)) ([23e3415](https://github.com/chattocorp/chatto/commit/23e34154e899e0aeadcaa46118914f6966a6221c))
+* **cli:** remove reset command ([60502e3](https://github.com/chattocorp/chatto/commit/60502e3fe11ae70943abf2c0856ab1496314349d))
+* **cli:** remove reset command ([#928](https://github.com/chattocorp/chatto/issues/928)) ([3380efd](https://github.com/chattocorp/chatto/commit/3380efd91579f3c115f2d5918be14d8aa88cdd4c))
+
+
+### Bug Fixes
+
+* **e2e:** wait for posted message articles ([#923](https://github.com/chattocorp/chatto/issues/923)) ([c7d9e22](https://github.com/chattocorp/chatto/commit/c7d9e22a462e9f0f3f21762bfb9f6fc8f3155d79))
+* **frontend:** confirm mention autocomplete with enter ([d28aa4e](https://github.com/chattocorp/chatto/commit/d28aa4e72d44d2cb480a06045ff215d61e87f2db))
+* **frontend:** use app modal for mention confirmation ([#927](https://github.com/chattocorp/chatto/issues/927)) ([f7ff517](https://github.com/chattocorp/chatto/commit/f7ff5173bde71422a3dc45c72ac1268b91924941))
+* tolerate stale room members ([#932](https://github.com/chattocorp/chatto/issues/932)) ([40c7d6c](https://github.com/chattocorp/chatto/commit/40c7d6cc0c0847764b8c02592197ee8f14657349))
+* update thread replies after send ([#924](https://github.com/chattocorp/chatto/issues/924)) ([2062fdc](https://github.com/chattocorp/chatto/commit/2062fdc9f8686f44a181780b3692364b266ff65b))
+
+## [0.2.0](https://github.com/chattocorp/chatto/compare/v0.1.0...v0.2.0) (2026-06-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* **docker:** use config and data root paths ([#903](https://github.com/chattocorp/chatto/issues/903))
+
+### Features
+
+* add notification badge counts ([#909](https://github.com/chattocorp/chatto/issues/909)) ([f25a69d](https://github.com/chattocorp/chatto/commit/f25a69da861628ebcb3a07ca1cbc1d9e2744fcf4))
+* **auth:** configure email OTP throttling ([#902](https://github.com/chattocorp/chatto/issues/902)) ([8c2d202](https://github.com/chattocorp/chatto/commit/8c2d2024b7e76df74fe3305736fa7f9683c353ac))
+* **frontend:** preview Markdown in composer ([#876](https://github.com/chattocorp/chatto/issues/876)) ([06afedb](https://github.com/chattocorp/chatto/commit/06afedbc7d1662d3793c549a402bc3343eb9e37d))
+* show room sidebar in DMs ([#912](https://github.com/chattocorp/chatto/issues/912)) ([32222fa](https://github.com/chattocorp/chatto/commit/32222fa82766060eb1b645fb507e1ea1ec1f2b19))
+
+
+### Bug Fixes
+
+* **auth:** make CSRF tokens stateless ([#900](https://github.com/chattocorp/chatto/issues/900)) ([a2da80c](https://github.com/chattocorp/chatto/commit/a2da80c478700c163240c3c5a816386b1d58c78f))
+* **ci:** checkout docs image PR refs ([#906](https://github.com/chattocorp/chatto/issues/906)) ([a2af9a2](https://github.com/chattocorp/chatto/commit/a2af9a294946aecea76cb121d66ed21f220bc11b))
+* **docker:** use config and data root paths ([#903](https://github.com/chattocorp/chatto/issues/903)) ([c90f0d9](https://github.com/chattocorp/chatto/commit/c90f0d9a4ee0711f16143cb28904dc7623ef39c6))
+* **frontend:** remount room on notification switch ([#908](https://github.com/chattocorp/chatto/issues/908)) ([fcba838](https://github.com/chattocorp/chatto/commit/fcba83843711a568e0356518bd25e78fe06835b8))
+* **frontend:** show active call badges for DMs ([#899](https://github.com/chattocorp/chatto/issues/899)) ([a7299e1](https://github.com/chattocorp/chatto/commit/a7299e15978c6b03ccd10889dc27d04e483851ad))
+* refresh room layout state after room creation ([#907](https://github.com/chattocorp/chatto/issues/907)) ([7cd94d2](https://github.com/chattocorp/chatto/commit/7cd94d27c86fcc09f669e36bfc92031271785633))
+* support implicit SMTP TLS ([#905](https://github.com/chattocorp/chatto/issues/905)) ([d7d83b1](https://github.com/chattocorp/chatto/commit/d7d83b1a98bf6bcf199776e188f9647b9c23cf78))
+* tidy server lifecycle logs ([#914](https://github.com/chattocorp/chatto/issues/914)) ([2b95bf4](https://github.com/chattocorp/chatto/commit/2b95bf42c1687ad8c2c3a91c589c68084eb2be5f))
+
+## [0.1.0](https://github.com/chattocorp/chatto/compare/v0.1.0-rc.0...v0.1.0) (2026-06-16)
+
+
+### Features
+
+* **auth:** use bearer tokens for origin GraphQL ([#897](https://github.com/chattocorp/chatto/issues/897)) ([cf9b552](https://github.com/chattocorp/chatto/commit/cf9b55294fd0b17636a181a35cb84ac9699ea85a))
+
+
+### Bug Fixes
+
+* **frontend:** keep sidebars visible on fresh sessions ([#891](https://github.com/chattocorp/chatto/issues/891)) ([1cb5717](https://github.com/chattocorp/chatto/commit/1cb571721e7ead02ca8cfd12d961937ad5f648fb))
+* **frontend:** remember last visited DM rooms ([#894](https://github.com/chattocorp/chatto/issues/894)) ([de8efb0](https://github.com/chattocorp/chatto/commit/de8efb0f8a827d4f9e40c103fe429d4e7674fb8e))
+
+## [0.1.0-rc.0](https://github.com/chattocorp/chatto/compare/v0.1.0-beta.6...v0.1.0-rc.0) (2026-06-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* refresh current room on reconnect ([#878](https://github.com/chattocorp/chatto/issues/878))
+* **auth:** stabilize cookie session auth ([#883](https://github.com/chattocorp/chatto/issues/883))
+* simplify RBAC permissions ([#880](https://github.com/chattocorp/chatto/issues/880))
+
+### Features
+
+* add per-process Prometheus metrics ([#877](https://github.com/chattocorp/chatto/issues/877)) ([34a88e5](https://github.com/chattocorp/chatto/commit/34a88e5b3608f87b778ecbc3a67120df404cbb30))
+* **auth:** support external auth providers ([#873](https://github.com/chattocorp/chatto/issues/873)) ([ff2fb06](https://github.com/chattocorp/chatto/commit/ff2fb0681832cd1915004117b27b0cc43781a782))
+* make LiveKit reconciliation resilient ([#869](https://github.com/chattocorp/chatto/issues/869)) ([82a5bc9](https://github.com/chattocorp/chatto/commit/82a5bc937c503203ae2bc557cc788f1a14c47b0b))
+* show call lifecycle notices in room events ([#867](https://github.com/chattocorp/chatto/issues/867)) ([b652c4f](https://github.com/chattocorp/chatto/commit/b652c4f9511359bc89b68ccf51ec4a232317ea5d))
+
+
+### Bug Fixes
+
+* **auth:** stabilize cookie session auth ([#883](https://github.com/chattocorp/chatto/issues/883)) ([376a268](https://github.com/chattocorp/chatto/commit/376a268595420601f78c328fae38969648638644))
+* **cli:** improve generated chatto config defaults ([#872](https://github.com/chattocorp/chatto/issues/872)) ([7ba64b7](https://github.com/chattocorp/chatto/commit/7ba64b779dbdd8ee4147dcc541ea19d1960a213e))
+* **config:** tighten chatto config validation ([#868](https://github.com/chattocorp/chatto/issues/868)) ([8b45012](https://github.com/chattocorp/chatto/commit/8b450122fd52e043fecea4cb87042ae2ba73df1a))
+* **core:** align projection snapshots with OCC ([#864](https://github.com/chattocorp/chatto/issues/864)) ([f805493](https://github.com/chattocorp/chatto/commit/f80549386bcab39a0cb2a2874cd0724b7dac8fc9))
+* **frontend:** prevent expired edit via ArrowUp ([#879](https://github.com/chattocorp/chatto/issues/879)) ([bbae3aa](https://github.com/chattocorp/chatto/commit/bbae3aa576a7a036f7567753bb38925afbd1bea6))
+* ignore markdown code mentions and previews ([#866](https://github.com/chattocorp/chatto/issues/866)) ([37933cb](https://github.com/chattocorp/chatto/commit/37933cbd552e406ee7e2ad5a48d7f56449886ce5))
+* refresh current room on reconnect ([#878](https://github.com/chattocorp/chatto/issues/878)) ([8066af7](https://github.com/chattocorp/chatto/commit/8066af79bc669ad613a496615719a103385c70d2))
+* remember sidebar visibility preferences ([#862](https://github.com/chattocorp/chatto/issues/862)) ([ec13041](https://github.com/chattocorp/chatto/commit/ec130411d1a6279e3e5ad218f77281d2382d7e55))
+
+
+### Code Refactoring
+
+* simplify RBAC permissions ([#880](https://github.com/chattocorp/chatto/issues/880)) ([37fe2c6](https://github.com/chattocorp/chatto/commit/37fe2c6dac274a4edf48c5051b7ecfcb04dcdcfb))
+
+## [0.1.0-beta.6](https://github.com/chattocorp/chatto/compare/v0.1.0-beta.5...v0.1.0-beta.6) (2026-06-15)
+
+
+### Features
+
+* add durable LiveKit call events and E2EE ([#835](https://github.com/chattocorp/chatto/issues/835)) ([8d91797](https://github.com/chattocorp/chatto/commit/8d91797e842e68072f14fcd2aa9543c2ade1d477))
+* add role mentions ([#825](https://github.com/chattocorp/chatto/issues/825)) ([cc95f73](https://github.com/chattocorp/chatto/commit/cc95f73460e868cd41cb6103f8b6587c79d38010))
+* add room extras sidebar tabs ([#856](https://github.com/chattocorp/chatto/issues/856)) ([99dff21](https://github.com/chattocorp/chatto/commit/99dff210ddb95b7c4162d1f63767f4e951f6ff4a))
+* **admin:** auto-paginate event log ([#852](https://github.com/chattocorp/chatto/issues/852)) ([cbee54f](https://github.com/chattocorp/chatto/commit/cbee54fa88bf6e47424a30e9f92ef7b16b05da66))
+* allow editing thread reply channel echoes ([#847](https://github.com/chattocorp/chatto/issues/847)) ([a5abd5a](https://github.com/chattocorp/chatto/commit/a5abd5a3b4b2c1c06504fcdbd5a512c8346405d6))
+* **frontend:** find server users in cmd-k ([#844](https://github.com/chattocorp/chatto/issues/844)) ([26283ce](https://github.com/chattocorp/chatto/commit/26283ce5818766fa4a94bc147f6a865478669d68))
+
+
+### Bug Fixes
+
+* add CSRF protection for cookie sessions ([#851](https://github.com/chattocorp/chatto/issues/851)) ([ccc8d69](https://github.com/chattocorp/chatto/commit/ccc8d6961d8e05095b025d8ea89101d604258e9d))
+* attribute RBAC audit events to actors ([#834](https://github.com/chattocorp/chatto/issues/834)) ([0e89890](https://github.com/chattocorp/chatto/commit/0e898907f45da420c6728e75ff4b7fe86ae34911))
+* **core:** end stuck calls when LiveKit fails ([#860](https://github.com/chattocorp/chatto/issues/860)) ([fbe1644](https://github.com/chattocorp/chatto/commit/fbe1644f931b8cadb3a2ed457557450fc89adb09))
+* **frontend:** auto-paginate admin members ([#846](https://github.com/chattocorp/chatto/issues/846)) ([7fff051](https://github.com/chattocorp/chatto/commit/7fff0510133d31d31ed412ef639ab374e03970bd))
+* **frontend:** paginate room member sidebar ([#833](https://github.com/chattocorp/chatto/issues/833)) ([1e87d98](https://github.com/chattocorp/chatto/commit/1e87d9855e9c2918539085a76780a6c5d19df226))
+* **frontend:** remove server header leave icon ([#855](https://github.com/chattocorp/chatto/issues/855)) ([360bdca](https://github.com/chattocorp/chatto/commit/360bdcabd458eb7d0f8b16bac649b8c940c1b217))
+* **frontend:** stabilize presence display ([#850](https://github.com/chattocorp/chatto/issues/850)) ([1901ca2](https://github.com/chattocorp/chatto/commit/1901ca24982a879b242001951ccd0e2080ee8198))
+* **frontend:** use commit hash for dev app version ([#857](https://github.com/chattocorp/chatto/issues/857)) ([2a7f73e](https://github.com/chattocorp/chatto/commit/2a7f73ee3eb2b594db916a29d6c93cf2ad73b450))
+* **logging:** stop logging user PII ([#830](https://github.com/chattocorp/chatto/issues/830)) ([6f1b558](https://github.com/chattocorp/chatto/commit/6f1b558278f2216e88ab02a93df59579fbec2be8))
+* preserve session auth for GraphQL CSRF ([#858](https://github.com/chattocorp/chatto/issues/858)) ([4b1507d](https://github.com/chattocorp/chatto/commit/4b1507d7826e89bb967adec16f1e12ded14534fa))
+* refine conversation start marker UX ([#839](https://github.com/chattocorp/chatto/issues/839)) ([862a617](https://github.com/chattocorp/chatto/commit/862a617b216fe3cf4dab7099163ca36a6696de87))
+* replay missed subscription events ([#832](https://github.com/chattocorp/chatto/issues/832)) ([eeec111](https://github.com/chattocorp/chatto/commit/eeec111e41fc6037d53e22a932f9e8a209b80440))
+* validate cookie encryption secret early ([#842](https://github.com/chattocorp/chatto/issues/842)) ([899953c](https://github.com/chattocorp/chatto/commit/899953ce48b277e4488fd0f01e0d316033ddc16c))
+
+
+### Performance Improvements
+
+* **threads:** paginate My Threads ([#837](https://github.com/chattocorp/chatto/issues/837)) ([7d4afab](https://github.com/chattocorp/chatto/commit/7d4afab47f0054b756c290a8a8c72fd752589b93))
+
 ## [0.1.0-beta.5](https://github.com/chattocorp/chatto/compare/v0.1.0-beta.4...v0.1.0-beta.5) (2026-06-13)
 
 

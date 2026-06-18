@@ -7,6 +7,7 @@
   import { graphqlClientManager } from '$lib/state/server/graphqlClient.svelte';
   import { createEventBusHandlerRegistrar } from '$lib/eventBus.svelte';
   import { graphql } from './gql';
+  import { isUnsupportedGraphQLFieldError } from '$lib/gql/compatibility';
   import { notificationTarget } from '$lib/state/server/notifications.svelte';
   import { appState } from '$lib/state/globals.svelte';
   import ServerIcon from './ServerIcon.svelte';
@@ -113,6 +114,16 @@
     }
   `);
 
+  const ServerSidebarEntryNotificationCountQuery = graphql(`
+    query ServerSidebarEntryNotificationCount {
+      server {
+        viewerNotifications(limit: 1) {
+          totalCount
+        }
+      }
+    }
+  `);
+
   async function loadAll() {
     try {
       const client = getClient();
@@ -147,6 +158,8 @@
         }
         roomUnreadStore.clear();
         roomUnreadStore.setServerHasUnread(server.viewerHasUnreadRooms);
+        notificationStore.setUnreadNotificationCount(0);
+        void loadUnreadNotificationCount();
 
         // Populate DM unread status and notification preferences. Channel
         // and DM rooms now share the same per-room unread map.
@@ -168,6 +181,28 @@
       }
     } catch (err) {
       console.error(`[server:${serverId}] failed to load sidebar icon data`, err);
+    }
+  }
+
+  async function loadUnreadNotificationCount() {
+    try {
+      const client = getClient();
+      const result = await client.query(ServerSidebarEntryNotificationCountQuery, {}).toPromise();
+
+      if (result.error) {
+        if (!isUnsupportedGraphQLFieldError(result.error, 'viewerNotifications')) {
+          console.warn(`[server:${serverId}] failed to load notification count`, result.error);
+        }
+        notificationStore.setUnreadNotificationCount(0);
+        return;
+      }
+
+      notificationStore.setUnreadNotificationCount(
+        result.data?.server?.viewerNotifications.totalCount ?? 0
+      );
+    } catch (err) {
+      console.warn(`[server:${serverId}] failed to load notification count`, err);
+      notificationStore.setUnreadNotificationCount(0);
     }
   }
 
@@ -280,13 +315,16 @@
     };
   });
 
-  // Handle click on icon notification dot. The icon's notification can come
+  // Handle click on icon notification badge. The icon's notification can come
   // from either a channel mention/reply or a DM message. Prefer channel
   // notifications when both are present.
   async function handleServerNotificationClick() {
     const notification =
       notificationStore.getSpaceNotification() ?? notificationStore.getDMNotification();
-    if (!notification) return;
+    if (!notification) {
+      await goto(resolve('/chat/notifications'));
+      return;
+    }
 
     const target = notificationTarget(notification);
     if (target.eventId && target.roomId) {
@@ -343,6 +381,7 @@
   href={resolve('/chat/[serverId]', { serverId: serverSegment })}
   selected={isActiveServer}
   indicator={stores.serverIndicator()}
+  notificationCount={notificationStore.unreadNotificationCount}
   onIndicatorClick={handleServerIndicatorClick}
   title={iconTitle}
   dimmed={iconDimmed}

@@ -6,43 +6,69 @@ the real sync hook so browser specs can exercise pagination wiring without
 mounting the full chat room shell.
 -->
 <script lang="ts">
-  import { useRoomMembersSync } from '$lib/hooks/useRoomMembersSync.svelte';
   import type { RoomData } from '$lib/hooks/useRoomData.svelte';
-  import {
-    createPresenceCache,
-    type PresenceCache
-  } from '$lib/state/presenceCache.svelte';
-  import RoomSidebar from './RoomSidebar.svelte';
+  import { createPresenceCache, type PresenceCache } from '$lib/state/presenceCache.svelte';
+  import { useConnection } from '$lib/state/server/connection.svelte';
+  import { RoomFilesStore, RoomMembersStore, setRoomMembersStore } from '$lib/state/room';
+  import { setUserSettings, UserSettingsState } from '$lib/state/userSettings.svelte';
+  import RoomSidebar, { type RoomSidebarPanel } from './RoomSidebar.svelte';
 
   let {
     roomId = 'room-1',
-    roomData,
+    roomData: _roomData,
+    activePanel = 'members',
+    presentation = 'desktop',
     currentUserId = 'viewer',
-    onPresenceCacheReady
+    canBanRoomMembers = false,
+    fileGroupingNow,
+    onPresenceCacheReady,
+    onOpenFile,
+    onClose
   }: {
     roomId?: string;
     roomData: RoomData;
+    activePanel?: RoomSidebarPanel;
+    presentation?: 'desktop' | 'overlay';
     currentUserId?: string | null;
+    canBanRoomMembers?: boolean;
+    fileGroupingNow?: Date;
     onPresenceCacheReady?: (cache: PresenceCache) => void;
+    onOpenFile?: (messageEventId: string, threadRootEventId: string | null) => void;
+    onClose?: () => void;
   } = $props();
 
+  const connection = useConnection();
+  setUserSettings(new UserSettingsState());
   const presenceCache = createPresenceCache();
   queueMicrotask(() => {
     onPresenceCacheReady?.(presenceCache);
   });
+  const roomFilesStore = new RoomFilesStore(connection());
+  const roomMembersStore = setRoomMembersStore(new RoomMembersStore(connection()));
 
-  const roomMembers = useRoomMembersSync(() => ({
-    roomId,
-    isDM: false,
-    roomData,
-    dmData: null
-  }));
+  $effect(() => {
+    if (activePanel !== 'files') return;
+    roomFilesStore.setRoom(roomId);
+  });
+
+  $effect(() => {
+    roomMembersStore.setRoom(roomId);
+    if (activePanel === 'members') {
+      roomMembersStore.ensureLoaded();
+    }
+  });
 </script>
 
 <RoomSidebar
   {roomId}
+  {activePanel}
+  {presentation}
   loading={false}
-  canBanRoomMembers={false}
+  {canBanRoomMembers}
   {currentUserId}
-  onLoadMoreMembers={roomMembers.loadMoreMembers}
+  membersStore={roomMembersStore}
+  filesStore={roomFilesStore}
+  {fileGroupingNow}
+  {onOpenFile}
+  {onClose}
 />

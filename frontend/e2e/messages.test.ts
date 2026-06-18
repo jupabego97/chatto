@@ -2,13 +2,11 @@ import { expect } from '@playwright/test';
 import { TIMEOUTS } from './constants';
 import { test } from './setup';
 import { createAndLoginTestUser } from './fixtures/testUser';
-import { ChatPage, RoomPage, ExplorePage } from './pages';
-import * as routes from './routes';
+import { withServerUser } from './fixtures/serverUser';
 
 test('consecutive messages from same user are grouped', async ({ page, chatPage, roomPage }) => {
   const testUser = await createAndLoginTestUser(page);
   await chatPage.goto();
-  await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   const timestamp = Date.now();
@@ -41,7 +39,6 @@ test('deleting first message in group leaves a tombstone as the group leader', a
 }) => {
   const testUser = await createAndLoginTestUser(page);
   await chatPage.goto();
-  await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   const timestamp = Date.now();
@@ -79,7 +76,6 @@ test('deleting first message in group leaves a tombstone as the group leader', a
 test('day separator appears for first message', async ({ page, chatPage, roomPage }) => {
   await createAndLoginTestUser(page);
   await chatPage.goto();
-  await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   const testMessage = `Test message ${Date.now()}`;
@@ -92,7 +88,6 @@ test('day separator appears for first message', async ({ page, chatPage, roomPag
 test('post message with image attachment', async ({ page, chatPage, roomPage }) => {
   const testUser = await createAndLoginTestUser(page);
   await chatPage.goto();
-  await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   const testMessage = `Image attachment test ${Date.now()}`;
@@ -113,7 +108,6 @@ test('image attachment refreshes URL after an expired lazy-load request', async 
 }) => {
   await createAndLoginTestUser(page);
   await chatPage.goto();
-  await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   let refreshQueryCount = 0;
@@ -125,9 +119,12 @@ test('image attachment refreshes URL after an expired lazy-load request', async 
     await route.continue();
   });
 
-  const failNextAssetResponse = await page.request.post('/auth/test/fail-next-asset-proxy-request', {
-    data: { count: 1 }
-  });
+  const failNextAssetResponse = await page.request.post(
+    '/auth/test/fail-next-asset-proxy-request',
+    {
+      data: { count: 1 }
+    }
+  );
   expect(failNextAssetResponse.ok()).toBe(true);
 
   await roomPage.sendAttachment('e2e/fixtures/brighton.jpg', 'Expired lazy image');
@@ -136,9 +133,7 @@ test('image attachment refreshes URL after an expired lazy-load request', async 
   await expect
     .poll(
       async () =>
-        roomPage.attachmentImage
-          .first()
-          .evaluate((img) => img.complete && img.naturalWidth > 0),
+        roomPage.attachmentImage.first().evaluate((img) => img.complete && img.naturalWidth > 0),
       { timeout: TIMEOUTS.COMPLEX_OPERATION }
     )
     .toBe(true);
@@ -147,7 +142,6 @@ test('image attachment refreshes URL after an expired lazy-load request', async 
 test('can post message with attachment but no text', async ({ page, chatPage, roomPage }) => {
   const testUser = await createAndLoginTestUser(page);
   await chatPage.goto();
-  await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   // Send attachment-only message
@@ -168,7 +162,6 @@ test('image attachment respects container width on narrow viewport', async ({
   // Setup at normal viewport (sidebar needs space to be visible)
   await createAndLoginTestUser(page);
   await chatPage.goto();
-  await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   // Upload an image (1024px wide, should be constrained)
@@ -197,7 +190,6 @@ test('room scrolls to bottom on load even with slow-loading images', async ({
 }) => {
   await createAndLoginTestUser(page);
   await chatPage.goto();
-  await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   // Send a message with an image attachment
@@ -243,7 +235,6 @@ test('cannot post message with neither text nor attachments', async ({
 }) => {
   await createAndLoginTestUser(page);
   await chatPage.goto();
-  await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   // Try to submit with empty text and no attachments
@@ -253,13 +244,14 @@ test('cannot post message with neither text nor attachments', async ({
   await expect(roomPage.messageInput).toBeFocused();
 
   // No message should appear in the room (check over time to be sure)
-  await expect.poll(async () => await roomPage.messages.count(), { timeout: TIMEOUTS.UI_FAST }).toBe(0);
+  await expect
+    .poll(async () => await roomPage.messages.count(), { timeout: TIMEOUTS.UI_FAST })
+    .toBe(0);
 });
 
 test('send button is visible', async ({ page, chatPage, roomPage }) => {
   await createAndLoginTestUser(page);
   await chatPage.goto();
-  await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   await expect(roomPage.sendButton).toBeVisible();
@@ -268,7 +260,6 @@ test('send button is visible', async ({ page, chatPage, roomPage }) => {
 test('send button is disabled when input is empty', async ({ page, chatPage, roomPage }) => {
   await createAndLoginTestUser(page);
   await chatPage.goto();
-  await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   // Ensure input is empty
@@ -281,7 +272,6 @@ test('send button is disabled when input is empty', async ({ page, chatPage, roo
 test('send button is enabled when input has text', async ({ page, chatPage, roomPage }) => {
   await createAndLoginTestUser(page);
   await chatPage.goto();
-  await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   // Type some text
@@ -294,7 +284,6 @@ test('send button is enabled when input has text', async ({ page, chatPage, room
 test('can send message by clicking send button', async ({ page, chatPage, roomPage }) => {
   await createAndLoginTestUser(page);
   await chatPage.goto();
-  await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   const testMessage = `Send button test ${Date.now()}`;
@@ -307,7 +296,6 @@ test('can send message by clicking send button', async ({ page, chatPage, roomPa
 test('user can delete their own message', async ({ page, chatPage, roomPage }) => {
   await createAndLoginTestUser(page);
   await chatPage.goto();
-  await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   const testMessage = `Delete test ${Date.now()}`;
@@ -330,7 +318,6 @@ test('user can delete their own message', async ({ page, chatPage, roomPage }) =
 test('user can cancel deleting a message', async ({ page, chatPage, roomPage }) => {
   await createAndLoginTestUser(page);
   await chatPage.goto();
-  await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   const testMessage = `Cancel delete test ${Date.now()}`;
@@ -350,71 +337,53 @@ test('deleted message disappears for other connected clients in real-time', asyn
   browser,
   serverURL
 }) => {
-  // User 1: Create space and post a message
+  // User 1: Create account and post a message
   await createAndLoginTestUser(page);
   await chatPage.goto();
-  const spaceName = await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   const testMessage = `Real-time delete test ${Date.now()}`;
   const message1 = await roomPage.sendMessage(testMessage);
   const eventId = await message1.getEventId();
 
-  // User 2: Create user and join space
-  const context2 = await browser!.newContext({
-    baseURL: serverURL,
-    viewport: { width: 1280, height: 720 }
-  });
-  const page2 = await context2.newPage();
+  // User 2: Create user and open the server
+  await withServerUser(
+    browser!,
+    serverURL,
+    async ({ page: page2, chatPage: chatPage2 }) => {
+      await chatPage2.enterRoom('general');
 
-  try {
-    await createAndLoginTestUser(page2);
+      // User 2 should see the message
+      await expect(page2.getByText(testMessage)).toBeVisible({ timeout: TIMEOUTS.UI_STANDARD });
 
-    // Post-#330 PR(a): signup auto-joins the server space; the Browse Spaces
-    // UI is gone, so user 2 just navigates to the chat root and clicks into
-    // the room.
-    void spaceName;
-    await page2.goto(routes.chat);
-    await page2.waitForURL(routes.patterns.spaceOrRoom);
+      // User 1: Delete the message
+      await message1.delete();
 
-    // User 2 enters the general room (may already be there due to redirect)
-    const generalRoomLink = page2.locator('.room-list').getByRole('link', { name: '# general' });
-    await expect(generalRoomLink).toBeVisible({ timeout: TIMEOUTS.UI_FAST });
-    await generalRoomLink.click();
-    await page2.waitForURL(routes.patterns.anyRoom);
+      // User 1: deleted message should show the tombstone
+      await roomPage.expectMessageNotVisible(testMessage);
+      if (eventId) {
+        const message1AfterDelete = roomPage.getMessageByEventId(eventId);
+        await message1AfterDelete.expectDeleted();
+      }
 
-    // User 2 should see the message
-    await expect(page2.getByText(testMessage)).toBeVisible({ timeout: TIMEOUTS.UI_STANDARD });
-
-    // User 1: Delete the message
-    await message1.delete();
-
-    // User 1: deleted message should show the tombstone
-    await roomPage.expectMessageNotVisible(testMessage);
-    if (eventId) {
-      const message1AfterDelete = roomPage.getMessageByEventId(eventId);
-      await message1AfterDelete.expectDeleted();
-    }
-
-    // User 2: should also see the tombstone arrive via LiveEvent
-    if (eventId) {
-      const message2AfterDelete = page2.locator(`[data-event-id="${eventId}"]`);
-      await expect(
-        message2AfterDelete.getByText('This message has been deleted')
-      ).toBeVisible({ timeout: TIMEOUTS.UI_STANDARD });
-      await expect(page2.getByText(testMessage)).not.toBeVisible({
-        timeout: TIMEOUTS.UI_STANDARD
-      });
-    }
-  } finally {
-    await context2.close();
-  }
+      // User 2: should also see the tombstone arrive via LiveEvent
+      if (eventId) {
+        const message2AfterDelete = page2.locator(`[data-event-id="${eventId}"]`);
+        await expect(message2AfterDelete.getByText('This message has been deleted')).toBeVisible({
+          timeout: TIMEOUTS.UI_STANDARD
+        });
+        await expect(page2.getByText(testMessage)).not.toBeVisible({
+          timeout: TIMEOUTS.UI_STANDARD
+        });
+      }
+    },
+    { viewport: { width: 1280, height: 720 } }
+  );
 });
 
 test('deleted attachment-only message shows placeholder', async ({ page, chatPage, roomPage }) => {
   await createAndLoginTestUser(page);
   await chatPage.goto();
-  await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   // Send attachment-only message
@@ -438,7 +407,6 @@ test('deleting attachment-only message in group does not mark text message as ed
 }) => {
   await createAndLoginTestUser(page);
   await chatPage.goto();
-  await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   const timestamp = Date.now();
@@ -474,7 +442,6 @@ test('removing attachment from attachment-only message hides it', async ({
 }) => {
   await createAndLoginTestUser(page);
   await chatPage.goto();
-  await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   // Send attachment-only message (no text body)
@@ -497,7 +464,6 @@ test('removing attachment from attachment-only message hides it', async ({
 test('deleted message with reactions remains visible', async ({ page, chatPage, roomPage }) => {
   await createAndLoginTestUser(page);
   await chatPage.goto();
-  await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   const testMessage = `Delete with reaction ${Date.now()}`;
@@ -534,7 +500,6 @@ test('deletion of a reacted message shows placeholder for other connected client
   // doesn't cover and that the previous refetch-only path failed silently on.
   await createAndLoginTestUser(page);
   await chatPage.goto();
-  const spaceName = await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   const testMessage = `Real-time delete with reaction ${Date.now()}`;
@@ -542,42 +507,30 @@ test('deletion of a reacted message shows placeholder for other connected client
   const eventId = await message1.getEventId();
   if (!eventId) throw new Error('expected eventId from sent message');
 
-  const context2 = await browser!.newContext({
-    baseURL: serverURL,
-    viewport: { width: 1280, height: 720 }
-  });
-  const page2 = await context2.newPage();
+  await withServerUser(
+    browser!,
+    serverURL,
+    async ({ roomPage: roomPage2, chatPage: chatPage2 }) => {
+      await chatPage2.enterRoom('general');
+      await roomPage2.expectMessageVisible(testMessage);
 
-  try {
-    await createAndLoginTestUser(page2);
+      // User 2 reacts so the deletion can't take the "fully hidden" path.
+      const message2 = roomPage2.getMessageByEventId(eventId);
+      await message2.react('👍');
+      await message2.expectReaction('👍', 1);
 
-    const chatPage2 = new ChatPage(page2);
-    const roomPage2 = new RoomPage(page2);
-    const explorePage2 = new ExplorePage(page2);
+      // User 1 deletes their own message.
+      await message1.delete();
 
-    await chatPage2.goto();
-    await chatPage2.goToExploreSpaces();
-    await explorePage2.joinSpace(spaceName);
-    await chatPage2.enterRoom('general');
-    await roomPage2.expectMessageVisible(testMessage);
-
-    // User 2 reacts so the deletion can't take the "fully hidden" path.
-    const message2 = roomPage2.getMessageByEventId(eventId);
-    await message2.react('👍');
-    await message2.expectReaction('👍', 1);
-
-    // User 1 deletes their own message.
-    await message1.delete();
-
-    // User 2 must see the placeholder + reaction without a refresh.
-    await message2.expectDeleted();
-    await message2.expectReaction('👍', 1);
-    await expect(message2.locator.getByText(testMessage)).not.toBeVisible({
-      timeout: TIMEOUTS.UI_STANDARD
-    });
-  } finally {
-    await context2.close();
-  }
+      // User 2 must see the placeholder + reaction without a refresh.
+      await message2.expectDeleted();
+      await message2.expectReaction('👍', 1);
+      await expect(message2.locator.getByText(testMessage)).not.toBeVisible({
+        timeout: TIMEOUTS.UI_STANDARD
+      });
+    },
+    { viewport: { width: 1280, height: 720 } }
+  );
 });
 
 test('deleted message with thread replies remains visible', async ({
@@ -587,7 +540,6 @@ test('deleted message with thread replies remains visible', async ({
 }) => {
   await createAndLoginTestUser(page);
   await chatPage.goto();
-  await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   const testMessage = `Delete with thread ${Date.now()}`;
@@ -624,7 +576,6 @@ test('image lightbox supports keyboard navigation with multiple images', async (
 }) => {
   await createAndLoginTestUser(page);
   await chatPage.goto();
-  await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   // Upload two images in a single message
@@ -688,7 +639,6 @@ test('image lightbox does not show navigation for single image', async ({
 }) => {
   await createAndLoginTestUser(page);
   await chatPage.goto();
-  await chatPage.createSpace();
   await chatPage.enterRoom('general');
 
   // Upload a single image
@@ -721,7 +671,6 @@ test.describe('image lightbox back button and tap behavior', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     await roomPage.sendAttachment('e2e/fixtures/brighton.jpg');
@@ -746,7 +695,6 @@ test.describe('image lightbox back button and tap behavior', () => {
   test('closes lightbox by clicking backdrop', async ({ page, chatPage, roomPage }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     await roomPage.sendAttachment('e2e/fixtures/brighton.jpg');
@@ -765,7 +713,6 @@ test.describe('Message link rendering', () => {
   test('long URLs do not overflow the message container', async ({ page, chatPage, roomPage }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Send a message with a very long URL that would overflow without wrapping

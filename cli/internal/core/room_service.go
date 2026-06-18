@@ -83,6 +83,17 @@ func (m *RoomService) waitForGroupLayout(ctx context.Context, pos events.StreamP
 	return waitForPositionAll(ctx, pos, waitForProjection("room group layout", m.groupLayoutProjector))
 }
 
+func (m *RoomService) waitForGroupLayoutCurrent(ctx context.Context, publisher *events.Publisher) error {
+	pos, err := publisher.LastSubjectPosition(ctx, events.GroupSubjectFilter())
+	if err != nil {
+		return err
+	}
+	if pos.IsZero() {
+		return nil
+	}
+	return m.waitForGroupLayout(ctx, pos)
+}
+
 func (m *RoomService) waitForTimeline(ctx context.Context, pos events.StreamPosition) error {
 	return waitForPositionAll(ctx, pos, waitForProjection("room timeline", m.timelineProjector))
 }
@@ -96,11 +107,14 @@ func (m *RoomService) waitForReactions(ctx context.Context, pos events.StreamPos
 }
 
 func (m *RoomService) waitForReactionsCurrent(ctx context.Context, publisher *events.Publisher, roomID string) error {
-	agg := events.RoomAggregate(roomID)
-	return waitForProjectionSubjectsCurrent(ctx, publisher, "reactions", m.reactionsProjector,
-		agg.Subject(events.EventReactionAdded),
-		agg.Subject(events.EventReactionRemoved),
-	)
+	pos, err := publisher.LastSubjectPosition(ctx, events.RoomAggregate(roomID).AllEventsFilter())
+	if err != nil {
+		return err
+	}
+	if pos.IsZero() {
+		return nil
+	}
+	return m.waitForReactions(ctx, pos)
 }
 
 func (m *RoomService) waitForDirectoryAndTimeline(ctx context.Context, pos events.StreamPosition) error {
@@ -114,29 +128,6 @@ func (m *RoomService) waitForTimelineAndThreads(ctx context.Context, pos events.
 	return waitForPositionAll(ctx, pos,
 		waitForProjection("room timeline", m.timelineProjector),
 		waitForProjection("threads", m.threadsProjector),
-	)
-}
-
-func (m *RoomService) waitForMyEventsReplayTail(ctx context.Context, pub *events.Publisher, pos events.StreamPosition) error {
-	if err := waitForPositionAll(ctx, pos,
-		waitForProjection("room timeline", m.timelineProjector),
-		waitForProjection("threads", m.threadsProjector),
-		waitForProjection("room directory", m.directoryProjector),
-	); err != nil {
-		return err
-	}
-	return waitForProjectionSubjectsCurrent(ctx, pub, "reactions", m.reactionsProjector,
-		events.RoomEventTypeFilter(events.EventReactionAdded),
-		events.RoomEventTypeFilter(events.EventReactionRemoved),
-	)
-}
-
-func (m *RoomService) waitForMyEventsReplayCurrent(ctx context.Context) error {
-	return waitForCurrentAll(ctx,
-		waitForProjection("room timeline", m.timelineProjector),
-		waitForProjection("threads", m.threadsProjector),
-		waitForProjection("room directory", m.directoryProjector),
-		waitForProjection("reactions", m.reactionsProjector),
 	)
 }
 
@@ -169,6 +160,21 @@ func (m *RoomService) roomIDByName(name string) string {
 	return m.directory.Catalog.FindByName(name)
 }
 
+func (m *RoomService) nameClaimSnapshot(name string) RoomNameClaimSnapshot {
+	return m.directory.Catalog.NameClaimSnapshot(name)
+}
+
+func (m *RoomService) waitForDirectoryCurrent(ctx context.Context, publisher *events.Publisher) error {
+	pos, err := publisher.LastSubjectPosition(ctx, events.RoomSubjectFilter())
+	if err != nil {
+		return err
+	}
+	if pos.IsZero() {
+		return nil
+	}
+	return m.waitForDirectory(ctx, pos)
+}
+
 func (m *RoomService) activeRoomBan(roomID, userID string, now time.Time) (RoomBan, bool) {
 	return m.directory.Bans.ActiveBan(roomID, userID, now)
 }
@@ -191,6 +197,10 @@ func (m *RoomService) timelineEntry(eventID string) (*TimelineEntry, bool) {
 
 func (m *RoomService) latestBody(eventID string) (*corev1.MessageBody, bool, bool) {
 	return m.timeline.LatestBody(eventID)
+}
+
+func (m *RoomService) currentRoomAttachmentMessages(roomID string) []projectedRoomAttachmentMessage {
+	return m.timeline.CurrentRoomAttachmentMessages(roomID)
 }
 
 func (m *RoomService) isEcho(eventID string) bool {
@@ -229,16 +239,16 @@ func (m *RoomService) visibleRoomTimeline(roomID string, limit int, beforeStream
 	return m.timeline.VisibleRoomTimeline(roomID, limit, beforeStreamSeq, visible)
 }
 
+func (m *RoomService) roomEventCount(roomID string) int {
+	return m.timeline.RoomEventCount(roomID)
+}
+
 func (m *RoomService) visibleRoomTimelineAfter(roomID string, limit int, afterStreamSeq uint64, visible func(*corev1.Event) bool) []*TimelineEntry {
 	return m.timeline.VisibleRoomTimelineAfter(roomID, limit, afterStreamSeq, visible)
 }
 
 func (m *RoomService) visibleRoomTimelineAround(roomID, eventID string, limit int) ([]*TimelineEntry, int, bool, bool, bool) {
 	return m.timeline.VisibleRoomTimelineAround(roomID, eventID, limit)
-}
-
-func (m *RoomService) roomTimelineBetween(roomID string, afterStreamSeq, throughStreamSeq uint64, include func(*corev1.Event) bool, limit int) []*TimelineEntry {
-	return m.timeline.RoomTimelineBetween(roomID, afterStreamSeq, throughStreamSeq, include, limit)
 }
 
 func (m *RoomService) threadExists(rootEventID string) bool {
@@ -263,6 +273,10 @@ func (m *RoomService) reactionsBatch(eventIDs []string) map[string][]ReactionSum
 
 func (m *RoomService) hasReaction(messageEventID, emoji, userID string) bool {
 	return m.reactions.HasReaction(messageEventID, emoji, userID)
+}
+
+func (m *RoomService) reactionMutationSnapshot(roomID, messageEventID, emoji, userID string) ReactionMutationSnapshot {
+	return m.reactions.ReactionMutationSnapshot(roomID, messageEventID, emoji, userID)
 }
 
 func (m *RoomService) appendDirectoryEventually(ctx context.Context, pub *events.Publisher, agg events.Aggregate, event *corev1.Event) (events.StreamPosition, error) {

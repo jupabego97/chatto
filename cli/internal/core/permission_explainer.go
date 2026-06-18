@@ -71,75 +71,70 @@ func (r *PermissionResolver) ExplainRoomPermission(ctx context.Context, userID s
 	return exp, err
 }
 
-// collectFullTrace populates the explanation by walking both the user-level
-// probes and the role hierarchy. Mirrors Resolve's resolution order but
-// records every encountered entry so the inspector can show the full trace.
+// collectFullTrace populates the explanation by collecting every applicable
+// user and role decision. Mirrors Resolve's deny-wins model while preserving
+// the full trace for the inspector.
 func (r *PermissionResolver) collectFullTrace(ctx context.Context, userID string, kind RoomKind, roomID string, perm Permission, exp *PermissionExplanation) error {
 	parts := perm.KeyParts()
 	if parts.Verb == "" || parts.ObjectType == "" {
 		return nil
 	}
-	useChannelRoomPath := kind == KindChannel && roomID != "" && PermissionAppliesAtScope(perm, ScopeRoom)
 
-	// For channel rooms, look up the set once.
 	groupID := ""
-	if useChannelRoomPath {
+	if kind == KindChannel && roomID != "" && PermissionAppliesAtScope(perm, ScopeRoom) {
 		if room, err := r.core.GetRoom(ctx, KindChannel, roomID); err == nil && room != nil {
 			groupID = room.GroupId
 		}
 	}
 
-	visit := exp.collect()
 	if r.core.UserSuspensions != nil && r.core.UserSuspensions.IsActive(userID, time.Now()) {
-		suspended := roleWithPosition{name: RoleSuspended, position: PositionSuspended}
-		if useChannelRoomPath {
-			if decided, _, err := r.probeRoom(ctx, suspended, parts, roomID, visit); err != nil {
-				return err
-			} else if decided && r.decisionFor(ScopeRoom, roomID, RoleSuspended, parts) == DecisionDeny {
-				return nil
-			}
-			if groupID != "" {
-				if decided, _, err := r.probeSet(ctx, suspended, parts, groupID, visit); err != nil {
-					return err
-				} else if decided && r.decisionFor(ScopeGroup, groupID, RoleSuspended, parts) == DecisionDeny {
-					return nil
-				}
-			}
-			if PermissionAppliesAtScope(perm, ScopeServer) {
-				if decided, _, err := r.probeServer(ctx, suspended, parts, visit); err != nil {
-					return err
-				} else if decided && r.decisionFor(ScopeServer, "", RoleSuspended, parts) == DecisionDeny {
-					return nil
-				}
-			}
-		} else if PermissionAppliesAtScope(perm, ScopeServer) {
-			if decided, _, err := r.probeServer(ctx, suspended, parts, visit); err != nil {
-				return err
-			} else if decided && r.decisionFor(ScopeServer, "", RoleSuspended, parts) == DecisionDeny {
+		for _, target := range r.applicableScopeTargets(kind, roomID, groupID, perm) {
+			if r.decisionFor(target.scope, target.id, RoleSuspended, parts) == DecisionDeny {
+				exp.collect()(TraceEntry{
+					Level:    target.level,
+					RoleName: RoleSuspended,
+					Decision: DecisionDeny,
+					ObjectID: target.objectID(),
+				})
 				return nil
 			}
 		}
 	}
-	userSubj := roleWithPosition{name: userID, position: 0}
 
-	// User-level probes.
-	if useChannelRoomPath {
-		if _, _, err := r.probeRoom(ctx, userSubj, parts, roomID, visit); err != nil {
+	if _, known := GetPermissionMetadata(perm); known {
+		isOwner, err := r.core.IsServerOwner(ctx, userID)
+		if err != nil {
 			return err
 		}
-		if groupID != "" {
-			if _, _, err := r.probeSet(ctx, userSubj, parts, groupID, visit); err != nil {
-				return err
-			}
-		}
-	} else {
-		if _, _, err := r.probeServer(ctx, userSubj, parts, visit); err != nil {
-			return err
+		if isOwner {
+			exp.State = DecisionAllow
+			exp.DecidedAt = LevelServer
+			exp.DecidedByRole = RoleOwner
+			exp.Trace = []TraceEntry{{
+				Level:    LevelServer,
+				RoleName: RoleOwner,
+				Decision: DecisionAllow,
+				ObjectID: ObjectIdAny,
+			}}
+			return nil
 		}
 	}
 
-	// Role hierarchy walk.
-	return r.walkRoles(ctx, userID, kind, roomID, groupID, perm, visit)
+	if err := r.visitApplicableDecisions(ctx, userID, kind, roomID, groupID, perm, exp.collect()); err != nil {
+		return err
+	}
+	if exp.State == DecisionNone && kind == KindDM && dmDefaultAllows(perm) {
+		exp.State = DecisionAllow
+		exp.DecidedAt = LevelRoom
+		exp.DecidedByRole = "@dm-policy"
+		exp.Trace = []TraceEntry{{
+			Level:    LevelRoom,
+			RoleName: "@dm-policy",
+			Decision: DecisionAllow,
+			ObjectID: roomID,
+		}}
+	}
+	return nil
 }
 
 // ExplainAllPermissions returns explanations for every permission applicable at
@@ -184,10 +179,14 @@ func (r *PermissionResolver) ExplainAllPermissions(ctx context.Context, userID s
 }
 
 // collect returns a visitFunc that appends every visited entry to the
-// explanation's trace and captures the first entry as the winning decision.
+// explanation's trace and applies the resolver's any-deny / any-allow rule.
 func (exp *PermissionExplanation) collect() visitFunc {
 	return func(entry TraceEntry) visitOutcome {
-		if exp.State == DecisionNone {
+		if entry.Decision == DecisionDeny {
+			exp.State = DecisionDeny
+			exp.DecidedAt = entry.Level
+			exp.DecidedByRole = entry.RoleName
+		} else if exp.State == DecisionNone {
 			exp.State = entry.Decision
 			exp.DecidedAt = entry.Level
 			exp.DecidedByRole = entry.RoleName

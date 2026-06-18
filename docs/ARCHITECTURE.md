@@ -46,37 +46,37 @@ This document uses the canonical terms from the [glossary](GLOSSARY.md), especia
 
 ## NATS Authentication
 
-Chatto supports multiple methods for authenticating with NATS, configured via `[nats.client]` in `chatto.toml`:
+Chatto supports embedded NATS for single-process/self-hosted installs and external NATS for clustered deployments. Embedded NATS is configured under `[nats.embedded]`; when the embedded TCP listener is enabled, `ReadConfig` derives matching `[nats.client]` defaults for CLI/admin commands. External NATS connections are configured explicitly via `[nats.client]`.
 
-| Method        | Config             | Description                                                      |
-| ------------- | ------------------ | ---------------------------------------------------------------- |
-| `nkey`        | `nkey_seed`        | Default for embedded NATS. Uses Ed25519 keypairs.                |
-| `userpass`    | `username`, `password` | Simple username/password authentication.                      |
-| `credentials` | `credentials_file` | JWT authentication via standard `.creds` file (for external NATS). |
-| `none`        | -                  | No authentication (for trusted networks only).                   |
+| Method        | Config                                  | Description                                                       |
+| ------------- | --------------------------------------- | ----------------------------------------------------------------- |
+| `token`       | `token` / `nats.embedded.auth_token`    | Default for embedded NATS and simple external deployments.        |
+| `userpass`    | `username`, `password`                  | Simple username/password authentication.                          |
+| `credentials` | `credentials_file`                      | JWT authentication via standard `.creds` file for external NATS.  |
+| `nkey`        | `nkey_seed`                             | NKey seed auth for external NATS deployments that use NKeys.      |
+| `none`        | -                                       | No authentication; only acceptable on trusted private networks.   |
 
 **Embedded NATS Setup:**
 
 When using embedded NATS (default), `chatto init` generates:
-- `chatto.toml` with NKey seed in `[nats.client]`
-- `nats-server.conf` with the corresponding public key in `authorization.users`
-
-The `nats-server.conf` file is auto-generated on first startup if missing. Users can edit it to add clustering, TLS, or additional authorization rules.
+- `chatto.toml` with `[nats.embedded]`, in-process NATS enabled, JetStream data directory, and generated `auth_token`
+- A commented `nats.embedded.port` example; uncommenting the port enables a local TCP listener and derived `[nats.client]` connection defaults for CLI/admin commands
 
 **External NATS Setup:**
 
-For connecting to an external NATS cluster with JWT authentication:
+For connecting to an external NATS cluster:
 1. Set `nats.embedded.enabled = false`
-2. Set `nats.client.auth_method = "credentials"`
-3. Set `nats.client.credentials_file = "path/to/your.creds"`
+2. Set `nats.client.url` to the external NATS URL(s)
+3. Set `nats.client.auth_method` plus the matching credential field (`token`, `username`/`password`, `credentials_file`, or `nkey_seed`)
 
 ## Architecture & APIs
 
-Key files: [`cli/internal/core/core.go`](../cli/internal/core/core.go), [`cli/internal/events/`](../cli/internal/events/), [`proto/chatto/core/v1/`](../proto/chatto/core/v1/)
+Key files: [`cli/internal/core/core.go`](../cli/internal/core/core.go), [`cli/internal/events/`](../cli/internal/events/), [`cli/internal/http_server/metrics.go`](../cli/internal/http_server/metrics.go), [`proto/chatto/core/v1/`](../proto/chatto/core/v1/)
 
 - **NATS**: At the core, Chatto uses a series of NATS JetStream streams, KV buckets and object storage. Data stored in these is defined as Protocol Buffers (see `proto/`).
 - **Core**: The `core` package defines Chatto's domain logic and directly talks to NATS to interact with KV buckets, object stores, and the `EVT` stream. `ChattoCore` remains the compatibility facade, while smaller services own projection readiness and domain-specific write concerns.
 - **GraphQL**: Client-facing API for all operations (auth, management, messaging). Subscriptions over WebSocket for real-time updates. Fields require authentication by default unless marked public in the schema; resolvers call Core methods directly and enforce operation-specific authorization before each call.
+- **Metrics**: Optional Prometheus-compatible per-process metrics run on a separate internal HTTP listener configured by `[metrics]`. The endpoint exposes Go/process collectors plus Chatto readiness, GraphQL WebSocket counts, `myEvents` stream counters, NATS client counters, and projection health/lag gauges.
 - **Web Client**: SvelteKit-based SPA that gets compiled and embedded into the Go binary. Talks to GraphQL API over HTTP/WebSocket.
 - **Email**: Optional SMTP integration for transactional emails (verification, password reset). Configured via `[smtp]` in config. The `internal/email` package provides a `Mailer` that returns `ErrSMTPDisabled` when SMTP is not configured, allowing callers to handle gracefully.
 
@@ -86,10 +86,12 @@ Key files: [`cli/internal/core/core.go`](../cli/internal/core/core.go), [`cli/in
 
 The core runtime is process-local but must be safe under multiple Chatto replicas connected to the same NATS account. Correctness comes from JetStream/KV atomicity and projection catch-up, not in-process serialization.
 
+`ChattoCore` keeps a small runtime service registry with stable machine-readable keys such as `config_manager` and `my_events_service`. Per-process metrics use these keys as labels; display names remain operator-facing text only.
+
 | Service                 | Key files                                                                                                                    | Responsibility                                                                                                             |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | `ChattoCore`            | [`core.go`](../cli/internal/core/core.go)                                                                                     | Application facade, resource initialization, lifecycle, GraphQL-facing operations                                            |
-| `MyEventsService`       | [`my_events_service.go`](../cli/internal/core/my_events_service.go)                                                           | `myEvents` live/reconnect delivery, projection readiness, replay planning, and per-user authorization                        |
+| `MyEventsService`       | [`my_events_service.go`](../cli/internal/core/my_events_service.go)                                                           | `myEvents` live delivery, projection readiness, heartbeats, per-user authorization, and process-local stream counters        |
 | `events.Publisher`     | [`publisher.go`](../cli/internal/events/publisher.go)                                                                        | OCC-only writes to `EVT`, including atomic batches and filter-scoped concurrency guards                                     |
 | `ConfigService`         | [`config_service.go`](../cli/internal/core/config_service.go)                                                                | Semantic server/user config event writes plus `ConfigProjection` readiness                                                  |
 | `ConfigManager`         | [`config_manager.go`](../cli/internal/core/config_manager.go)                                                                | Compatibility facade for server config reads/writes backed by `ConfigService`                                               |
@@ -98,7 +100,7 @@ The core runtime is process-local but must be safe under multiple Chatto replica
 | `RBACService`           | [`rbac_service.go`](../cli/internal/core/rbac_service.go)                                                                    | RBAC projection readiness for role, assignment, and permission writes                                                       |
 | `MentionablesService`   | [`mentionables_projection.go`](../cli/internal/core/mentionables_projection.go)                                              | Global mention-handle namespace lookup and readiness                                                                        |
 | `PresenceService`       | [`presence_service.go`](../cli/internal/core/presence_service.go), [`presence_hub.go`](../cli/internal/core/presence_hub.go) | Per-process watcher/fanout for live presence state in `MEMORY_CACHE`                                                       |
-| `CallService`           | [`call_service.go`](../cli/internal/core/call_service.go), [`voice.go`](../cli/internal/core/voice.go)                       | Durable LiveKit call lifecycle/participant facts, call-state projection readiness, KMS-backed E2EE key resolution, and LiveKit reconciliation |
+| `CallService`           | [`call_service.go`](../cli/internal/core/call_service.go), [`voice.go`](../cli/internal/core/voice.go), [`lease.go`](../cli/internal/lease/lease.go) | Durable LiveKit call lifecycle/participant facts, call-state projection readiness, KMS-backed E2EE key resolution, and elected LiveKit reconciliation |
 | `MediaService`          | [`media_service.go`](../cli/internal/core/media_service.go), [`attachments.go`](../cli/internal/core/attachments.go)          | Attachment/media binary storage, signed asset URLs, transformed image cache operations                                      |
 | `AssetService`          | [`asset_service.go`](../cli/internal/core/asset_service.go), [`asset_projection.go`](../cli/internal/core/asset_projection.go)  | Durable asset lifecycle facts, processing transitions, tombstones, derivative cleanup ordering, asset projection readiness and reads |
 | `video.Service`         | [`service.go`](../cli/internal/video/service.go)                                                                             | Process-local video/animated-GIF processing; emits asset processing result events                                           |
@@ -107,30 +109,30 @@ The core runtime is process-local but must be safe under multiple Chatto replica
 
 Key files: [`cli/internal/core/core.go`](../cli/internal/core/core.go), [`cli/internal/events/projector.go`](../cli/internal/events/projector.go), [`cli/internal/core/projection_subjects_test.go`](../cli/internal/core/projection_subjects_test.go)
 
-Projections are in-memory read models rebuilt from `EVT`. `NewChattoCore` registers each top-level projector once; `ChattoCore.Run` starts every projector, waits for them to become current at boot, and writers wait for the relevant projector sequence before returning read-your-writes.
+Projections are in-memory read models rebuilt from `EVT`. `NewChattoCore` registers each top-level projector once with a stable machine-readable key such as `content_keys` plus a human display name such as `Content Keys`; `ChattoCore.Run` starts every projector, waits for them to become current at boot, and writers wait for the relevant projector sequence before returning read-your-writes.
 
 | Runtime area       | Registered projector | Consumes                                                   | Read models / primary readers                                                             |
 | ------------------ | -------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | Room directory     | Room Directory       | `evt.room.>`                                               | `RoomCatalogProjection`, `RoomMembershipProjection`, `RoomBanProjection`; room/member queries and room authorization |
-| Room organization  | Room Group Layout    | `evt.group.>`, `evt.layout.>`                              | `RoomGroupProjection`, `RoomLayoutProjection`; sidebar groups and room ordering            |
-| Room timeline      | Room Timeline        | `evt.room.>`                                               | Raw room log, visible timeline index, latest message bodies, hidden echoes, message asset references, legacy room-asset replay routing |
-| Assets             | Assets               | `evt.asset.>`, legacy `evt.room.*.asset_*`                 | Asset creation metadata, room scope, processing manifests, derivative graph, deletion state, asset reconnect replay |
+| Room organization  | Room Group Layout    | `evt.group.>`, `evt.layout.>`                              | `RoomGroupProjection`, `RoomLayoutProjection`; sidebar groups, sidebar links, and mixed sidebar item ordering |
+| Room timeline      | Room Timeline        | `evt.room.>`                                               | Raw room log, visible timeline index, latest message bodies, hidden echoes, current attachment-bearing message index, and message asset references |
+| Assets             | Assets               | `evt.asset.>`, legacy `evt.room.*.asset_*`                 | Asset creation metadata, room scope, processing manifests, derivative graph, deletion state, and legacy room-asset compatibility |
 | Threads            | Threads              | `evt.room.>`, `evt.user.*.user_key_shredded`               | Per-thread reply logs, summaries, participants, reply counts                               |
-| Reactions          | Reactions            | `evt.room.*.reaction_added`, `evt.room.*.reaction_removed` | Current per-message reaction sets and summaries                                            |
+| Reactions          | Reactions            | `evt.room.>`                                               | Current per-message reaction sets and room-scoped snapshot OCC positions                   |
 | Voice calls        | Call State           | `evt.room.>`                                               | Current LiveKit call session, participants, and active room IDs                           |
 | Server/user config | Server Config        | `evt.config.>`, selected user cleanup/preference facts     | Server config, branding refs, user preferences, notification levels, blocked usernames     |
-| Users              | Users                | `evt.user.>`                                               | Account/profile/auth lookup state, verified emails, OAuth subjects, encrypted user PII     |
+| Users              | Users                | `evt.user.>`                                               | Account/profile/auth lookup state, verified emails, external identity links, encrypted user PII |
 | Content keys       | Content Keys         | `evt.user.*.dek_generated`, `evt.user.*.user_key_shredded` | Active and shredded user DEK epochs for message bodies and user PII                        |
 | RBAC               | RBAC                 | `evt.rbac.>`                                               | Roles, role order, assignments, scoped allow/deny decisions                                |
 | Mentions           | Mentionables         | `evt.>`                                                    | Global mention-handle ownership across users, roles, `@all`, and `@here`                  |
 
-Notes: "Registered projector" names match the admin projection diagnostics. Composite projections expose nested read models, but only their parent projector is started by `ChattoCore.Run`.
+Notes: registered projector keys are used by metrics and automation; registered projector names match the admin projection diagnostics. Composite projections expose nested read models, but only their parent projector is started by `ChattoCore.Run`.
 
 ## GraphQL API Overview
 
 Key files: [`cli/internal/graph/`](../cli/internal/graph/) (schemas in `*.graphqls` files, resolvers in `*.resolvers.go`)
 
-The GraphQL API is the primary client-facing interface for Chatto. It provides queries, mutations, and a single unified subscription over HTTP and WebSocket connections. Fields require authentication by default unless explicitly marked public in the schema. Authentication is cookie-session-based; user registration, login, password reset, email verification, and OAuth flows are REST endpoints (under `/auth/...`) rather than GraphQL mutations.
+The GraphQL API is the primary client-facing interface for Chatto. It provides queries, mutations, and a single unified subscription over HTTP and WebSocket connections. Fields require authentication by default unless explicitly marked public in the schema. Authentication accepts opaque bearer tokens first and falls back to cookie sessions when no bearer token is present. User registration, login, password reset, email verification, and external provider login flows are REST endpoints (under `/auth/...`) rather than GraphQL mutations; successful password login and registration issue both a cookie session and a bearer token. Public server metadata includes `Server.authProviders`, a list of configured external login providers with IDs, types, labels, and login URLs.
 
 The schema is modular: each feature area lives in its own `.graphqls` file and extends the root `Query` / `Mutation` / `Subscription` types. The operations below group by user-facing area, not by source file.
 
@@ -138,26 +140,28 @@ The schema is modular: each feature area lives in its own `.graphqls` file and e
 
 **Server & identity** ([`server.graphqls`](../cli/internal/graph/server.graphqls), [`server_rbac.graphqls`](../cli/internal/graph/server_rbac.graphqls))
 
-| Query                                | Description                                                                    |
-| ------------------------------------ | ------------------------------------------------------------------------------ |
-| `server`                             | Information about this Chatto server (name, branding, member counts). Public. |
-| `viewer`                             | Current authenticated user's identity, permissions, follows, notifications, and suspension status. |
+| Query                                | Description                                                                                                     |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `server`                             | Information about this Chatto server (name, branding, member counts, viewer unread notification count). Public. |
+| `viewer`                             | Nullable current-user scope: authenticated identity, permissions, follows, notifications, and suspension status; `null` for unauthenticated callers. |
 
-Note: there is no top-level `me` query — viewer-scoped state hangs off the `viewer` field (which is extended by several feature files, e.g. `threads.graphqls` adds `viewer.followedThreads`, `notifications.graphqls` adds `viewer.notifications` / `viewer.hasNotifications`).
+Note: there is no top-level `me` query — viewer-scoped state hangs off the `viewer` field (which is extended by several feature files, e.g. `threads.graphqls` adds `viewer.followedThreads`, `notifications.graphqls` adds `viewer.notifications` / `viewer.hasNotifications`). Notification badges use scoped `Server.viewerNotifications` and `Room.viewerNotifications` connections and read their `totalCount`.
 
 **Users** ([`query.graphqls`](../cli/internal/graph/query.graphqls))
 
-| Query                              | Description                                                                            |
-| ---------------------------------- | -------------------------------------------------------------------------------------- |
-| `user(userId)`                     | Authenticated lookup of a user by ID.                                                  |
-| `userByLogin(login)`               | Authenticated lookup of a user by login (returns null if not found).                   |
-| `server.members(search, limit, offset)` | Canonical paginated member directory (authenticated users).                       |
+| Query                                   | Description                                                            |
+| --------------------------------------- | ---------------------------------------------------------------------- |
+| `user(userId)`                          | Authenticated lookup of a user by ID.                                  |
+| `userByLogin(login)`                    | Authenticated lookup of a user by login (returns null if not found).   |
+| `server.members(search, limit, offset)` | Canonical paginated member directory (authenticated users).             |
 
 **Rooms** ([`query.graphqls`](../cli/internal/graph/query.graphqls), [`room.graphqls`](../cli/internal/graph/room.graphqls))
 
 | Query                              | Description                                                                            |
 | ---------------------------------- | -------------------------------------------------------------------------------------- |
-| `room(roomId)`                     | Get a room by ID. Room-scoped reads (`members`, `events`, `event(eventId)`, `eventsAround`, `voiceCallToken`, `viewerCan*` flags) live as fields on the returned `Room`; `members` is offset-paginated. `events` is the visible room timeline. Folded durable facts such as reactions are recovered on reconnect through `Subscription.myEvents(after:)`, not through room timeline pagination. |
+| `server.rooms(type?)`              | List rooms visible to the caller. Channel rooms are gated by membership or `room.list`; DM rooms are membership-only. Sidebar clients use `viewerIsMember` and `viewerCanJoinRoom` on `Room` to distinguish joined, joinable, and visible-but-not-joinable channel rows. |
+| `server.roomGroups`                | Ordered channel-room groups and mixed sidebar items used to render the server sidebar. Group room entries are filtered to rooms visible to the caller. |
+| `room(roomId)`                     | Get a room by ID. Room-scoped reads (`members`, `events`, `event(eventId)`, `eventsAround`, `voiceCallToken`, `viewerCan*` flags, `viewerIsMember`, `viewerNotifications`) live as fields on the returned `Room`; `members(search, limit, offset)` and `viewerNotifications` are offset-paginated. `events` is the visible room timeline. Folded durable facts such as reactions are reflected in projected room reads; the web client refreshes the current room window after wake/reconnect to catch up without a full document reload. |
 
 **RBAC tooling** ([`rbac.graphqls`](../cli/internal/graph/rbac.graphqls), [`role_permissions.graphqls`](../cli/internal/graph/role_permissions.graphqls), [`role_permission_matrix.graphqls`](../cli/internal/graph/role_permission_matrix.graphqls), [`user_permissions.graphqls`](../cli/internal/graph/user_permissions.graphqls), [`permission_inspector.graphqls`](../cli/internal/graph/permission_inspector.graphqls))
 
@@ -165,7 +169,7 @@ Note: there is no top-level `me` query — viewer-scoped state hangs off the `vi
 | ------------------------------------------------- | ------------------------------------------------------------------------ |
 | `admin.rbac.rolePermissionTierMatrix(roomId?, groupId?)` | Full role-permission matrix at server / group / room scope.       |
 | `admin.rbac.rolePermissionMatrix(roleName)`       | Per-role permission matrix (`role.manage` gated).                        |
-| `admin.rbac.userPermissionMatrix(userId)`         | Effective allow/deny matrix for a user (`role.manage` + outrank gate).   |
+| `admin.rbac.userPermissionMatrix(userId)`         | Effective allow/deny matrix for a user (`user.manage-permissions`).       |
 | `admin.rbac.permissionExplanation(userId, …)`     | Admin/tooling-only per-permission resolver explainer; no self-inspection. |
 
 **Voice & link previews** ([`voice.graphqls`](../cli/internal/graph/voice.graphqls), [`linkpreview.graphqls`](../cli/internal/graph/linkpreview.graphqls))
@@ -208,7 +212,7 @@ Admin queries are nested under a single `admin: AdminQueries` field that returns
 
 | Mutation                  | Description                                                                                  |
 | ------------------------- | -------------------------------------------------------------------------------------------- |
-| `postMessage`             | Post a message (root or thread reply; optional attachments / link previews / echo-to-channel).|
+| `postMessage`             | Post a message (root or thread reply; attachments additionally require `message.attach`; optional link previews / echo-to-channel).|
 | `updateMessage`           | Update own message body (3-hour window); optional thread-reply echo reconciliation.           |
 | `deleteMessage`           | Delete message body (GDPR crypto-shred); event stays in stream as audit trail.               |
 | `deleteAttachment`        | Delete an attachment from own message.                                                       |
@@ -217,6 +221,10 @@ Admin queries are nested under a single `admin: AdminQueries` field that returns
 | `sendTypingIndicator`     | Publish a transient "user is typing" live event.                                             |
 | `markThreadAsRead`        | Update viewer's last-seen marker for a thread (drives unread separators).                    |
 | `followThread` / `unfollowThread` | Subscribe / unsubscribe to thread reply notifications.                              |
+
+| Room read                  | Description                                                                                  |
+| -------------------------- | -------------------------------------------------------------------------------------------- |
+| `Room.attachments`         | Paginated current attachment list for root messages and thread replies, authorized like `Room.events`. |
 
 **User profile & account** ([`mutation.graphqls`](../cli/internal/graph/mutation.graphqls), [`user_preferences.graphqls`](../cli/internal/graph/user_preferences.graphqls))
 
@@ -258,7 +266,12 @@ Admin queries are nested under a single `admin: AdminQueries` field that returns
 | `reorderRoomGroups`               | Reorder all room groups (full list, exactly once each).                                      |
 | `reorderRoomsInGroup`             | Reorder rooms within a single group.                                                         |
 | `moveRoomToGroup`                 | Move a room into a different group (`room.manage` in both source and target — see ADR-031). |
-| `grantGroupPermission`            | Grant a permission to a role at group scope (overrides server defaults).                     |
+| `createSidebarLink`               | Add an external link to a room group (`room.manage`).                                        |
+| `updateSidebarLink`               | Rename or retarget a sidebar link (`room.manage`).                                           |
+| `deleteSidebarLink`               | Remove a sidebar link from its group (`room.manage`).                                        |
+| `moveSidebarLinkToGroup`          | Move a sidebar link into a different group (`room.manage` in both source and target).        |
+| `reorderSidebarItemsInGroup`      | Reorder rooms and sidebar links within a single group.                                       |
+| `grantGroupPermission`            | Grant a permission to a role at group scope.                                                 |
 | `denyGroupPermission`             | Deny a permission to a role at group scope.                                                  |
 | `clearGroupPermissionState`       | Remove both grant and denial at group scope.                                                 |
 
@@ -268,13 +281,13 @@ Admin queries are nested under a single `admin: AdminQueries` field that returns
 | --------------------------------- | -------------------------------------------------------------------------------------------- |
 | `createRole` / `updateRole` / `deleteRole` | CRUD for custom server roles (system roles are fixed).                              |
 | `reorderRoles`                    | Reorder custom roles. System roles maintain fixed positions and are excluded.                |
-| `assignRole` / `revokeRole`       | Add / remove a role assignment on a user (`role.assign` + outrank target).                   |
+| `assignRole` / `revokeRole`       | Add / remove a role assignment on a user (`role.assign`).                                    |
 | `grantPermission` / `revokePermission` | Grant or revoke a permission on a role at server scope.                                 |
 | `denyPermission`                  | Deny a permission on a role at server scope (clears any existing grant).                     |
 | `clearPermissionState`            | Restore neutral state for a permission on a role at server scope.                            |
 | `grantRoomPermission` / `denyRoomPermission` / `clearRoomPermission` | Same trio at room scope.                              |
-| `grantUserPermission`             | Grant a permission directly to a user (beats role decisions; no self-action).                |
-| `denyUserPermission`              | Deny a permission directly to a user (beats role grants; no self-action).                    |
+| `grantUserPermission`             | Grant a permission directly to a user (`user.manage-permissions`).                           |
+| `denyUserPermission`              | Deny a permission directly to a user (`user.manage-permissions`; any applicable deny wins).  |
 | `clearUserPermissionState`        | Clear both grant and denial of a permission on a user.                                       |
 
 **Admin** ([`admin.graphqls`](../cli/internal/graph/admin.graphqls))
@@ -285,7 +298,7 @@ Like `Query.admin`, the `admin: AdminMutations` field returns `null` for unauthe
 
 | Subscription          | Description                                                                                                                                                                                                                                                                                                                                                                                                          |
 | --------------------- | ---- |
-| `myEvents(after:)`            | The single subscription. Multiplexes durable room/asset events from `live.evt.>` (messages, reactions, edits, retractions, room lifecycle, asset processing, voice call lifecycle/participant facts) and transient sync signals from `live.sync.>` (typing, mention notifications, video-complete pings, server config/profile/preference invalidation, notifications, thread-follow sync, presence, server membership lifecycle, session termination, user-suspension changes, heartbeats) into one GraphQL `Event` envelope. Asset lifecycle events are authorized through the room scope recorded on their `AssetCreatedEvent`. The membership set is tracked in real time — joining or leaving a room updates filtering immediately without reconnecting. DM-room events use the same membership gate as channel-room events; there is no separate DM read permission. Subscribing sets the caller's presence to `ONLINE`. Durable EVT-backed events include a server-signed, user-bound `deliveryCursor`. When `after` is supplied, durable EVT room and asset facts newer than that cursor are replayed from in-memory projections before live delivery continues; invalid, expired, or over-budget cursors require a full refresh. Transient events, presence changes, user-suspension sync, and heartbeats are not replayed. |
+| `myEvents`            | The single subscription. Multiplexes durable room/asset events from `live.evt.>` (messages, reactions, edits, retractions, room lifecycle, asset processing, voice call lifecycle/participant facts) and transient sync signals from `live.sync.>` (typing, mention notifications, video-complete pings, server config/profile/preference invalidation, notifications, thread-follow sync, presence, server membership lifecycle, session termination, user-suspension changes, heartbeats) into one GraphQL `Event` envelope. Asset lifecycle events are authorized through the room scope recorded on their `AssetCreatedEvent`. The membership set is tracked in real time — joining or leaving a room updates filtering immediately without reconnecting. DM-room events use the same membership gate as channel-room events; there is no separate DM read permission. Subscribing sets the caller's presence to `ONLINE`. The subscription is live-only: missed state is recovered by projected queries, not subscription replay cursors. |
 
 There is no `adminAuditLogEvents` subscription — audit events arrive through `myEvents` for users with the relevant admin scope.
 
@@ -318,7 +331,7 @@ Diagnostic fields (`admin.systemInfo`, `admin.eventLog`, `admin.eventLogEntry`, 
 | ------- | ----------------------------- | ------------------------------------------- |
 | Stream  | `EVT`                         | Durable event-sourcing log for domain facts |
 | KV      | `RUNTIME_STATE`               | Persisted latest-value runtime/user state, including pending notifications, push subscriptions, auth/workflow tokens, and wrapped app DEK records |
-| KV      | `MEMORY_CACHE`                | Volatile memory-backed cache state for presence; excluded from backups |
+| KV      | `MEMORY_CACHE`                | Volatile memory-backed cache state for presence and short-lived leader leases; excluded from backups |
 | KV      | `ENCRYPTION_KEYS`             | KMS key-encryption keys and per-call LiveKit E2EE keys; excluded from backups |
 | Objects | `SERVER_ASSETS`               | Asset binaries (avatars, server branding, link previews, message attachments) |
 | Objects | `ASSET_CACHE`                 | Optional cached image transforms with TTL    |
@@ -344,10 +357,11 @@ auth workflow audit facts.
 **Event-sourced aggregates:**
 
 - `EVT` is the source of truth.
-- Fresh deployments seed current invariants such as default RBAC roles and the default room group.
+- Fresh deployments seed current invariants such as default RBAC roles and the default room group. Fresh RBAC seeds include `message.attach` for `everyone`; existing RBAC state is not silently backfilled on boot.
 - Reads come from in-memory projections rebuilt from `EVT`.
-- Room timeline reads use `RoomTimelineProjection`'s derived visible-room index for initial loads, forward/backward pagination, and around-message windows. The raw room log still preserves folded room facts such as edits, retractions, reactions, and thread replies; visible readers skip or fold those facts before serving the room timeline. Asset lifecycle facts live in `AssetProjection`, which also consumes legacy beta `evt.room.{roomId}.asset_*` facts. `Subscription.myEvents(after:)` uses the raw room log plus asset projection replay so folded facts can reach the client as ordinary durable events without appearing as standalone timeline rows in `Room.events`.
+- Room timeline reads use `RoomTimelineProjection`'s derived visible-room index for initial loads, forward/backward pagination, and around-message windows; `Room.attachments` uses the projection's current attachment-bearing message index so it does not decrypt unrelated message bodies. The raw room log still preserves folded room facts such as edits, retractions, reactions, and thread replies; visible readers skip or fold those facts before serving the room timeline. Asset lifecycle facts live in `AssetProjection`, which also consumes legacy beta `evt.room.{roomId}.asset_*` facts. Live `Subscription.myEvents` delivery reads the committed EVT feed, waits for projection readiness, and emits authorized events without exposing folded facts as standalone timeline rows in `Room.events`.
 - Writes append to `EVT` only for durable domain facts; legacy KV/stream data is not maintained as a mirror.
+- Mutations whose decision comes from a projection use a snapshot that carries both derived state and the applied stream sequence for the same OCC subject/filter. On conflict, writers wait for the owning projection to the latest matching tail and retry from a fresh snapshot.
 - Read-your-writes is provided by waiting for the local projector to reach the append sequence.
 
 - KV buckets remain strongly consistent (NATS JetStream R3 replication)
@@ -374,7 +388,7 @@ Key files: [`cli/internal/core/core.go`](../cli/internal/core/core.go), [`cli/in
 | ------------ | ------------------- | ------- | ------ | --------------------------------------------------------------------------- |
 | Stream       | `EVT`               | File    | Yes    | Event-sourcing log for durable `corev1.Event` facts on `evt.>`              |
 | KV bucket    | `RUNTIME_STATE`     | File    | Yes    | Persisted latest-value runtime state, auth/session tokens, notifications, wrapped app DEKs |
-| KV bucket    | `MEMORY_CACHE`      | Memory  | No     | Volatile presence                                                           |
+| KV bucket    | `MEMORY_CACHE`      | Memory  | No     | Volatile presence and short-lived leader leases                             |
 | KV bucket    | `ENCRYPTION_KEYS`   | File    | No     | KMS key-encryption keys and per-call LiveKit E2EE keys; excluded from backups |
 | Object store | `SERVER_ASSETS`     | File    | Yes    | Asset binaries for avatars, branding, link previews, attachments, derivatives |
 | Object store | `ASSET_CACHE`       | File    | No     | Optional TTL cache for transformed image bytes                               |
@@ -426,7 +440,7 @@ User-facing live delivery is built from two internal NATS Core subject roots:
 2. **Direct Live Publish** (transient):
    - Transient UI sync signals publish as `corev1.LiveEvent` via NATS Core to `live.sync.>` — no stream storage.
 
-The `myEvents` GraphQL subscription is owned by `MyEventsService` behind the `ChattoCore.StreamMyEvents` facade and subscribes to `live.sync.>` and `live.evt.>`. For deliverable raw EVT room and asset messages, it reads the republished `Nats-Sequence` header, waits for the local projections needed by authorization and follow-up resolvers, filters by the subscribing user, and then emits the GraphQL event with an opaque `deliveryCursor`. Asset lifecycle events resolve their room authorization through `AssetProjection`, using the room scope on `AssetCreatedEvent` and inherited parent scope for derivatives. The cursor is signed with the server-side core secret, bound to the authenticated user, and expires after seven days; clients must treat it as an opaque token. When a client reconnects with `after`, the server subscribes to live feeds first, captures one global `evt.>` stream replay cutoff, waits for replay projections to catch up, refreshes the subscriber's current room memberships, plans a bounded replay from `RoomTimelineProjection` and `AssetProjection` in global stream-sequence order, then skips any buffered live EVT messages at or below that cutoff to avoid duplicates and cursor backtracking. Current room membership is the replay privacy boundary: rooms the user no longer belongs to are not replayed, even if the cursor predates the leave/ban/delete. If replay would exceed the server budget (currently 1000 durable facts), GraphQL returns `MY_EVENTS_FULL_REFRESH_REQUIRED` and the web client discards the cursor and reloads from projected state. Transient `LiveEvent` messages are adapted at this API boundary into the public GraphQL event shape. There is no per-connection JetStream consumer.
+The `myEvents` GraphQL subscription is owned by `MyEventsService` behind the `ChattoCore.StreamMyEvents` facade and subscribes to `live.sync.>` and `live.evt.>`. For deliverable raw EVT room and asset messages, it reads the republished `Nats-Sequence` header, waits for the local projections needed by authorization and follow-up resolvers, filters by the subscribing user, and then emits the GraphQL event. Asset lifecycle events resolve their room authorization through `AssetProjection`, using the room scope on `AssetCreatedEvent` and inherited parent scope for derivatives. Transient `LiveEvent` messages are adapted at this API boundary into the public GraphQL event shape. The subscription is live-only; missed state is recovered by projected reads. The bundled web client keeps its event bus subscription simple, watches server heartbeats for silent stalls, refetches server-scoped projected state after reconnect/resubscribe gaps, and refetches the current room or thread window from projections after browser wake, WebSocket reconnect, subscription end, or heartbeat-stall catch-up notifications. There is no per-connection JetStream consumer and no public subscription replay cursor.
 
 ### EVT Subject Patterns
 
@@ -448,7 +462,7 @@ The republished `live.evt.{aggregateType}.{aggregateId}.{eventType}` subject is 
 | `evt.asset.*.{eventType}`                        | One asset event type across all assets                                          |
 | `evt.config.>`                                   | Dynamic server/user configuration and preferences                               |
 | `evt.config.{subject}.{eventType}`               | Config fact for `server`, a user ID, or another configurable subject            |
-| `evt.group.{groupId}.{eventType}`                | Room group metadata and group-owned room ordering/membership facts              |
+| `evt.group.{groupId}.{eventType}`                | Room group metadata and group-owned sidebar item ordering/membership facts      |
 | `evt.layout.default.{eventType}`                 | Singleton sidebar group ordering facts                                          |
 | `evt.user.{userId}.{eventType}`                  | User/account/profile/auth lookup facts and user-scoped auth audit facts         |
 | `evt.user.*.{eventType}`                         | One user event type across all users                                            |
@@ -510,6 +524,10 @@ The aggregate ID is intentionally part of the subject; actor/user and detailed c
 | `evt.group.{groupId}.room_added`                            | `RoomAddedToGroupEvent`                             |
 | `evt.group.{groupId}.room_removed`                          | `RoomRemovedFromGroupEvent`                         |
 | `evt.group.{groupId}.rooms_reordered`                       | `RoomsInGroupReorderedEvent`                        |
+| `evt.group.{groupId}.sidebar_link_added`                    | `SidebarLinkAddedToGroupEvent`                      |
+| `evt.group.{groupId}.sidebar_link_updated`                  | `SidebarLinkUpdatedEvent`                           |
+| `evt.group.{groupId}.sidebar_link_removed`                  | `SidebarLinkRemovedFromGroupEvent`                  |
+| `evt.group.{groupId}.sidebar_entries_reordered`             | `SidebarGroupEntriesReorderedEvent`                 |
 | `evt.layout.default.groups_reordered`                        | `RoomGroupsReorderedEvent`                          |
 | `evt.user.{userId}.account_created`                         | `UserAccountCreatedEvent`                           |
 | `evt.user.{userId}.login_changed`                           | `UserLoginChangedEvent`                             |
@@ -518,7 +536,8 @@ The aggregate ID is intentionally part of the subject; actor/user and detailed c
 | `evt.user.{userId}.avatar_cleared`                          | `UserAvatarClearedEvent`                            |
 | `evt.user.{userId}.verified_email_added`                    | `UserVerifiedEmailAddedEvent`                       |
 | `evt.user.{userId}.password_hash_changed`                   | `UserPasswordHashChangedEvent`                      |
-| `evt.user.{userId}.oidc_subject_linked`                     | `UserOIDCSubjectLinkedEvent`                        |
+| `evt.user.{userId}.oidc_subject_linked`                     | `UserOIDCSubjectLinkedEvent` (legacy replay)        |
+| `evt.user.{userId}.external_identity_linked`                | `UserExternalIdentityLinkedEvent`                   |
 | `evt.user.{userId}.server_preferences_changed`              | `UserServerPreferencesChangedEvent`                 |
 | `evt.user.{userId}.login_cooldown_started`                  | `UserLoginCooldownStartedEvent`                     |
 | `evt.user.{userId}.login_cooldown_cleared`                  | `UserLoginCooldownClearedEvent`                     |
@@ -587,12 +606,12 @@ Patterns: `live.sync.>` for transient `LiveEvent` pubsub and `live.evt.>` for ra
 | `live.sync.member.deleted`                                | Server-level membership invalidation after account deletion |
 | `live.sync.room.{kind}.{roomId}.user_typing`             | User typing in a room        |
 
-Voice call lifecycle and participant transitions are durable room EVT facts under `evt.room.{roomId}.call_started`, `evt.room.{roomId}.call_joined`, `evt.room.{roomId}.call_left`, and `evt.room.{roomId}.call_ended`, republished to `live.evt.>` for realtime subscription delivery. Room membership remains the authorization boundary for live delivery.
+Voice call lifecycle and participant transitions are durable room EVT facts under `evt.room.{roomId}.call_started`, `evt.room.{roomId}.call_joined`, `evt.room.{roomId}.call_left`, and `evt.room.{roomId}.call_ended`, republished to `live.evt.>` for realtime subscription delivery. Call start/end facts are visible in room history; participant join/leave facts remain live-deliverable for active-call state but are not displayed as timeline rows. Only the replica holding the `MEMORY_CACHE` lease `lease.livekit_reconciler` runs the periodic LiveKit reconciliation loop. LiveKit reconciliation appends `RECONCILIATION` facts for participant mismatches. Missing LiveKit rooms and observed empty rooms end projected calls immediately after a successful listing; pre-threshold LiveKit listing failures increment shared `MEMORY_CACHE` key `livekit.reconciliation.list_failures` and are retried on the normal reconciliation ticker, and listing failures only end projected active calls after three consecutive failed elected reconciliation cycles. A successful elected reconcile pass deletes that failure counter. `voiceCallToken` and `callParticipants` expose the active call ID so clients can ignore stale leave/end facts from previous calls in the same room. Room membership remains the authorization boundary for live delivery.
 
 The unified `myEvents` GraphQL subscription is backed by a single core stream (`StreamMyEvents`) that combines:
 
 - One `ChanSubscribe("live.sync.>")` for transient `LiveEvent` messages, and one `ChanSubscribe("live.evt.>")` for raw committed EVT facts. Authorization is applied per event: room membership for room subjects, asset room membership for asset subjects, `isAuthorizedForLiveEvent` for user/config/member subjects, and projection readiness before deliverable `live.evt.>` events.
-- Optional reconnect replay from `RoomTimelineProjection` and `AssetProjection` when the client supplies a valid signed `myEvents(after:)` cursor. Replay is limited to durable room/asset EVT facts for rooms the user is currently a member of and capped by a per-subscription event budget; transient sync and presence signals remain live-only.
+- Live-only subscription delivery. Missed state after reconnect is recovered from projected reads: server-scoped stores refetch their current projections after event-bus gaps, and the visible room/thread refetches its current message window. Transient sync and presence signals remain live-only.
 - The PresenceHub (single per-process KV watcher on `presence.>` fanning out per-user status changes to all subscribers).
 - An in-process heartbeat ticker (synthetic `Heartbeat` event every 25s for client-side liveness detection).
 
@@ -601,7 +620,7 @@ The unified `myEvents` GraphQL subscription is backed by a single core stream (`
 | Bucket                        | Storage | Backup   | Description                                     |
 | ----------------------------- | ------- | -------- | ----------------------------------------------- |
 | `RUNTIME_STATE`               | File    | Yes      | Persisted latest-value runtime/user state, including pending notifications, push subscriptions, auth/workflow tokens, and wrapped app DEK records |
-| `MEMORY_CACHE`                | Memory  | No       | Volatile cache state; presence keyed `presence.{userId}` with per-key TTL |
+| `MEMORY_CACHE`                | Memory  | No       | Volatile cache state; presence keyed `presence.{userId}` and short-lived leader leases keyed `lease.{name}` with per-key TTLs |
 | `ENCRYPTION_KEYS`             | File    | **No**   | KMS KEKs and LiveKit per-call E2EE keys (excluded for security); app-owned wrapped DEKs live in `RUNTIME_STATE` |
 
 **ENCRYPTION_KEYS keys:**
@@ -642,8 +661,10 @@ Token HMAC keys are derived with `[core].secret_key` and the token family as a d
 | Key                                        | Description                                      |
 | ------------------------------------------ | ------------------------------------------------ |
 | `presence.{userId}`                        | Serialized `UserPresence` proto for the user's live status; per-key 60s TTL |
+| `lease.livekit_reconciler`                 | Short-lived leader lease; only the current owner runs periodic LiveKit reconciliation |
+| `livekit.reconciliation.list_failures`      | Shared consecutive LiveKit listing failure counter reset by any successful elected reconciliation pass |
 
-Notes: Memory-based storage (not persisted, not backed up). Presence uses per-key TTL with 30-second client refresh and `LimitMarkerTTL` so NATS emits delete markers on TTL expiry. A single per-process **PresenceHub** watches `presence.>` and emits `PresenceChanged` only when a user's status changes. `Subscription.myEvents` sets the user online, and `updateMyPresence` overwrites the user's live status. On disconnect, clients do not write `OFFLINE`; they stop refreshing and TTL handles expiry. Active voice call participants are served from the call-state projection over durable room EVT facts and reconciled against LiveKit; per-call LiveKit E2EE keys live behind the KMS boundary in `ENCRYPTION_KEYS`, and the retired `CALL_STATE` bucket is no longer imported.
+Notes: Memory-based storage (not persisted, not backed up). Presence uses per-key TTL with 30-second client refresh and `LimitMarkerTTL` so NATS emits delete markers on TTL expiry. A single per-process **PresenceHub** watches `presence.>` and emits `PresenceChanged` only when a user's status changes. `Subscription.myEvents` sets the user online, and `updateMyPresence` overwrites the user's live status. On disconnect, clients do not write `OFFLINE`; they stop refreshing and TTL handles expiry. Short-lived `lease.{name}` records coordinate singleton background work across replicas without adding durable state. Active voice call participants are served from the call-state projection over durable room EVT facts and reconciled against LiveKit by the elected reconciler; per-call LiveKit E2EE keys live behind the KMS boundary in `ENCRYPTION_KEYS`, and the retired `CALL_STATE` bucket is no longer imported.
 
 ### Object Store Buckets
 
@@ -809,17 +830,17 @@ Messages are persisted as durable `EVT` facts. Public timeline facts (`MessagePo
 - Room-level message history is served from `RoomTimelineProjection`, which keeps the raw room event log plus derived indexes for latest body state, hidden echoes, message asset references, and room-visible timeline entries. Asset metadata, processing manifests, and derivative graphs are served from `AssetProjection`.
 - `MessagePostedEvent.channelEchoEventId` is a GraphQL-only derived field backed by `RoomTimelineProjection`'s echo-link index; it is not stored in the protobuf payload.
 - Initial loads and cursor pagination walk the derived visible-room index so thread replies, edits, retractions, reactions, asset-processing facts, and directly hidden echoes do not count as separate room timeline rows.
-- Reconnect catch-up uses `Subscription.myEvents(after:)`, keyed by the signed subscription `deliveryCursor`. The web client keeps the most recent durable cursor in its event bus and passes it on resubscribe; replayed reactions/edits/retractions/asset lifecycle facts arrive through the same event handlers as live events. If the server rejects the cursor as invalid, expired, or too expensive to replay, the client performs a full refresh from projected query state.
+- Reconnect catch-up in the web client refreshes the currently viewed room window from `RoomTimelineProjection` after browser wake, WebSocket reconnect, subscription end, or heartbeat-stall catch-up notifications. When the user is at the bottom it fetches the latest page; when scrolled up it uses `eventsAround` for the visible anchor event and preserves scroll by event ID. Server-scoped stores also refetch projected state after event-bus reconnect/resubscribe gaps so notifications, unread/sidebar state, room layout, server profile/settings, and active-call indicators do not depend on replayed subscription events. `Subscription.myEvents` is live-only and does not expose a replay cursor.
 - `eventsAround` uses the same visible-room index to center jump-to-message windows on the target's visible position.
-- Thread panes read the root message from `RoomTimelineProjection` and cursor-paginated replies from `ThreadProjection`.
+- Thread panes read the root message from `RoomTimelineProjection` and cursor-paginated replies from `ThreadProjection`. Anchored thread refreshes use `threadRepliesAround(eventId:)` to keep a visible reply in the refreshed window.
 
 **@Mentions:**
 
-- `@username` patterns in message body are extracted via regex (ASCII alphanumeric, underscore, hyphen)
-- Usernames are resolved to user IDs; only server members are included (non-members silently ignored)
+- `@username` patterns in message body are parsed as Markdown inline mention tokens (ASCII alphanumeric, underscore, hyphen, dot), excluding code spans, code blocks, and blockquotes.
+- Mention handles are resolved in the posting room; direct user handles only notify current room members, and invalid/non-member handles are silently ignored.
 - `MessagePostedEvent.mentioned_user_ids` contains resolved user IDs
 - Mention resolution is post-time only; later `MessageEditedEvent` facts update body content but do not add, remove, dismiss, or re-send mention notifications
-- Pending mention state is a notification record in `RUNTIME_STATE` (`notification.{userId}.{notificationId}`); sidebar orange dots derive from pending notifications, not a separate mention flag.
+- Pending mention state is a notification record in `RUNTIME_STATE` (`notification.{userId}.{notificationId}`); sidebar notification count badges derive from pending notifications, not a separate mention flag.
 - Live notification published to `live.sync.user.{userId}.mentioned` for toast display
 - Mention notifications are dismissed when the user views the relevant room or thread, or explicitly dismisses them from the notification center.
 - Self-mentions are filtered out (no notification to message author)

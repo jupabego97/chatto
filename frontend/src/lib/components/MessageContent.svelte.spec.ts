@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import '../../app.css';
 import MessageContent, { renderMarkdown, rendererReady } from './MessageContent.svelte';
 import { q } from '$lib/test-utils';
 import type { RoomMember } from '$lib/mentions';
@@ -19,8 +20,26 @@ function member(login: string): RoomMember {
   };
 }
 
+function computedColorFor(property: string): string {
+  const element = document.createElement('div');
+  element.style.color = `var(${property})`;
+  document.body.appendChild(element);
+  const color = window.getComputedStyle(element).color;
+  element.remove();
+  return color;
+}
+
+function computedBorderColorFor(property: string): string {
+  const element = document.createElement('div');
+  element.style.borderLeft = `1px solid var(${property})`;
+  document.body.appendChild(element);
+  const color = window.getComputedStyle(element).borderLeftColor;
+  element.remove();
+  return color;
+}
+
 describe('renderMarkdown', () => {
-  // Wait for Shiki to initialize before running tests
+  // Wait for the markdown renderer to initialize before running tests
   beforeAll(async () => {
     await rendererReady;
   });
@@ -79,7 +98,6 @@ describe('renderMarkdown', () => {
 
     it('renders code blocks with language hint', async () => {
       const html = await renderMarkdown('```javascript\nconst x = 1;\n```');
-      // Shiki uses language-* class on the code element
       expect(html).toContain('language-javascript');
     });
 
@@ -163,6 +181,11 @@ describe('renderMarkdown', () => {
         const html = await renderMarkdown(`${hashes} Heading ${level}`);
         expect(html).toContain(`<h${level}>Heading ${level}</h${level}>`);
       }
+    });
+
+    it('renders encoded trailing hashes as literal heading text', async () => {
+      const html = await renderMarkdown('# test &#35;');
+      expect(html).toContain('<h1>test #</h1>');
     });
 
     it('does not render setext (underline-style) headings', async () => {
@@ -252,7 +275,7 @@ describe('renderMarkdown', () => {
 });
 
 describe('MessageContent component', () => {
-  // Wait for Shiki to initialize before running tests
+  // Wait for the markdown renderer to initialize before running tests
   beforeAll(async () => {
     await rendererReady;
   });
@@ -272,6 +295,18 @@ describe('MessageContent component', () => {
     await expect.element(wrapper).toBeInTheDocument();
   });
 
+  it('styles blockquotes as distinct quote blocks', async () => {
+    const { container } = renderMessage('> quoted text\n>\n> second line');
+
+    await expect.poll(() => q(container, 'blockquote')).toBeTruthy();
+
+    const blockquote = q(container, 'blockquote')!;
+    const styles = window.getComputedStyle(blockquote);
+    expect(styles.borderLeftColor).not.toBe(computedBorderColorFor('--color-border'));
+    expect(styles.backgroundImage).toBe('none');
+    expect(styles.color).not.toBe(computedColorFor('--color-muted'));
+  });
+
   it('renders links with security attributes', async () => {
     const { container } = renderMessage('[link](https://example.com)');
 
@@ -280,6 +315,45 @@ describe('MessageContent component', () => {
     const link = q(container, 'a')!;
     expect(link.getAttribute('target')).toBe('_blank');
     expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+  });
+
+  it('renders fenced code blocks with highlighted markup and hides raw fences', async () => {
+    const { container } = renderMessage('```javascript\nconst x = 1;\n```');
+
+    await expect.poll(() => q(container, 'pre.hljs')).toBeTruthy();
+
+    const pre = q(container, 'pre.hljs')!;
+    const code = q(container, 'pre.hljs code.language-javascript')!;
+    expect(pre.getAttribute('data-language')).toBe('javascript');
+    expect(code.textContent).toContain('const x = 1;');
+    expect(container.textContent).not.toContain('```javascript');
+  });
+
+  it('keeps long fenced code blocks scrollable inside the code element', async () => {
+    const longLine = `const result = ${'veryLongVariableName + '.repeat(20)}"end"`;
+    const { container } = renderMessage(`\`\`\`javascript\n${longLine}\n\`\`\``);
+
+    await expect.poll(() => q(container, 'pre.hljs code.language-javascript')).toBeTruthy();
+
+    const pre = q(container, 'pre.hljs')!;
+    const code = q(container, 'pre.hljs code.language-javascript')!;
+    expect(pre.getAttribute('data-language')).toBe('javascript');
+    expect(code.textContent).toContain(longLine);
+    expect(container.textContent).not.toContain('```javascript');
+    expect(window.getComputedStyle(pre).overflowX).toBe('hidden');
+    expect(window.getComputedStyle(code).overflowX).toBe('auto');
+  });
+
+  it('renders a highlighted code block after leading text', async () => {
+    const { container } = renderMessage(
+      'Check this out:\n```javascript\nconsole.log("hello");\n```'
+    );
+
+    await expect.poll(() => q(container, 'pre.hljs')).toBeTruthy();
+    expect(container.textContent).toContain('Check this out:');
+    expect(q(container, 'pre.hljs code.language-javascript')?.textContent).toContain(
+      'console.log("hello");'
+    );
   });
 
   describe('mention wiring', () => {
@@ -299,6 +373,25 @@ describe('MessageContent component', () => {
       // Wait for markdown to render so we know the prose pass completed
       await expect.poll(() => q(container, '.prose')).toBeTruthy();
       expect(q(container, 'span.mention')).toBeNull();
+    });
+
+    it('does not wrap an @mention inside escaped-backtick inline code', async () => {
+      const { container } = renderMessage('\\`@alice\\`', [member('alice')]);
+      await expect.poll(() => q(container, 'code')).toBeTruthy();
+      expect(q(container, 'span.mention')).toBeNull();
+    });
+
+    it('does not wrap an @mention split by markdown formatting', async () => {
+      const { container } = renderMessage('@*alice*', [member('alice')]);
+      await expect.poll(() => q(container, 'em')).toBeTruthy();
+      expect(q(container, 'span.mention')).toBeNull();
+    });
+
+    it('wraps an @mention immediately after escaped-backtick inline code', async () => {
+      const { container } = renderMessage('\\`cmd\\`@alice', [member('alice')]);
+      await expect.poll(() => q(container, 'span.mention')).toBeTruthy();
+      expect(q(container, 'code')?.textContent).toContain('cmd');
+      expect(q(container, 'span.mention')?.textContent).toBe('@alice');
     });
 
     it('wraps a known role mention when role handles include the name', async () => {

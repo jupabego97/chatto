@@ -23,12 +23,11 @@ import {
 import { eventBusManager } from './state/server/eventBus.svelte';
 
 export const MyServerEventsSubscriptionDoc = graphql(`
-  subscription MyServerEvents($after: String) {
-    myEvents(after: $after) {
+  subscription MyServerEvents {
+    myEvents {
       id
       createdAt
       actorId
-      deliveryCursor
       actor {
         ...UserAvatarUser
       }
@@ -143,11 +142,25 @@ export const MyServerEventsSubscriptionDoc = graphql(`
         ... on ServerMemberDeletedEvent {
           userId
         }
+        ... on CallStartedEvent {
+          roomId
+          callId
+        }
         ... on CallParticipantJoinedEvent {
           roomId
+          callId
         }
         ... on CallParticipantLeftEvent {
           roomId
+          callId
+        }
+        ... on CallEndedEvent {
+          roomId
+          callId
+        }
+        ... on CallEndedEvent {
+          roomId
+          callId
         }
         # Deployment-wide events.
         ... on ServerUpdatedEvent {
@@ -232,9 +245,15 @@ export { RoomEventViewFragmentDoc, useFragment };
 export type EventEnvelope = MyServerEventsSubscription['myEvents'];
 
 export type EventHandler = (event: EventEnvelope) => void;
+export type EventBusCatchUpReason =
+  | 'subscription-ended'
+  | 'ws-reconnected'
+  | 'heartbeat-stalled';
+export type EventBusCatchUpHandler = (reason: EventBusCatchUpReason) => void;
 
 export interface EventBus {
   handlers: SvelteSet<EventHandler>;
+  catchUpHandlers: SvelteSet<EventBusCatchUpHandler>;
 }
 
 // The context holds a getter — not a fixed bus — so reads from inside a

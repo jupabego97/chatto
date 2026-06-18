@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
@@ -65,7 +66,7 @@ func setupGraphQLTestServerFull(t *testing.T, ownersConfig config.OwnersConfig, 
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
-	_, nc := testutil.StartNATS(t)
+	_, nc := testutil.StartSharedNATS(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
@@ -285,7 +286,22 @@ func TestGraphQL_Query_Viewer_Unauthenticated(t *testing.T) {
 	env := setupGraphQLTestServer(t)
 
 	resp := env.doGraphQL(t, `query { viewer { user { id login } } }`, nil)
-	assertGraphQLAuthRequired(t, resp)
+	if len(resp.Errors) > 0 {
+		t.Fatalf("Expected no errors for unauthenticated nullable viewer, got: %v", resp.Errors)
+	}
+	var data struct {
+		Viewer *struct {
+			User struct {
+				ID string `json:"id"`
+			} `json:"user"`
+		} `json:"viewer"`
+	}
+	if err := json.Unmarshal(resp.Data, &data); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
+	if data.Viewer != nil {
+		t.Fatal("Expected nil viewer for unauthenticated request")
+	}
 }
 
 func TestGraphQL_JSONRequestBodyLimit_AcceptsBodyWithinLimit(t *testing.T) {
@@ -437,7 +453,22 @@ func TestGraphQL_Query_Viewer_CookieSessionRevoked(t *testing.T) {
 	}
 
 	resp = env.doGraphQL(t, `query { viewer { user { id login } } }`, nil)
-	assertGraphQLAuthRequired(t, resp)
+	if len(resp.Errors) > 0 {
+		t.Fatalf("Expected no errors for revoked nullable viewer, got: %v", resp.Errors)
+	}
+	var after struct {
+		Viewer *struct {
+			User struct {
+				ID string `json:"id"`
+			} `json:"user"`
+		} `json:"viewer"`
+	}
+	if err := json.Unmarshal(resp.Data, &after); err != nil {
+		t.Fatalf("Failed to unmarshal post-revocation response: %v", err)
+	}
+	if after.Viewer != nil {
+		t.Fatal("Expected nil viewer after cookie session revocation")
+	}
 }
 
 // TestGraphQL_Query_Spaces_PublicDiscovery tests that the spaces query is public
@@ -763,6 +794,16 @@ func TestGraphQL_Query_Viewer(t *testing.T) {
 // ============================================================================
 
 func TestGraphQL_ErrorFormat(t *testing.T) {
+	var logOutput bytes.Buffer
+	oldLogger := log.Default()
+	log.SetDefault(log.NewWithOptions(&logOutput, log.Options{
+		Level:     log.DebugLevel,
+		Formatter: log.JSONFormatter,
+	}))
+	t.Cleanup(func() {
+		log.SetDefault(oldLogger)
+	})
+
 	env := setupGraphQLTestServer(t)
 
 	// Invalid query syntax
@@ -776,6 +817,20 @@ func TestGraphQL_ErrorFormat(t *testing.T) {
 	err := resp.Errors[0]
 	if err.Message == "" {
 		t.Error("Expected error message")
+	}
+
+	logs := logOutput.String()
+	if !strings.Contains(logs, `"level":"error"`) {
+		t.Fatalf("Expected GraphQL error to be logged at error level, got logs: %s", logs)
+	}
+	if !strings.Contains(logs, `"prefix":"graphql"`) {
+		t.Fatalf("Expected GraphQL error log to use graphql prefix, got logs: %s", logs)
+	}
+	if !strings.Contains(logs, `"msg":"GraphQL operation failed"`) {
+		t.Fatalf("Expected GraphQL error log message, got logs: %s", logs)
+	}
+	if !strings.Contains(logs, "thisFieldDoesNotExist") {
+		t.Fatalf("Expected GraphQL error log to include validation error, got logs: %s", logs)
 	}
 }
 
@@ -1027,8 +1082,10 @@ func TestBearerToken_AuthenticatesGraphQL(t *testing.T) {
 func TestBearerToken_InvalidToken(t *testing.T) {
 	env := setupGraphQLTestServer(t)
 
-	// Make a GraphQL query with an invalid token
-	resp := env.doGraphQLWithToken(t, "cht_ATinvalidtoken1234", `{ viewer { user { id login } } }`)
+	// Make a protected GraphQL query with an invalid token. Nullable viewer
+	// intentionally returns null for unauthenticated callers, so use a field
+	// that still requires authentication to prove the bearer token failed.
+	resp := env.doGraphQLWithToken(t, "cht_ATinvalidtoken1234", `{ server { rooms { id } } }`)
 	assertGraphQLAuthRequired(t, resp)
 }
 
@@ -1061,7 +1118,7 @@ func TestBearerToken_RevokedTokenFails(t *testing.T) {
 		t.Fatalf("Failed to revoke token: %v", err)
 	}
 
-	// Verify it no longer works
-	resp = env.doGraphQLWithToken(t, token, `{ viewer { user { id } } }`)
+	// Verify it no longer works against a protected field.
+	resp = env.doGraphQLWithToken(t, token, `{ server { rooms { id } } }`)
 	assertGraphQLAuthRequired(t, resp)
 }

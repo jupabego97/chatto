@@ -86,7 +86,23 @@ func runServer(configPath string) {
 	// Conductor stops foreground run scripts with SIGHUP before escalating.
 	// Chatto has no reload-on-HUP behavior, so treat it as graceful shutdown
 	// alongside the usual terminal and supervisor stop signals.
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
+	shutdownSignals := []os.Signal{syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM}
+	signalLog := make(chan os.Signal, 1)
+	stopSignalLog := make(chan struct{})
+	signal.Notify(signalLog, shutdownSignals...)
+	defer func() {
+		signal.Stop(signalLog)
+		close(stopSignalLog)
+	}()
+	go func() {
+		select {
+		case sig := <-signalLog:
+			log.Info("Received shutdown signal", "signal", sig.String())
+		case <-stopSignalLog:
+		}
+	}()
+
+	ctx, stop := signal.NotifyContext(context.Background(), shutdownSignals...)
 	defer stop()
 
 	// Use errgroup to coordinate services
@@ -114,6 +130,7 @@ func runServer(configPath string) {
 
 	// Create Chatto core
 	cfg.Core.AuthTokenTTL = cfg.Auth.TokenTTLOrDefault()
+	cfg.Core.EmailOTP = cfg.Auth.EmailOTP
 	cfg.Core.Replicas = cfg.NATS.ReplicasOrDefault()
 	cfg.Core.Limits = cfg.Limits
 	cfg.Core.Owners = cfg.Owners
@@ -305,15 +322,10 @@ func connectToNATS(ctx context.Context, cfg config.ChattoConfig, embeddedNATS *s
 		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
 			if err != nil {
 				logger.Warn("NATS disconnected", "error", err)
-			} else {
-				logger.Info("NATS disconnected (graceful)")
 			}
 		}),
 		nats.ReconnectHandler(func(nc *nats.Conn) {
 			logger.Info("NATS reconnected", "url", nc.ConnectedUrl())
-		}),
-		nats.ClosedHandler(func(_ *nats.Conn) {
-			logger.Info("NATS connection closed")
 		}),
 	)
 
@@ -558,6 +570,9 @@ func fetchPayloadContext(ctx context.Context, chattoCore *core.ChattoCore, notif
 	case *corev1.Notification_Reply:
 		roomID = n.Reply.RoomId
 		eventID = n.Reply.EventId
+	case *corev1.Notification_RoomMessage:
+		roomID = n.RoomMessage.RoomId
+		eventID = n.RoomMessage.EventId
 	default:
 		return nil
 	}
@@ -604,9 +619,9 @@ func fetchPayloadContext(ctx context.Context, chattoCore *core.ChattoCore, notif
 		}
 	}
 
-	// For mentions and replies, also fetch the room name
+	// For notifications shown as channel activity, also fetch the room name.
 	switch notification.Notification.(type) {
-	case *corev1.Notification_Mention, *corev1.Notification_Reply:
+	case *corev1.Notification_Mention, *corev1.Notification_Reply, *corev1.Notification_RoomMessage:
 		room, err := chattoCore.GetRoom(ctx, kind, roomID)
 		if err != nil {
 			logger.Debug("Failed to fetch room for push notification",

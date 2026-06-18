@@ -120,11 +120,25 @@
         ... on ServerMemberDeletedEvent {
           userId
         }
+        ... on CallStartedEvent {
+          roomId
+          callId
+        }
         ... on CallParticipantJoinedEvent {
           roomId
+          callId
         }
         ... on CallParticipantLeftEvent {
           roomId
+          callId
+        }
+        ... on CallEndedEvent {
+          roomId
+          callId
+        }
+        ... on CallEndedEvent {
+          roomId
+          callId
         }
       }
     }
@@ -141,7 +155,11 @@
     compact?: boolean;
     roomId: string;
     messageStore?: MessagesStore | null;
-    onOpenThread?: (threadRootEventId: string, highlightEventId?: string) => void;
+    onOpenThread?: (
+      threadRootEventId: string,
+      highlightEventId?: string,
+      quoteText?: string
+    ) => void;
   } = $props();
 
   // Join/leave events are confusing in DM 1:1 conversations. Post-PR(b) we

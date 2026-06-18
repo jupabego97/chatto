@@ -23,8 +23,8 @@ func setupCore(t *testing.T) *core.ChattoCore {
 	t.Cleanup(cancel)
 
 	cfg := config.CoreConfig{
-		SecretKey: "test-core-secret",
-		Assets:    config.AssetsConfig{SigningSecret: "test-secret"},
+		SecretKey: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+		Assets:    config.AssetsConfig{SigningSecret: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},
 	}
 	c, err := core.NewChattoCore(ctx, nc, cfg)
 	if err != nil {
@@ -117,6 +117,9 @@ func TestApplyBootstrap_CreatesUsersAndServer(t *testing.T) {
 
 	if isOwner, err := c.IsServerOwner(ctx, alice.Id); err != nil || !isOwner {
 		t.Errorf("expected alice to have owner role (err=%v)", err)
+	}
+	if got := c.RBAC.GetDecision(core.ScopeServer, "", core.RoleEveryone, core.PermRoomCreate); got != core.DecisionNone {
+		t.Errorf("bootstrap should not grant server-tier room.create to everyone, got %s", got)
 	}
 
 	// The server config should carry the bootstrap name.

@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -41,6 +42,7 @@ type HTTPServer struct {
 	addr       string
 	version    string
 	logger     *log.Logger
+	metrics    *processMetrics
 
 	// Optional test hook used to make password-login revocation races deterministic.
 	passwordLoginSessionCreatedHook func(*gin.Context, string, uint64)
@@ -82,6 +84,7 @@ func NewHTTPServer(cfg HTTPServerConfig) (*HTTPServer, error) {
 		addr:       cfg.Addr,
 		version:    cfg.Version,
 		logger:     logger,
+		metrics:    newProcessMetrics(),
 	}
 
 	// Set up all routes
@@ -161,6 +164,7 @@ func (s *HTTPServer) setupRoutes() error {
 
 	// CORS middleware for cross-origin API access (token-based auth)
 	s.router.Use(s.corsMiddleware(allowedOrigins))
+	s.router.Use(s.csrfMiddleware())
 
 	// Set up feature-specific routes
 	s.setupHealthRoutes()
@@ -184,6 +188,7 @@ func (s *HTTPServer) Run(ctx context.Context) error {
 
 	var servers []*http.Server
 	var tlsServer *http.Server
+	var metricsServer *http.Server
 
 	if s.config.Webserver.TLS.Enabled {
 		tlsConfig := s.config.Webserver.TLS
@@ -217,11 +222,24 @@ func (s *HTTPServer) Run(ctx context.Context) error {
 		servers = append(servers, newHTTPServer(s.addr, s.router))
 	}
 
+	if s.config.Metrics.Enabled {
+		var err error
+		metricsServer, err = s.newMetricsServer()
+		if err != nil {
+			return err
+		}
+		servers = append(servers, metricsServer)
+	}
+
 	serverErr := make(chan error, len(servers)+1)
 
 	// Start HTTP servers
 	for _, srv := range servers {
-		s.logger.Info("Starting HTTP server", "addr", srv.Addr, "url", s.config.Webserver.URL)
+		if srv == metricsServer {
+			s.logger.Info("Starting metrics server", "url", metricsServerURL(srv.Addr, s.config.Metrics.PathOrDefault()))
+		} else {
+			s.logger.Info("Starting HTTP server", "addr", srv.Addr, "url", s.config.Webserver.URL)
+		}
 		go func(srv *http.Server) {
 			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 				serverErr <- err
@@ -259,13 +277,15 @@ func (s *HTTPServer) Run(ctx context.Context) error {
 	}
 }
 
+func metricsServerURL(addr, path string) string {
+	return (&url.URL{Scheme: "http", Host: addr, Path: path}).String()
+}
+
 func (s *HTTPServer) shutdownServer(server *http.Server) error {
 	return s.shutdownServerWithTimeout(server, httpServerShutdownTimeout)
 }
 
 func (s *HTTPServer) shutdownServerWithTimeout(server *http.Server, timeout time.Duration) error {
-	s.logger.Info("Shutting down server", "addr", server.Addr)
-
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -277,7 +297,6 @@ func (s *HTTPServer) shutdownServerWithTimeout(server *http.Server, timeout time
 		return err
 	}
 
-	s.logger.Info("Server shutdown complete", "addr", server.Addr)
 	return nil
 }
 

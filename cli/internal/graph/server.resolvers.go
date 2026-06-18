@@ -19,8 +19,8 @@ import (
 // No authentication required - needed on login page.
 func (r *queryResolver) Server(ctx context.Context) (*model.Server, error) {
 	return &model.Server{
-		Version:              r.version,
-		EnabledAuthProviders: r.authConfig.EnabledProviders(),
+		Version:       r.version,
+		AuthProviders: authProviderModels(r.authConfig.PublicProviders()),
 	}, nil
 }
 
@@ -235,6 +235,15 @@ func (r *serverResolver) ViewerHasUnreadRooms(ctx context.Context, obj *model.Se
 		}
 	}
 	return false, nil
+}
+
+// ViewerNotifications is the resolver for the viewerNotifications field.
+func (r *serverResolver) ViewerNotifications(ctx context.Context, obj *model.Server, limit *int32, offset *int32) (*model.NotificationsConnection, error) {
+	user := auth.ForContext(ctx)
+	if user == nil {
+		return emptyNotificationsConnection(), nil
+	}
+	return r.resolveNotificationsConnection(ctx, user.Id, limit, offset, nil)
 }
 
 // Name is the resolver for the name field.

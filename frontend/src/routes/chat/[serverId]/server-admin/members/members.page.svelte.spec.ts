@@ -4,171 +4,224 @@ import { flushSync } from 'svelte';
 import MembersPage from './+page.svelte';
 
 type Member = {
-	id: string;
-	login: string;
-	displayName: string;
-	avatarUrl: string | null;
-	roles: string[];
-	createdAt: string;
+  id: string;
+  login: string;
+  displayName: string;
+  avatarUrl: string | null;
+  roles: string[];
+  createdAt: string;
 };
 
 const mocks = vi.hoisted(() => ({
-	query: vi.fn(),
-	goto: vi.fn()
+  query: vi.fn(),
+  goto: vi.fn()
 }));
 
+let originalIntersectionObserver: typeof IntersectionObserver;
+let observers: MockIntersectionObserver[] = [];
+
+class MockIntersectionObserver implements IntersectionObserver {
+  readonly root: Element | Document | null;
+  readonly rootMargin: string;
+  readonly thresholds: ReadonlyArray<number> = [];
+  private elements: Element[] = [];
+
+  constructor(
+    private readonly callback: IntersectionObserverCallback,
+    options?: IntersectionObserverInit
+  ) {
+    this.root = options?.root ?? null;
+    this.rootMargin = options?.rootMargin ?? '0px';
+    observers.push(this);
+  }
+
+  observe = (target: Element) => {
+    this.elements.push(target);
+  };
+
+  unobserve = (target: Element) => {
+    this.elements = this.elements.filter((element) => element !== target);
+  };
+
+  disconnect = () => {
+    this.elements = [];
+  };
+
+  takeRecords = () => [];
+
+  trigger(isIntersecting: boolean) {
+    const target = this.elements[0] ?? document.createElement('tr');
+    this.callback(
+      [
+        {
+          boundingClientRect: target.getBoundingClientRect(),
+          intersectionRatio: isIntersecting ? 1 : 0,
+          intersectionRect: target.getBoundingClientRect(),
+          isIntersecting,
+          rootBounds: null,
+          target,
+          time: performance.now()
+        }
+      ],
+      this
+    );
+  }
+}
+
 vi.mock('$app/navigation', () => ({
-	goto: mocks.goto,
-	pushState: vi.fn(),
-	replaceState: vi.fn(),
-	preloadData: vi.fn(),
-	invalidate: vi.fn(),
-	invalidateAll: vi.fn()
+  goto: mocks.goto,
+  pushState: vi.fn(),
+  replaceState: vi.fn(),
+  preloadData: vi.fn(),
+  invalidate: vi.fn(),
+  invalidateAll: vi.fn()
 }));
 
 vi.mock('$lib/state/activeServer.svelte', () => ({
-	getActiveServer: () => 'origin'
+  getActiveServer: () => 'origin'
 }));
 
 vi.mock('$lib/state/userSettings.svelte', () => ({
-	getUserSettings: () => ({
-		effectiveTimezone: undefined,
-		effectiveHour12: undefined
-	})
+  getUserSettings: () => ({
+    effectiveTimezone: undefined,
+    effectiveHour12: undefined
+  })
 }));
 
 vi.mock('$lib/state/server/connection.svelte', () => ({
-	useConnection: () => () => ({
-		isConnected: true,
-		showConnectionLostBanner: false,
-		client: {
-			query: mocks.query,
-			mutation: vi.fn(),
-			subscription: vi.fn()
-		}
-	})
+  useConnection: () => () => ({
+    isConnected: true,
+    showConnectionLostBanner: false,
+    client: {
+      query: mocks.query,
+      mutation: vi.fn(),
+      subscription: vi.fn()
+    }
+  })
 }));
 
 function member(index: number, prefix = 'member'): Member {
-	return {
-		id: `${prefix}-${index}`,
-		login: `${prefix}${index}`,
-		displayName: `${prefix} ${index}`,
-		avatarUrl: null,
-		roles: ['everyone'],
-		createdAt: '2026-01-01T12:00:00Z'
-	};
+  return {
+    id: `${prefix}-${index}`,
+    login: `${prefix}${index}`,
+    displayName: `${prefix} ${index}`,
+    avatarUrl: null,
+    roles: ['everyone'],
+    createdAt: '2026-01-01T12:00:00Z'
+  };
 }
 
 function result(users: Member[], totalCount = users.length, hasMore = false) {
-	return {
-		server: {
-			roles: [{ name: 'admin', displayName: 'Admin' }],
-			members: {
-				users,
-				totalCount,
-				hasMore
-			}
-		}
-	};
+  return {
+    server: {
+      roles: [{ name: 'admin', displayName: 'Admin' }],
+      members: {
+        users,
+        totalCount,
+        hasMore
+      }
+    }
+  };
 }
 
 function queueResults(...results: ReturnType<typeof result>[]) {
-	mocks.query.mockImplementation(() => {
-		const data = results.shift();
-		return {
-			toPromise: vi.fn().mockResolvedValue({
-				data,
-				error: null
-			})
-		};
-	});
+  mocks.query.mockImplementation(() => {
+    const data = results.shift();
+    return {
+      toPromise: vi.fn().mockResolvedValue({
+        data,
+        error: null
+      })
+    };
+  });
 }
 
 async function settle() {
-	await Promise.resolve();
-	await Promise.resolve();
-	await Promise.resolve();
-	flushSync();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  flushSync();
 }
 
 describe('server admin members pagination', () => {
-	beforeEach(() => {
-		vi.useFakeTimers();
-		mocks.query.mockReset();
-		mocks.goto.mockReset();
-	});
+  beforeEach(() => {
+    vi.useFakeTimers();
+    originalIntersectionObserver = globalThis.IntersectionObserver;
+    observers = [];
+    globalThis.IntersectionObserver =
+      MockIntersectionObserver as unknown as typeof IntersectionObserver;
+    mocks.query.mockReset();
+    mocks.goto.mockReset();
+  });
 
-	afterEach(() => {
-		vi.useRealTimers();
-	});
+  afterEach(() => {
+    globalThis.IntersectionObserver = originalIntersectionObserver;
+    vi.useRealTimers();
+  });
 
-	it('loads the first offset page on mount and the next page near scroll end', async () => {
-		queueResults(
-			result(Array.from({ length: 20 }, (_, i) => member(i)), 21, true),
-			result([member(20)], 21, false)
-		);
+  it('loads the first offset page on mount and the next page when the table end intersects', async () => {
+    queueResults(
+      result(
+        Array.from({ length: 20 }, (_, i) => member(i)),
+        21,
+        true
+      ),
+      result([member(20)], 21, false)
+    );
 
-		const { container } = render(MembersPage);
-		await settle();
+    const { container } = render(MembersPage);
+    await settle();
 
-		expect(mocks.query).toHaveBeenNthCalledWith(
-			1,
-			expect.anything(),
-			{ search: null, limit: 20, offset: 0 }
-		);
-		expect(container.textContent).toContain('Showing 20 of 21 member(s)');
+    expect(mocks.query).toHaveBeenNthCalledWith(1, expect.anything(), {
+      search: null,
+      limit: 20,
+      offset: 0
+    });
+    expect(container.textContent).toContain('Showing 20 of 21 member(s)');
 
-		const scrollRegion = container.querySelector(
-			'.min-h-0.flex-1.overflow-y-auto'
-		) as HTMLDivElement;
-		Object.defineProperties(scrollRegion, {
-			clientHeight: { value: 400, configurable: true },
-			scrollHeight: { value: 1000, configurable: true },
-			scrollTop: { value: 520, configurable: true }
-		});
-		scrollRegion.dispatchEvent(new Event('scroll'));
-		await settle();
+    expect(observers).toHaveLength(1);
+    observers[0].trigger(true);
+    await settle();
 
-		expect(mocks.query).toHaveBeenNthCalledWith(
-			2,
-			expect.anything(),
-			{ search: null, limit: 20, offset: 20 }
-		);
-		expect(container.textContent).toContain('@member20');
-		expect(container.textContent).toContain('Showing 21 of 21 member(s)');
-	});
+    expect(mocks.query).toHaveBeenNthCalledWith(2, expect.anything(), {
+      search: null,
+      limit: 20,
+      offset: 20
+    });
+    expect(container.textContent).toContain('@member20');
+    expect(container.textContent).toContain('Showing 21 of 21 member(s)');
+  });
 
-	it('searches from offset zero and hides load-more when the filtered page is complete', async () => {
-		queueResults(
-			result([member(0, 'unrelated')], 42, true),
-			result([member(0, 'target')], 1, false)
-		);
+  it('searches from offset zero and hides load-more when the filtered page is complete', async () => {
+    queueResults(
+      result([member(0, 'unrelated')], 42, true),
+      result([member(0, 'target')], 1, false)
+    );
 
-		const { container } = render(MembersPage);
-		await settle();
+    const { container } = render(MembersPage);
+    await settle();
 
-		const input = container.querySelector('input') as HTMLInputElement;
-		input.value = ' target ';
-		input.dispatchEvent(new Event('input', { bubbles: true }));
-		await vi.advanceTimersByTimeAsync(300);
-		await settle();
+    const input = container.querySelector('input') as HTMLInputElement;
+    input.value = ' target ';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(300);
+    await settle();
 
-		expect(mocks.query).toHaveBeenNthCalledWith(
-			2,
-			expect.anything(),
-			{ search: 'target', limit: 20, offset: 0 }
-		);
-		expect(container.textContent).toContain('@target0');
-		expect(container.textContent).not.toContain('@unrelated0');
-	});
+    expect(mocks.query).toHaveBeenNthCalledWith(2, expect.anything(), {
+      search: 'target',
+      limit: 20,
+      offset: 0
+    });
+    expect(container.textContent).toContain('@target0');
+    expect(container.textContent).not.toContain('@unrelated0');
+  });
 
-	it('renders the members body as a scroll region', async () => {
-		queueResults(result([], 0, false));
+  it('renders the members body as a scroll region', async () => {
+    queueResults(result([], 0, false));
 
-		const { container } = render(MembersPage);
-		await settle();
+    const { container } = render(MembersPage);
+    await settle();
 
-		expect(container.querySelector('.min-h-0.flex-1.overflow-y-auto')).toBeTruthy();
-	});
+    expect(container.querySelector('.min-h-0.flex-1.overflow-y-auto')).toBeTruthy();
+  });
 });

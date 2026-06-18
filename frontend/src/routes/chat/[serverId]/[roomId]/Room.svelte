@@ -11,16 +11,20 @@
   import VoiceCallPanel from '$lib/components/voice/VoiceCallPanel.svelte';
   import {
     useRoomData,
-    useRoomMembersSync,
     useRoomUnread,
     useEvent,
+    usePresenceChange,
     createTypingIndicator
   } from '$lib/hooks';
-  import { appState, sidebarNav } from '$lib/state/globals.svelte';
+  import { appState } from '$lib/state/globals.svelte';
   import {
     createComposerContext,
     createMentionRoles,
     getRoomMembers,
+    MessagesStore,
+    RoomFilesStore,
+    RoomMembersStore,
+    setRoomMembersStore,
     createRoomPermissions,
     DEFAULT_ROOM_PERMISSIONS
   } from '$lib/state/room';
@@ -33,14 +37,24 @@
   import { clearLastRoom, setLastRoom } from '$lib/storage/lastRoom';
   import PageTitle from '$lib/ui/PageTitle.svelte';
   import PaneHeader from '$lib/ui/PaneHeader.svelte';
-  import { tick } from 'svelte';
+  import { onDestroy, tick } from 'svelte';
+  import { fly } from 'svelte/transition';
   import RoomEventsPane from './RoomEventsPane.svelte';
   import RoomSidebar from './RoomSidebar.svelte';
+  import RoomSidebarToggle from './RoomSidebarToggle.svelte';
+  import {
+    canBanMembersFromRoomSidebar,
+    DM_ROOM_SIDEBAR_PANELS,
+    roomSidebarPanelForRoom
+  } from './roomSidebarBehavior';
+  import { RoomSidebarPanelsState } from './roomSidebarPanels.svelte';
   import ThreadPane from './ThreadPane.svelte';
 
   let { roomId, threadId }: { roomId: string; threadId?: string } = $props();
 
   const connection = useConnection();
+  const roomFilesStore = new RoomFilesStore(connection());
+  const roomMembersStore = setRoomMembersStore(new RoomMembersStore(connection()));
   const serverSegment = $derived(serverIdToSegment(getActiveServer()));
   const stores = serverRegistry.getStore(getActiveServer());
   const serverInfo = stores.serverInfo;
@@ -48,9 +62,12 @@
 
   // Thread navigation functions (URL-driven state)
   let pendingThreadHighlight = $state<string | null>(null);
+  let pendingThreadQuote = $state<{ id: number; text: string } | null>(null);
+  let pendingThreadQuoteId = 0;
 
-  function openThread(threadRootEventId: string, highlightEventId?: string) {
+  function openThread(threadRootEventId: string, highlightEventId?: string, quoteText?: string) {
     pendingThreadHighlight = highlightEventId ?? null;
+    pendingThreadQuote = quoteText ? { id: ++pendingThreadQuoteId, text: quoteText } : null;
     goto(
       resolve('/chat/[serverId]/[roomId]/[threadId]', {
         serverId: serverSegment,
@@ -70,6 +87,12 @@
   const replyState = composerContext.replyState;
   const jumpState = composerContext.jumpState;
   const currentUser = $derived(serverRegistry.getStore(getActiveServer()).currentUser);
+  const roomMessageStore = new MessagesStore(
+    connection(),
+    () => currentUser.user?.id ?? null
+  );
+
+  onDestroy(() => roomMessageStore.dispose());
 
   // --- Extracted hooks ---
   const room = useRoomData(() => ({ roomId }));
@@ -116,17 +139,24 @@
     };
   });
 
-  const roomMembers = useRoomMembersSync(() => ({
-    roomId,
-    isDM: room.isDM,
-    roomData: room.roomData,
-    dmData: room.dmData
-  }));
-
   const unread = useRoomUnread(() => ({ roomId }));
+
+  $effect(() => {
+    roomFilesStore.setRoom(roomId);
+    roomMembersStore.setRoom(roomId);
+  });
+
+  $effect(() => {
+    if (room.roomData) {
+      roomMembersStore.ensureLoaded();
+    }
+  });
 
   // Room permissions — derived reactively, no $effect needed
   let permissions = $derived(room.roomData ?? DEFAULT_ROOM_PERMISSIONS);
+  let composerCanAttach = $derived(
+    room.roomData === undefined ? true : permissions.canAttach
+  );
 
   createRoomPermissions(() => permissions);
 
@@ -176,22 +206,30 @@
     if (!appState.isFocused) return;
 
     const currentRoomId = roomId;
-    if (room.isDM) {
-      notificationStore.dismissDMNotifications(currentRoomId);
-    } else {
-      notificationStore.dismissMentionNotifications(currentRoomId);
-      notificationStore.dismissRoomReplyNotifications(currentRoomId);
-      notificationStore.dismissRoomMessageNotifications(currentRoomId);
-    }
+    void (async () => {
+      const results = room.isDM
+        ? [await notificationStore.dismissDMNotifications(currentRoomId)]
+        : await Promise.all([
+            notificationStore.dismissMentionNotifications(currentRoomId),
+            notificationStore.dismissRoomReplyNotifications(currentRoomId),
+            notificationStore.dismissRoomMessageNotifications(currentRoomId)
+          ]);
+
+      const dismissedForRoom = results.reduce(
+        (sum, counts) => sum + (counts.byRoom[currentRoomId] ?? 0),
+        0
+      );
+      if (dismissedForRoom > 0) {
+        stores.rooms.decrementUnreadNotification(currentRoomId, dismissedForRoom);
+      }
+    })();
   });
 
   // Remember this room as the last visited (for the chat-root → last-room
-  // auto-redirect). DM rooms are deliberately excluded: their lifecycle is
-  // user-driven (start a conversation, post a message), not "the room I was
-  // last in," and auto-landing on a DM after returning to the instance is
-  // surprising — channels are the implicit destination.
+  // auto-redirect). Room.svelte is reused across roomId changes, so wait for
+  // the loaded room data to catch up to the current route before writing.
   $effect(() => {
-    if (room.roomData && !room.isDM) {
+    if (room.roomData?.room.id === roomId) {
       setLastRoom(getActiveServer(), roomId);
     }
   });
@@ -251,6 +289,8 @@
   //   the tab would strand the user's own latest message below the unread
   //   separator.
   useEvent((event) => {
+    roomFilesStore.ingestServerEvent(event);
+    roomMembersStore.ingestServerEvent(event);
     if (!event.event) return;
 
     if (event.event.__typename === 'MessagePostedEvent' && event.event.roomId === roomId) {
@@ -272,20 +312,50 @@
     }
   });
 
+  usePresenceChange((userId, status) => {
+    roomMembersStore.updatePresence(userId, status);
+  });
+
   // Header action visibility — flat derivations keep the template clean
   let showVoiceCall = $derived(!!room.roomData && !!serverInfo.livekitUrl);
   // Channel rooms can always be left. DMs are permanent (no leave action).
   let showLeaveRoom = $derived(!!room.roomData && !room.isDM);
+  const roomSidebarPanels = new RoomSidebarPanelsState(
+    () => getActiveServer(),
+    () => roomId
+  );
+  const activeRoomSidebarPanel = $derived(
+    roomSidebarPanelForRoom(room.isDM, roomSidebarPanels.activeDesktopPanel)
+  );
+  const mobileRoomSidebarPanel = $derived(
+    roomSidebarPanelForRoom(room.isDM, roomSidebarPanels.mobilePanel)
+  );
+  const roomSidebarTogglePanels = $derived(room.isDM ? DM_ROOM_SIDEBAR_PANELS : undefined);
 
   let leavingRoom = $state(false);
+
+  function openFileMessage(
+    messageEventId: string,
+    threadRootEventId: string | null,
+    closeMobile = false
+  ): void {
+    if (threadRootEventId) {
+      openThread(threadRootEventId, messageEventId);
+    } else {
+      void jumpState.jumpToMessage(messageEventId);
+    }
+    if (closeMobile) {
+      roomSidebarPanels.closeMobile();
+    }
+  }
 
   // Drop zone state for drag-and-drop image uploads
   let isDraggingFiles = $state(false);
   let composerApi = $state<MessageComposerApi | null>(null);
 
-  // Drop zone attachment - only active when user can post messages
+  // Drop zone attachment - only active when user can post and attach files.
   const roomDropZone = $derived(
-    room.roomData?.canPostMessage
+    room.roomData?.canPostMessage && room.roomData?.canAttach
       ? dropZone({
           onDrop: (files) => composerApi?.addFiles(files),
           onDragStateChange: (dragging) => (isDraggingFiles = dragging),
@@ -304,12 +374,31 @@
 
 <svelte:window
   onkeydown={(e) => {
+    if (e.key === 'Escape' && mobileRoomSidebarPanel && !e.defaultPrevented) {
+      e.preventDefault();
+      roomSidebarPanels.closeMobile();
+      return;
+    }
+
     if (e.key === 'Escape' && threadId && !e.defaultPrevented) {
       e.preventDefault();
       closeThread();
     }
   }}
   onpointerdown={(e) => {
+    if (mobileRoomSidebarPanel && e.button === 0) {
+      const target = e.target as HTMLElement;
+      if (
+        target.closest(
+          '[data-testid="room-sidebar-mobile-pane"], [data-testid="room-sidebar-toggle"], dialog'
+        )
+      ) {
+        return;
+      }
+      roomSidebarPanels.closeMobile();
+      return;
+    }
+
     if (!threadId || e.button !== 0) return;
     const target = e.target as HTMLElement;
     if (target.closest('[data-testid="thread-pane"], dialog')) return;
@@ -318,11 +407,9 @@
 />
 
 <!--
-  Render the layout shell whether or not roomData has loaded. EventList
-  already manages its own skeleton via the messages store's
-  isInitialLoading flag, and stays mounted across roomId changes — so it
-  becomes the single skeleton element throughout the loading transition,
-  with no remount and no shimmer-phase reset.
+  Render the layout shell whether or not roomData has loaded. EventList stays
+  mounted across roomId changes, so scroll and virtualization state can settle
+  without remounting the whole room body.
 
   roomData === null triggers a redirect via $effect.pre above, so we skip
   rendering in that case to avoid a flash of the previous room's UI under
@@ -338,26 +425,34 @@
       <div
         class={[
           'relative flex min-h-0 min-w-0 flex-1 flex-col transition-opacity duration-200',
-          threadId ? 'opacity-30' : ''
+          threadId ? 'opacity-30' : '',
+          mobileRoomSidebarPanel ? 'max-lg:opacity-30' : ''
         ]}
-        inert={threadId ? true : undefined}
+        inert={threadId || mobileRoomSidebarPanel ? true : undefined}
         {@attach roomDropZone}
       >
         <DropZoneOverlay visible={isDraggingFiles} />
 
         <PaneHeader {title} loading={!room.roomData}>
-          {#snippet afterTitle()}
-            {#if !sidebarNav.isOpen && !room.isDM && room.roomData?.spaceName}
-              <span class="text-sm text-muted">{room.roomData.spaceName}</span>
-            {/if}
-          {/snippet}
           {#snippet actions()}
+            <RoomSidebarToggle
+              mode="mobile"
+              activePanel={mobileRoomSidebarPanel}
+              panels={roomSidebarTogglePanels}
+              onToggle={(panel) => roomSidebarPanels.toggleMobilePanel(panel)}
+            />
+            <RoomSidebarToggle
+              mode="desktop"
+              activePanel={activeRoomSidebarPanel}
+              panels={roomSidebarTogglePanels}
+              onToggle={(panel) => roomSidebarPanels.toggleDesktopPanel(panel)}
+            />
             {#if showVoiceCall}
               <VoiceCallButton {roomId} livekitUrl={serverInfo.livekitUrl!} />
             {/if}
             {#if showLeaveRoom}
               <button
-                class="iconify cursor-pointer text-muted uil--sign-out-alt hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
+                class="group/pane-header-icon-button pane-header-icon-button"
                 onclick={() =>
                   pushState('', {
                     modal: {
@@ -369,6 +464,7 @@
                 disabled={leavingRoom}
                 title="Leave room"
               >
+                <span class="pane-header-icon-glyph uil--sign-out-alt" aria-hidden="true"></span>
               </button>
             {/if}
           {/snippet}
@@ -380,6 +476,7 @@
 
         <RoomEventsPane
           {roomId}
+          messageStore={roomMessageStore}
           unreadAfterTime={unread.unreadAfterTime}
           unreadBeforeTime={unread.unreadBeforeTime}
           onOpenThread={openThread}
@@ -390,14 +487,29 @@
         <MessageComposer
           {roomId}
           canPost={permissions.canPostMessage}
+          canAttach={composerCanAttach}
           inReplyTo={replyState.messageEventId ?? undefined}
           replyDisplayName={replyState.actorDisplayName || undefined}
           replyExcerpt={replyState.excerpt || undefined}
           onCancelReply={() => replyState.cancelReply()}
-          autoFocus={!threadId}
+          autoFocus={!threadId && !mobileRoomSidebarPanel}
           onReady={(api) => (composerApi = api)}
           onTyping={() => typingIndicator?.sendTypingIndicator()}
-          onMessageSent={() => typingIndicator?.resetDebounce()}
+          onMessageSent={(event) => {
+            typingIndicator?.resetDebounce();
+            if (event) {
+              roomMessageStore.ingestEvent(event);
+              if (
+                event.event?.__typename === 'MessagePostedEvent' &&
+                event.event.roomId === roomId &&
+                !event.event.threadRootEventId
+              ) {
+                unread.noteReadCursor(event.createdAt);
+              }
+            } else {
+              void roomMessageStore.refreshCurrentWindow(null);
+            }
+          }}
         />
       </div>
 
@@ -408,23 +520,67 @@
           threadRootEventId={threadId}
           onClose={closeThread}
           canPostInThread={room.roomData.canPostInThread}
+          canAttach={room.roomData.canAttach}
           canEchoMessage={room.roomData.canEchoMessage && room.roomData.canPostMessage}
           highlightEventId={pendingThreadHighlight}
+          pendingQuote={pendingThreadQuote}
           onHighlightComplete={() => {
             pendingThreadHighlight = null;
           }}
+          onQuoteConsumed={() => {
+            pendingThreadQuote = null;
+          }}
         />
+      {/if}
+
+      {#if mobileRoomSidebarPanel}
+        <button
+          type="button"
+          class="absolute inset-0 z-10 bg-transparent lg:hidden"
+          aria-label="Close room extras"
+          onclick={() => roomSidebarPanels.closeMobile()}
+        ></button>
+        <div
+          class="absolute inset-y-0 right-0 z-20 flex min-h-0 w-full min-w-0 flex-col overflow-hidden border-l border-border bg-background shadow-[-4px_0_12px_rgba(0,0,0,0.15)] sm:w-[90%] lg:hidden"
+          data-testid="room-sidebar-mobile-pane"
+          transition:fly={{ x: 300, duration: 200 }}
+        >
+          <RoomSidebar
+            {roomId}
+            activePanel={mobileRoomSidebarPanel}
+            presentation="overlay"
+            loading={room.isRoomLoading}
+            filesStore={roomFilesStore}
+            canBanRoomMembers={canBanMembersFromRoomSidebar(
+              room.isDM,
+              room.roomData?.canBanRoomMembers
+            )}
+            currentUserId={currentUser.user?.id ?? null}
+            membersStore={roomMembersStore}
+            onOpenFile={(messageEventId, threadRootEventId) =>
+              openFileMessage(messageEventId, threadRootEventId, true)}
+            onClose={() => roomSidebarPanels.closeMobile()}
+          />
+        </div>
       {/if}
     </div>
 
-    {#if !room.isDM}
+    {#if activeRoomSidebarPanel}
       <div class="hidden lg:flex">
         <RoomSidebar
           {roomId}
+          activePanel={activeRoomSidebarPanel}
           loading={room.isRoomLoading}
-          canBanRoomMembers={room.roomData?.canBanRoomMembers ?? false}
+          filesStore={roomFilesStore}
+          canBanRoomMembers={canBanMembersFromRoomSidebar(
+            room.isDM,
+            room.roomData?.canBanRoomMembers
+          )}
           currentUserId={currentUser.user?.id ?? null}
-          onLoadMoreMembers={roomMembers.loadMoreMembers}
+          membersStore={roomMembersStore}
+          onOpenFile={(messageEventId, threadRootEventId) =>
+            openFileMessage(messageEventId, threadRootEventId)}
+          onClose={() => roomSidebarPanels.closeDesktop()}
         />
       </div>
     {/if}

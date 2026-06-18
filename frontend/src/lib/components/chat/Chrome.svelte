@@ -85,6 +85,7 @@
     canManageRooms: boolean;
     canManageRoles: boolean;
     canAssignRoles: boolean;
+    canManageUserPermissions: boolean;
   };
 
   // Validate access to the active server. Returns server data on success,
@@ -105,6 +106,7 @@
               viewerCanManageRooms
               viewerCanManageRoles
               viewerCanAssignRoles
+              viewerCanManageUserPermissions
             }
           }
         `),
@@ -131,7 +133,8 @@
       canManage: inst.viewerCanManageServer,
       canManageRooms: inst.viewerCanManageRooms,
       canManageRoles: inst.viewerCanManageRoles,
-      canAssignRoles: inst.viewerCanAssignRoles
+      canAssignRoles: inst.viewerCanAssignRoles,
+      canManageUserPermissions: inst.viewerCanManageUserPermissions
     };
   }
 
@@ -212,7 +215,8 @@
         canManage: serverData.canManage,
         canManageRooms: serverData.canManageRooms,
         canManageRoles: serverData.canManageRoles,
-        canAssignRoles: serverData.canAssignRoles
+        canAssignRoles: serverData.canAssignRoles,
+        canManageUserPermissions: serverData.canManageUserPermissions
       });
     }
   });

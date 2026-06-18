@@ -18,10 +18,8 @@ This codebase keeps agent-relevant context in six places. Read the one that fits
 Please use the following facts when making decisions about features or implementation:
 
 - This project is currently in early development.
-- The 0.1.x event-sourcing architecture has been rolled out to all existing Chatto servers/instances, which are now running in the 0.1.0-beta.x stream.
-- Pre-0.1.0 boot importers and their verification settings have been removed. Do not add new code that depends on importing a 0.0.x server into the 0.1.x event-sourced shape.
-- We're preparing a release of 0.1.0, the first public version that users can self-host or provision through Chatto Cloud. A milestone of the same name is available on GitHub to track work related to this release.
-- The focus of 0.1.x is on stabilizing the core data model and APIs, improving documentation, and building out a solid foundation for future features. We want to avoid adding new features that aren't necessary for this stabilization effort.
+- We've made the software public and users can now self-host. We're advising self-hosters to use the `:latest` image tag to keep up to date, but there may be stragglers.
+- The next big new version will be 0.2.0, but for now we're concentrating on smaller, non-breaking changes to improve the application.
 
 Please update this section as the project evolves, and refer to it when making decisions about features or implementation.
 
@@ -33,6 +31,10 @@ Please update this section as the project evolves, and refer to it when making d
 
 ### Specific Rules for Frontend Code
 
+- Review your changes and additions in the browser, using the Chrome Devtools MCP.
+- We use Tailwind 4 for styling. Please use it, and don't write custom CSS directives.
+- Establish Tailwind 4 utility classes and/or Svelte components where feasible.
+- Before styling overlays, popovers, banners, toasts, menus, or similar floating UI, reuse the closest established utility/component pattern first (for example `menu`, `menu-section`, `btn`, and existing chat overlays). Add a shared Tailwind utility or component when a pattern is missing instead of inventing one-off visual styles.
 - Checkboxes and similar in the Server Admin UI should save their change immediately on click, confirmed through a toast notification.
 - Implement pagination as automatic "load more" (ie. when the edge of the container is reached), not manual/page-based pagination.
 - Use "Save" buttons only for forms with multiple fields that need to be submitted together, and make sure they are disabled until a change is made.
@@ -45,6 +47,7 @@ Please update this section as the project evolves, and refer to it when making d
 - State changes go into the EVT stream. Do not litter RUNTIME_STATE or other KV buckets with durable state unless it's something that we deliberately don't want to put into the main EVT event stream (eg. encryption keys, ephemeral state like typing notifications, last-read markers, etc.)
 - All state interactions should go through a Service responsible for a specific domain; that Service should create and maintain whatever projections it needs to do its work, and expose methods for the rest of the codebase to interact with it. Avoid direct interactions with JetStream, KV, or projections from outside of Services.
 - GraphQL list pagination should follow the existing offset style unless there is a specific reason to use a cursor. Use `limit` and `offset` arguments, normalize them through the backend `paginationArgs` helper with a domain-appropriate default/max, and return a connection-like object with the page items plus `totalCount` and `hasMore`. Compute `hasMore` from the requested offset and actual returned page length, and keep filtering/search semantics server-side so clients can page through filtered results without loading the whole list.
+- When adding GraphQL fields that frontend clients will use against registered remote servers, keep mixed-version compatibility in mind. Where feasible, isolate new/optional fields into focused follow-up queries instead of adding them to critical bootstrap queries, and have the frontend handle `Cannot query field "..."` validation errors through the shared GraphQL compatibility helper so older servers do not break the multi-server client.
 - Never log PII. Logs must not include raw login names, display names, email addresses, submitted auth identifiers, OAuth/OIDC provider subject identifiers, tokens, passwords, auth codes, reset links, raw IP addresses, or full query strings. Prefer opaque Chatto IDs, counts, booleans, event names, and already-safe hashes from audit-specific code.
 
 ### Breaking Changes

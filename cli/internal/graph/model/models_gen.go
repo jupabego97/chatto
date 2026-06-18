@@ -141,6 +141,18 @@ type AssignRoleInput struct {
 	RoleName string `json:"roleName"`
 }
 
+// External login provider metadata safe to expose before authentication.
+type AuthProvider struct {
+	// Stable provider ID used in login URLs and external identity links.
+	ID string `json:"id"`
+	// Provider type, such as 'oidc', 'github', or 'google'.
+	Type string `json:"type"`
+	// Human-readable label for login UI.
+	Label string `json:"label"`
+	// Relative URL that starts this provider's login flow.
+	LoginURL string `json:"loginUrl"`
+}
+
 // Input for banning another member from a channel room.
 type BanRoomMemberInput struct {
 	// The ID of the channel room to ban the member from.
@@ -159,6 +171,8 @@ type CallParticipant struct {
 	User *corev1.User `json:"user"`
 	// When the user joined the call.
 	JoinedAt *timestamppb.Timestamp `json:"joinedAt"`
+	// The active call session ID this participant belongs to.
+	CallID string `json:"callId"`
 }
 
 // Input for clearing permission state on a role.
@@ -246,6 +260,15 @@ type CreateRoomInput struct {
 	GroupID string `json:"groupId"`
 }
 
+type CreateSidebarLinkInput struct {
+	// The group that should contain the new sidebar link.
+	GroupID string `json:"groupId"`
+	// Display label for the link.
+	Label string `json:"label"`
+	// Absolute http(s) URL.
+	URL string `json:"url"`
+}
+
 // Input for deleting an attachment from a message.
 type DeleteAttachmentInput struct {
 	// The ID of the room containing the message.
@@ -296,6 +319,11 @@ type DeleteRoleInput struct {
 type DeleteRoomGroupInput struct {
 	// The room group's ID.
 	ID string `json:"id"`
+}
+
+type DeleteSidebarLinkInput struct {
+	// The sidebar link to delete.
+	LinkID string `json:"linkId"`
 }
 
 // Input for denying a permission for a role.
@@ -515,6 +543,13 @@ type MoveRoomToGroupInput struct {
 	GroupID string `json:"groupId"`
 }
 
+type MoveSidebarLinkToGroupInput struct {
+	// The sidebar link to move.
+	LinkID string `json:"linkId"`
+	// The destination room group.
+	GroupID string `json:"groupId"`
+}
+
 // Root mutation type for modifying data.
 type Mutation struct {
 }
@@ -688,7 +723,7 @@ type PostMessageInput struct {
 	Body *string `json:"body,omitempty"`
 	// Optional file attachments (images, videos, etc.).
 	Attachments []*graphql.Upload `json:"attachments,omitempty"`
-	// Event ID of the thread root message. Determines thread membership and controls permission check (message.start_thread vs message.post_in_thread vs message.post).
+	// Event ID of the thread root message. Determines thread membership and controls permission check (`message.post-in-thread` vs `message.post`).
 	ThreadRootEventID *string `json:"threadRootEventId,omitempty"`
 	// Event ID of the message this responds to (attribution only, does not affect routing or permissions).
 	InReplyTo *string `json:"inReplyTo,omitempty"`
@@ -712,6 +747,8 @@ type ProjectionMetric struct {
 
 // Point-in-time runtime state for one event-sourced projection.
 type ProjectionState struct {
+	// Stable machine-readable projection key, suitable for metric labels and automation.
+	Key string `json:"key"`
 	// Human-readable projection name.
 	Name string `json:"name"`
 	// Diagnostic storage subject filters consumed by this projection.
@@ -773,8 +810,7 @@ type RbacQueries struct {
 	// `role.manage` at server scope.
 	RolePermissionMatrix *RolePermissionMatrix `json:"rolePermissionMatrix,omitempty"`
 	// Permission matrix for a specific user. Authorization mirrors user-level
-	// permission mutations: viewer must hold `role.manage` and strictly outrank
-	// the target. Self-introspection is not allowed.
+	// permission mutations: viewer must hold `user.manage-permissions`.
 	UserPermissionMatrix *UserPermissionMatrix `json:"userPermissionMatrix,omitempty"`
 	// Explain every applicable permission for a user at the given scope.
 	// Authorization: admin/tooling-only, with no self-inspection path.
@@ -812,6 +848,13 @@ type ReorderRoomsInGroupInput struct {
 	GroupID string `json:"groupId"`
 	// Room IDs in the desired display order, first to last.
 	OrderedRoomIds []string `json:"orderedRoomIds"`
+}
+
+type ReorderSidebarItemsInGroupInput struct {
+	// The group whose mixed sidebar item order is being rewritten.
+	GroupID string `json:"groupId"`
+	// Mixed room/link entries in the desired display order, first to last.
+	Items []*SidebarGroupEntryInput `json:"items"`
 }
 
 // Input for revoking a permission from a role.
@@ -865,12 +908,34 @@ type RoleRoomPermissions struct {
 	DisplayName string `json:"displayName"`
 	// Whether this is a system-defined role
 	IsSystem bool `json:"isSystem"`
-	// Hierarchy position (higher = higher rank; see Role.position).
+	// Display/order position (higher sorts before lower; not an authorization rank).
 	Position int32 `json:"position"`
 	// Permissions granted at room level
 	Permissions []string `json:"permissions"`
 	// Permissions denied at room level
 	PermissionDenials []string `json:"permissionDenials"`
+}
+
+// A file attachment and the message where it was posted.
+type RoomAttachmentItem struct {
+	// The file attachment.
+	Attachment *corev1.Attachment `json:"attachment"`
+	// The message event that owns the attachment.
+	MessageEventID string `json:"messageEventId"`
+	// The thread root when the attachment was posted in a thread reply.
+	ThreadRootEventID *string `json:"threadRootEventId,omitempty"`
+	// When the owning message was posted.
+	CreatedAt *timestamppb.Timestamp `json:"createdAt"`
+}
+
+// Paginated list of current room attachments.
+type RoomAttachmentsConnection struct {
+	// The attachment rows for this page.
+	Items []*RoomAttachmentItem `json:"items"`
+	// Total count of attachments before pagination.
+	TotalCount int32 `json:"totalCount"`
+	// Whether there are more attachments beyond this page.
+	HasMore bool `json:"hasMore"`
 }
 
 // An active room ban shown in server-admin moderation tools.
@@ -929,6 +994,17 @@ type RoomEventsConnection struct {
 	HasOlder bool `json:"hasOlder"`
 	// Whether there are newer events after this page.
 	HasNewer bool `json:"hasNewer"`
+}
+
+type RoomGroupItem struct {
+	// The item kind.
+	Type RoomGroupItemType `json:"type"`
+	// Room ID for ROOM, sidebar link ID for SIDEBAR_LINK.
+	ID string `json:"id"`
+	// Room payload when type is ROOM.
+	Room *corev1.Room `json:"room,omitempty"`
+	// Sidebar link payload when type is SIDEBAR_LINK.
+	Link *corev1.SidebarLink `json:"link,omitempty"`
 }
 
 // Per-room-group role permission inspector. Returns the explicit grants and
@@ -993,8 +1069,8 @@ type SendTypingIndicatorInput struct {
 type Server struct {
 	// The application version.
 	Version string `json:"version"`
-	// List of enabled SSO provider names (e.g., 'google', 'github').
-	EnabledAuthProviders []string `json:"enabledAuthProviders"`
+	// External login providers enabled on this server.
+	AuthProviders []*AuthProvider `json:"authProviders"`
 	// Public-facing identity and branding for this server.
 	Profile *ServerProfile `json:"profile"`
 	// True if Web Push notifications are enabled on this server.
@@ -1011,15 +1087,15 @@ type Server struct {
 	MaxUploadSize int64 `json:"maxUploadSize"`
 	// Maximum upload size for video attachments in bytes. Same as maxUploadSize when video processing is disabled.
 	MaxVideoUploadSize int64 `json:"maxVideoUploadSize"`
-	// Duration in seconds after posting during which a user can edit their own message. Moderators with `message.edit-any` are not bound by this window.
+	// Duration in seconds after posting during which a user can edit their own message. Moderators with `message.manage` are not bound by this window.
 	MessageEditWindowSeconds int32 `json:"messageEditWindowSeconds"`
 	// List of rooms on this server.
 	//
 	// When `type` is null or `CHANNEL`, the result includes regular channels. When
 	// `type` is null or `DM`, the caller's direct-message conversations are merged
-	// in through membership; the unified sidebar uses the null default to render
-	// channels and DMs together. Pass `type: CHANNEL` for channels-only consumers
-	// (e.g. the admin room-management UI); pass `type: DM` for DMs-only consumers.
+	// in through membership. Pass `type: CHANNEL` for channels-only consumers
+	// (e.g. room-group sidebars and the admin room-management UI); pass `type: DM`
+	// for DMs-only consumers.
 	Rooms []*corev1.Room `json:"rooms"`
 	// Ordered list of channel-room groups. Every server boots with at least the
 	// seed "Lobby" group; the list is never empty for a configured server.
@@ -1040,6 +1116,8 @@ type Server struct {
 	ViewerCanManageRooms bool `json:"viewerCanManageRooms"`
 	// Whether the current user has any unread messages in rooms they've joined.
 	ViewerHasUnreadRooms bool `json:"viewerHasUnreadRooms"`
+	// Pending notifications for the current user on this server, newest first.
+	ViewerNotifications *NotificationsConnection `json:"viewerNotifications"`
 	// The current user's server-level notification preference.
 	ViewerNotificationPreference *ViewerNotificationPreference `json:"viewerNotificationPreference,omitempty"`
 	// Get a single member of this server by user ID.
@@ -1060,12 +1138,9 @@ type Server struct {
 	ViewerCanManageRoles bool `json:"viewerCanManageRoles"`
 	// Whether the current user can assign roles to users (has role.assign permission).
 	ViewerCanAssignRoles bool `json:"viewerCanAssignRoles"`
-	// UI hint reporting whether the viewer outranks the target user by role
-	// hierarchy. **This is a rank check only**, not an authorization gate —
-	// capabilities like "edit this user's profile" additionally require a
-	// permission (e.g. `role.assign`). Use this for showing/hiding admin UI
-	// affordances; never as the sole basis for permitting a mutation. See
-	// `.claude/rules/authorization.md` (`permission AND OutranksUser`).
+	// Whether the current user can edit direct per-user permission overrides (has user.manage-permissions permission).
+	ViewerCanManageUserPermissions bool `json:"viewerCanManageUserPermissions"`
+	// Whether the current user can administer the target user's profile. Self is allowed; other users require role.assign.
 	ViewerCanManageUser bool `json:"viewerCanManageUser"`
 	// Get users assigned to a specific role.
 	RoleUsers []*corev1.User `json:"roleUsers"`
@@ -1130,6 +1205,13 @@ type SetServerNotificationLevelInput struct {
 	Level NotificationLevel `json:"level"`
 }
 
+type SidebarGroupEntryInput struct {
+	// The item kind.
+	Type RoomGroupItemType `json:"type"`
+	// Room ID for ROOM, sidebar link ID for SIDEBAR_LINK.
+	ID string `json:"id"`
+}
+
 // Input for starting a DM conversation.
 type StartDMInput struct {
 	// The IDs of the users to start a conversation with. The current user is automatically included.
@@ -1185,7 +1267,7 @@ type TierRole struct {
 	Description string `json:"description"`
 	// Whether this is a system role and cannot be deleted.
 	IsSystem bool `json:"isSystem"`
-	// Hierarchy position: higher = higher rank. Owner=1000, admin=900, moderator=100, custom roles in 1..99, everyone=0.
+	// Display/order position. Owner=1000, admin=900, moderator=100, custom roles in 1..99, everyone=0. Not an authorization rank.
 	Position int32 `json:"position"`
 	// Explicit allow/deny at the requested tier. Allow and deny lists may
 	// both be empty for a role with no override at this tier.
@@ -1204,7 +1286,7 @@ type TierRoles struct {
 	// Permissions configurable at this tier. The matrix renders one row per
 	// entry in this list.
 	ApplicablePermissions []string `json:"applicablePermissions"`
-	// All roles ordered by position (lowest = highest rank first).
+	// All roles ordered by display position.
 	Roles []*TierRole `json:"roles"`
 }
 
@@ -1333,6 +1415,15 @@ type UpdateSettingsInput struct {
 	Timezone *string `json:"timezone,omitempty"`
 	// Time display format. Set to AUTO to use browser locale default.
 	TimeFormat *TimeFormat `json:"timeFormat,omitempty"`
+}
+
+type UpdateSidebarLinkInput struct {
+	// The sidebar link to update.
+	LinkID string `json:"linkId"`
+	// Display label for the link.
+	Label string `json:"label"`
+	// Absolute http(s) URL.
+	URL string `json:"url"`
 }
 
 // Input for uploading a user avatar.
@@ -1659,7 +1750,7 @@ func (e PermissionMatrixDecision) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// Where a PermissionMatrixScope sits in the resolution hierarchy.
+// Where a PermissionMatrixScope sits in the resolution scope tree.
 type PermissionMatrixScopeKind string
 
 const (
@@ -1841,6 +1932,61 @@ func (e *PresenceStatusInput) UnmarshalJSON(b []byte) error {
 }
 
 func (e PresenceStatusInput) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type RoomGroupItemType string
+
+const (
+	RoomGroupItemTypeRoom        RoomGroupItemType = "ROOM"
+	RoomGroupItemTypeSidebarLink RoomGroupItemType = "SIDEBAR_LINK"
+)
+
+var AllRoomGroupItemType = []RoomGroupItemType{
+	RoomGroupItemTypeRoom,
+	RoomGroupItemTypeSidebarLink,
+}
+
+func (e RoomGroupItemType) IsValid() bool {
+	switch e {
+	case RoomGroupItemTypeRoom, RoomGroupItemTypeSidebarLink:
+		return true
+	}
+	return false
+}
+
+func (e RoomGroupItemType) String() string {
+	return string(e)
+}
+
+func (e *RoomGroupItemType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RoomGroupItemType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RoomGroupItemType", str)
+	}
+	return nil
+}
+
+func (e RoomGroupItemType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RoomGroupItemType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RoomGroupItemType) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

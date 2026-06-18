@@ -1,7 +1,7 @@
 # FDR-019: Room Lifecycle
 
 **Status:** Active
-**Last reviewed:** 2026-06-08
+**Last reviewed:** 2026-06-15
 
 ## Overview
 
@@ -13,7 +13,7 @@ A channel room goes through a lifecycle of create, edit, archive, unarchive, and
 - **Edit** — `room.manage` holders can change the name, description, and group of an existing room.
 - **Archive** — `room.manage` toggles an `archived` flag on the room. Archived rooms vanish from the sidebar, the Browse Rooms page, and search results, but members stay joined and history is intact. The owner can still navigate to the room directly.
 - **Unarchive** — same permission, flips the flag back. The room reappears in the sidebar and discovery surfaces.
-- **Ban member** — `room.ban-member` holders can ban a lower-ranked user from a channel room with a required reason and optional expiry. The banned user loses room read/write/live access immediately and cannot rejoin until the ban is removed or expires.
+- **Ban member** — `room.ban-member` holders can ban a user from a channel room with a required reason and optional expiry. The banned user loses room read/write/live access immediately and cannot rejoin until the ban is removed or expires.
 - **Delete** — `room.manage` appends `RoomDeletedEvent` to `EVT`, releases the room from its group layout, and causes projections to remove the room, its name claim, and its memberships.
 - Moving a room between groups requires `room.manage` in both groups (see FDR-017).
 
@@ -21,9 +21,9 @@ A channel room goes through a lifecycle of create, edit, archive, unarchive, and
 
 ### 1. Room name uniqueness via EVT projection and OCC
 
-**Decision:** Room names are unique server-wide (case-insensitive). Uniqueness is enforced by checking the room catalog projection and appending name-changing room events with wildcard OCC against the room aggregate event set.
+**Decision:** Room names are unique server-wide (case-insensitive). Uniqueness is enforced by checking a room catalog projection snapshot and appending name-changing room events with wildcard OCC against the room aggregate event set.
 **Why:** Race-tolerant name claiming is the only way to safely handle two operators creating the same-named room at the same moment. EVT OCC lets the event log remain the source of truth without maintaining a legacy KV name mirror.
-**Tradeoff:** Renames must coordinate through the event log and projection readiness instead of a single KV claim. The payoff is no dual-write divergence.
+**Tradeoff:** Renames must coordinate through the event log and projection readiness instead of a single KV claim. The snapshot carries the matching `evt.room.>` sequence so stale projections conflict and retry instead of committing a duplicate claim. The payoff is no dual-write divergence.
 
 ### 2. Every channel room belongs to exactly one group
 
@@ -77,7 +77,7 @@ A channel room goes through a lifecycle of create, edit, archive, unarchive, and
 
 - `room.create` — create a new channel room in a group. Configurable per group.
 - `room.manage` — edit, archive, unarchive, and delete a channel room. Configurable per group and per room.
-- `room.ban-member` — ban lower-ranked members from a channel room. Configurable per group and per room.
+- `room.ban-member` — ban members from a channel room. Configurable per group and per room.
 - `room.join` — gates whether a user can become a member of an unarchived room. Configurable per group and per room.
 
 ## Related
