@@ -11,6 +11,12 @@ allowed_origins = []
 cookie_signing_secret = '3ad5f5f911b6865b1a729335f4544d102a99a2847a3d5076431ed43877dd6bd9'
 cookie_encryption_secret = 'f61dd5e478f0c494bd7cc1d6136d8fd9b1c9cde38677f5c3a04f2ae181fd8464'
 
+[metrics]
+enabled = true
+bind_address = '127.0.0.1'
+port = 9090
+path = '/metrics'
+
 [core]
 secret_key = '7f3e0d39031f4ee7e2078aafc785f1969b8f1d4a4ea178a4732cb2096fe7f3bb'
 
@@ -24,8 +30,10 @@ max_upload_size = '25MB'
 enabled = true
 ttl = '7d'
 
-[auth.oidc]
-enabled = true
+[[auth.providers]]
+id = 'chatto-hub'
+type = 'oidc'
+label = 'Chatto Hub'
 issuer_url = 'https://chatto.id/realms/chatto-hub'
 client_id = 'chatto-dev'
 client_secret = 'iARXOaPkiIDxdNRX2N9uJmQf0aXIfwUE'
@@ -37,6 +45,12 @@ port = 1025
 tls = 'opportunistic'
 from = 'Chatto Local Development <chatto@chatto.run>'
 
+[push]
+enabled = true
+vapid_public_key = 'BKBVYBi1oSQ0rOjiS86KCNa2VfxnH03kON54RUqm3X7Q2JQMBkspTHlgBo27OV3wfcX36cxVyJ2h2I_Zd4Yz_DI'
+vapid_private_key = 'rOYtIsUZwE3_91odhvbJX7W6sEFjxCAPeC1FO3CtPEc'
+vapid_subject = 'mailto:dev@chatto.run'
+
 [video]
 enabled = true
 
@@ -46,11 +60,6 @@ enabled = true
 url = 'ws://livekit.chatto-tools.orb.local:7880'
 api_key = 'devkey'
 api_secret = 'secret'
-
-[nats.client]
-url = 'nats://localhost:4555'
-auth_method = 'token'
-token = 'd5ed70d13c4682609dfd0a4f65bf7e59ef22f3be8502762b501d3b7cf0b73b43'
 
 [nats.embedded]
 enabled = true
@@ -67,7 +76,7 @@ login = 'alice'
 display_name = 'Alice'
 email = 'alice@example.com'
 password = 'foobar123'
-instance_role = 'owner'
+server_role = 'owner'
 
 [[bootstrap.users]]
 login = 'bob'
@@ -75,5 +84,5 @@ display_name = 'Bob'
 email = 'bob@example.com'
 password = 'foobar123'
 
-[bootstrap.instance]
+[bootstrap.server]
 name = 'Local Development'

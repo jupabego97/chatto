@@ -97,12 +97,16 @@ const (
 	EventCallEnded             = "call_ended"
 
 	// Group aggregate
-	EventRoomGroupCreated      = "group_created"
-	EventRoomGroupUpdated      = "group_updated"
-	EventRoomGroupDeleted      = "group_deleted"
-	EventRoomAddedToGroup      = "room_added"
-	EventRoomRemovedFromGroup  = "room_removed"
-	EventRoomsInGroupReordered = "rooms_reordered"
+	EventRoomGroupCreated        = "group_created"
+	EventRoomGroupUpdated        = "group_updated"
+	EventRoomGroupDeleted        = "group_deleted"
+	EventRoomAddedToGroup        = "room_added"
+	EventRoomRemovedFromGroup    = "room_removed"
+	EventRoomsInGroupReordered   = "rooms_reordered"
+	EventSidebarLinkAdded        = "sidebar_link_added"
+	EventSidebarLinkUpdated      = "sidebar_link_updated"
+	EventSidebarLinkRemoved      = "sidebar_link_removed"
+	EventSidebarEntriesReordered = "sidebar_entries_reordered"
 
 	// Layout aggregate (singleton)
 	EventRoomGroupsReordered = "groups_reordered"
@@ -135,6 +139,7 @@ const (
 	EventUserVerifiedEmailAdded       = "verified_email_added"
 	EventUserPasswordHashChanged      = "password_hash_changed"
 	EventUserOIDCSubjectLinked        = "oidc_subject_linked"
+	EventUserExternalIdentityLinked   = "external_identity_linked"
 	EventUserServerPreferencesChanged = "server_preferences_changed"
 	EventUserLoginCooldownStarted     = "login_cooldown_started"
 	EventUserLoginCooldownCleared     = "login_cooldown_cleared"
@@ -249,6 +254,14 @@ func EventTypeOf(e *corev1.Event) string {
 		return EventRoomRemovedFromGroup
 	case *corev1.Event_RoomsInGroupReordered:
 		return EventRoomsInGroupReordered
+	case *corev1.Event_SidebarLinkAddedToGroup:
+		return EventSidebarLinkAdded
+	case *corev1.Event_SidebarLinkUpdated:
+		return EventSidebarLinkUpdated
+	case *corev1.Event_SidebarLinkRemovedFromGroup:
+		return EventSidebarLinkRemoved
+	case *corev1.Event_SidebarGroupEntriesReordered:
+		return EventSidebarEntriesReordered
 
 	case *corev1.Event_RoomGroupsReordered:
 		return EventRoomGroupsReordered
@@ -304,6 +317,8 @@ func EventTypeOf(e *corev1.Event) string {
 		return EventUserPasswordHashChanged
 	case *corev1.Event_UserOidcSubjectLinked:
 		return EventUserOIDCSubjectLinked
+	case *corev1.Event_UserExternalIdentityLinked:
+		return EventUserExternalIdentityLinked
 	case *corev1.Event_UserServerPreferencesChanged:
 		return EventUserServerPreferencesChanged
 	case *corev1.Event_UserLoginCooldownStarted:
@@ -448,7 +463,7 @@ func ConfigSubjectAggregate(subject string) Aggregate {
 
 // UserAggregate is the typed constructor for a user aggregate. It owns
 // identity/profile state, verified-email indexes, password auth state,
-// OIDC subject links, server preferences, and account deletion.
+// external identity links, server preferences, and account deletion.
 func UserAggregate(userID string) Aggregate {
 	return Aggregate{Type: AggregateUser, ID: userID}
 }

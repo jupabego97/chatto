@@ -1,5 +1,4 @@
 <script lang="ts">
-
   import { resolve } from '$app/paths';
   import { page } from '$app/state';
   import { serverIdToSegment } from '$lib/navigation';
@@ -23,7 +22,6 @@
     getLoginChangeCooldownRemaining,
     formatCooldownRemaining
   } from '$lib/validation';
-  import { viewerOutranksTarget } from '$lib/roleHierarchy';
 
   type User = {
     id: string;
@@ -42,7 +40,7 @@
     permissions: string[];
     permissionDenials: string[];
   };
-  // Everyone role is implicit for all space members and shouldn't be assignable
+  // Everyone role is implicit for all server members and shouldn't be assignable
   const IMPLICIT_ROLES = ['everyone'];
 
   const currentUser = $derived(serverRegistry.getStore(getActiveServer()).currentUser);
@@ -54,10 +52,10 @@
 
   let member = $state<User | null>(null);
   let allRoles = $state<Role[]>([]);
-  let viewerRoles = $state<string[]>([]);
-  let memberSpaceRoles = $state<string[]>([]); // Member's space roles (separate from member object)
+  let memberServerRoles = $state<string[]>([]); // Member's server roles (separate from member object)
   let canAssignRoles = $state(false);
   let canManageRoles = $state(false);
+  let canManageUserPermissions = $state(false);
   let loading = $state(true);
   let updating = $state<string | null>(null);
   let error = $state<string | null>(null);
@@ -70,29 +68,19 @@
   let lastLoginChange = $state<Date | null>(null);
   let clearingCooldown = $state(false);
 
-  // Optimistic UI hint mirroring the backend's OutranksUser. The mutation
-  // still re-checks server-side; this just gates whether the affordance
-  // appears at all.
-  const viewerCanManage = $derived(viewerOutranksTarget(viewerRoles, memberSpaceRoles, allRoles));
-
   async function loadData() {
     error = null;
 
     const resp = await connection().client.query(
       graphql(`
         query SpaceMemberDetails($userId: ID!) {
-          viewer {
-            user {
-              id
-              roles
-            }
-          }
           user(userId: $userId) {
             lastLoginChange
           }
           server {
             viewerCanAssignRoles
             viewerCanManageRoles
+            viewerCanManageUserPermissions
             availablePermissions
             roles {
               name
@@ -134,10 +122,10 @@
 
     member = resp.data.server.member ?? null;
     allRoles = resp.data.server.roles ?? [];
-    viewerRoles = resp.data.viewer?.user.roles ?? [];
-    memberSpaceRoles = resp.data.server.member?.roles ?? [];
+    memberServerRoles = resp.data.server.member?.roles ?? [];
     canAssignRoles = resp.data.server.viewerCanAssignRoles;
     canManageRoles = resp.data.server.viewerCanManageRoles;
+    canManageUserPermissions = resp.data.server.viewerCanManageUserPermissions;
     editLogin = resp.data.server.member?.login ?? '';
     editDisplayName = resp.data.server.member?.displayName ?? '';
     lastLoginChange = resp.data.user?.lastLoginChange
@@ -247,7 +235,7 @@
 
   // Check if user has a specific role (explicit assignment)
   function hasRole(roleName: string): boolean {
-    return memberSpaceRoles.includes(roleName);
+    return memberServerRoles.includes(roleName);
   }
 
   // Check if a role is implicit (always assigned to all members)
@@ -268,9 +256,9 @@
   // Check if this is the current user
   const isSelf = $derived(currentUser.user?.id === userId);
 
-  // Sorted space roles (excluding everyone, sorted by position)
+  // Sorted server roles (excluding everyone, sorted by position)
   const sortedSpaceRoles = $derived(
-    memberSpaceRoles
+    memberServerRoles
       .filter((r) => r !== 'everyone')
       .sort((a, b) => getRolePosition(a) - getRolePosition(b))
   );
@@ -327,7 +315,9 @@
   <PaneHeader
     title="Member Details"
     subtitle={member?.displayName ?? 'Loading...'}
-    backHref={resolve('/chat/[serverId]/server-admin/members', { serverId: serverIdToSegment(getActiveServer()) })}
+    backHref={resolve('/chat/[serverId]/server-admin/members', {
+      serverId: serverIdToSegment(getActiveServer())
+    })}
     backLabel="Back to Members"
     showMobileNav
   />
@@ -336,7 +326,7 @@
     {#if loading}
       <div class="text-muted">Loading member...</div>
     {:else if !member}
-      <Hint tone="danger">Member not found. They may have left the space.</Hint>
+      <Hint tone="danger">Member not found. They may have left the server.</Hint>
     {:else}
       {#if error}
         <FormError {error} />
@@ -438,7 +428,9 @@
             <div class="flex items-center gap-3 rounded-lg border border-border bg-surface-100 p-3">
               <div class="flex-1 text-sm text-muted">
                 {#if cooldownActive}
-                  Self-rename cooldown active for this user — {formatCooldownRemaining(cooldownRemaining)} remaining.
+                  Self-rename cooldown active for this user — {formatCooldownRemaining(
+                    cooldownRemaining
+                  )} remaining.
                 {:else if lastLoginChange}
                   Last self-rename: {lastLoginChange.toLocaleString()}.
                 {:else}
@@ -463,10 +455,8 @@
       <!-- Role Assignments -->
       <Panel title="Role Assignments" icon="iconify uil--shield-check">
         <p class="mb-4 text-sm text-muted">
-          {#if canAssignRoles && viewerCanManage}
+          {#if canAssignRoles}
             Assign roles to this member. Changes are saved immediately.
-          {:else if canAssignRoles && !viewerCanManage}
-            You cannot modify roles for this member because their highest role outranks yours.
           {:else}
             View the roles assigned to this member.
           {/if}
@@ -477,13 +467,13 @@
             {@const isImplicit = isImplicitRole(role.name)}
             {@const has = isImplicit || hasRole(role.name)}
             {@const isUpdating = updating === role.name}
-            {@const isSelfAdmin = isSelf && role.name === 'admin' && has}
-            {@const isDisabled =
-              !canAssignRoles || !viewerCanManage || isImplicit || isUpdating || isSelfAdmin}
+            {@const isSelfProtectedRole =
+              isSelf && (role.name === 'admin' || role.name === 'owner') && has}
+            {@const isDisabled = !canAssignRoles || isImplicit || isUpdating || isSelfProtectedRole}
             {@const tooltip = isImplicit
-              ? 'All space members have this role implicitly'
-              : isSelfAdmin
-                ? 'You cannot revoke your own admin role'
+              ? 'All server members have this role implicitly'
+              : isSelfProtectedRole
+                ? `You cannot revoke your own ${role.displayName} role`
                 : ''}
 
             <div
@@ -519,8 +509,11 @@
               </label>
               {#if canManageRoles}
                 <a
-                  href={resolve('/chat/[serverId]/server-admin/permissions/[name]', { serverId: serverIdToSegment(getActiveServer()), name: role.name })}
-                  class="link shrink-0 text-sm"
+                  href={resolve('/chat/[serverId]/server-admin/permissions/[name]', {
+                    serverId: serverIdToSegment(getActiveServer()),
+                    name: role.name
+                  })}
+                  class="shrink-0 text-sm link"
                 >
                   Edit
                 </a>
@@ -530,12 +523,14 @@
         </div>
       </Panel>
 
-      <!-- Per-user permission overrides. -->
-      <Hint>
-        User-level overrides for this account. They outrank every role grant — use sparingly
-        for per-user exceptions like suspensions or one-off elevations.
-      </Hint>
-      <UserPermissionsMatrix {userId} />
+      {#if canManageUserPermissions}
+        <!-- Per-user permission overrides. -->
+        <Hint>
+          User-level overrides for this account. Any applicable deny wins over grants; use sparingly
+          for per-user exceptions like suspensions or one-off elevations.
+        </Hint>
+        <UserPermissionsMatrix {userId} />
+      {/if}
     {/if}
   </div>
 </div>

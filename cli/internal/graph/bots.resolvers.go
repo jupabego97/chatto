@@ -120,13 +120,7 @@ func (r *queryResolver) Bots(ctx context.Context) ([]*corev1.User, error) {
 		if !canManage {
 			continue
 		}
-		outranks, err := r.core.OutranksUser(ctx, caller.Id, bot.GetId())
-		if err != nil {
-			return nil, err
-		}
-		if outranks {
-			out = append(out, bot)
-		}
+		out = append(out, bot)
 	}
 	return out, nil
 }

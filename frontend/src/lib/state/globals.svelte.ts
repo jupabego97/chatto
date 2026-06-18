@@ -80,10 +80,11 @@ export const SIDEBAR_PANEL_WIDTH_PX = 68 + 256;
 
 /**
  * Controls the visibility of the left sidebars (Server Gutter and RoomList).
- * Tracks the user's desktop preference separately from viewport-driven changes,
- * so manual toggles on desktop "stick" across viewport transitions.
+ * Tracks the user's desktop preference separately from viewport-driven changes
+ * within the current app session, so manual toggles on desktop "stick" across
+ * viewport transitions without making fresh sessions start hidden.
  *
- * - Desktop: sidebar follows user preference (open by default)
+ * - Desktop: sidebar follows the current session's preference (open by default)
  * - Mobile: sidebar is always closed unless explicitly opened (overlay)
  * - Resizing back to desktop restores the user's last desktop preference
  *
@@ -91,7 +92,7 @@ export const SIDEBAR_PANEL_WIDTH_PX = 68 + 256;
  * finger delta (relative to the open position). Templates should disable
  * CSS transitions while dragging and apply the transform from `progress`.
  */
-class SidebarNavState {
+export class SidebarNavState {
   isOpen = $state(true);
   /**
    * Live drag offset in px relative to the *open* position. Negative values
@@ -102,6 +103,11 @@ class SidebarNavState {
   private desktopOpen = $state(true);
   private _isMobile = $state(false);
   private dragBaselineOpen = false;
+
+  constructor(initialDesktopOpen = true) {
+    this.isOpen = initialDesktopOpen;
+    this.desktopOpen = initialDesktopOpen;
+  }
 
   setMobile(isMobile: boolean) {
     if (this._isMobile === isMobile) return;
@@ -117,10 +123,12 @@ class SidebarNavState {
   }
 
   toggle() {
-    this.isOpen = !this.isOpen;
-    if (!this._isMobile) {
-      this.desktopOpen = this.isOpen;
+    if (this._isMobile) {
+      this.isOpen = !this.isOpen;
+      return;
     }
+
+    this.setDesktopOpen(!this.isOpen);
   }
 
   get isMobile(): boolean {
@@ -143,6 +151,9 @@ class SidebarNavState {
 
   close() {
     this.isOpen = false;
+    if (!this._isMobile) {
+      this.setDesktopOpen(false);
+    }
   }
 
   startDrag() {
@@ -182,6 +193,11 @@ class SidebarNavState {
     const handler = (e: MediaQueryListEvent) => this.setMobile(e.matches);
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
+  }
+
+  private setDesktopOpen(open: boolean) {
+    this.desktopOpen = open;
+    this.isOpen = open;
   }
 }
 

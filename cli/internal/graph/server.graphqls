@@ -22,6 +22,23 @@ type ServerProfile {
 }
 
 """
+External login provider metadata safe to expose before authentication.
+"""
+type AuthProvider {
+  "Stable provider ID used in login URLs and external identity links."
+  id: ID! @public
+
+  "Provider type, such as 'oidc', 'github', or 'google'."
+  type: String! @public
+
+  "Human-readable label for login UI."
+  label: String! @public
+
+  "Relative URL that starts this provider's login flow."
+  loginUrl: String! @public
+}
+
+"""
 Information about this Chatto server.
 Some fields don't require authentication and are available on the login page.
 """
@@ -29,8 +46,8 @@ type Server {
   "The application version."
   version: String! @public
 
-  "List of enabled SSO provider names (e.g., 'google', 'github')."
-  enabledAuthProviders: [String!]! @public
+  "External login providers enabled on this server."
+  authProviders: [AuthProvider!]! @public
 
   "Public-facing identity and branding for this server."
   profile: ServerProfile! @public @goField(forceResolver: true)
@@ -56,7 +73,7 @@ type Server {
   "Maximum upload size for video attachments in bytes. Same as maxUploadSize when video processing is disabled."
   maxVideoUploadSize: Int64! @goField(forceResolver: true, type: "int64")
 
-  "Duration in seconds after posting during which a user can edit their own message. Moderators with `message.edit-any` are not bound by this window."
+  "Duration in seconds after posting during which a user can edit their own message. Moderators with `message.manage` are not bound by this window."
   messageEditWindowSeconds: Int! @goField(forceResolver: true)
 
   """
@@ -64,9 +81,9 @@ type Server {
 
   When `type` is null or `CHANNEL`, the result includes regular channels. When
   `type` is null or `DM`, the caller's direct-message conversations are merged
-  in through membership; the unified sidebar uses the null default to render
-  channels and DMs together. Pass `type: CHANNEL` for channels-only consumers
-  (e.g. the admin room-management UI); pass `type: DM` for DMs-only consumers.
+  in through membership. Pass `type: CHANNEL` for channels-only consumers
+  (e.g. room-group sidebars and the admin room-management UI); pass `type: DM`
+  for DMs-only consumers.
   """
   rooms(type: RoomType): [Room!]! @goField(forceResolver: true)
 
@@ -95,6 +112,13 @@ type Server {
   viewerCanManageRooms: Boolean! @goField(forceResolver: true)
   "Whether the current user has any unread messages in rooms they've joined."
   viewerHasUnreadRooms: Boolean! @goField(forceResolver: true)
+  "Pending notifications for the current user on this server, newest first."
+  viewerNotifications(
+    "Maximum number of results to return (default 50, max 100)."
+    limit: Int
+    "Offset for pagination."
+    offset: Int
+  ): NotificationsConnection! @goField(forceResolver: true)
 }
 
 extend type Query {

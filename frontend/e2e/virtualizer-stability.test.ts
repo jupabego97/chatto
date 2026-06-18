@@ -1,10 +1,9 @@
 import { expect, type Page } from '@playwright/test';
 import { test } from './setup';
-import { createAndLoginTestUser, joinSpace } from './fixtures/testUser';
-import { ChatPage } from './pages';
+import { createAndLoginTestUser } from './fixtures/testUser';
+import { withServerUser } from './fixtures/serverUser';
 import { TIMEOUTS } from './constants';
 import { waitForRoomReady } from './fixtures/realtimeSync';
-import * as routes from './routes';
 
 /**
  * Post messages via GraphQL API (much faster than UI-based posting).
@@ -54,7 +53,6 @@ test.describe('Virtualizer stability', () => {
     await page.setViewportSize({ width: 1280, height: 500 });
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
 
     await chatPage.enterRoom('general');
     const generalRoomId = getRoomIdFromUrl(page);
@@ -99,9 +97,6 @@ test.describe('Virtualizer stability', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
-
-    const spaceId = await chatPage.getSpaceId();
 
     // Enter the default "general" room and post many messages
     await chatPage.enterRoom('general');
@@ -169,11 +164,9 @@ test.describe('Virtualizer stability', () => {
     browser,
     serverURL
   }) => {
-    // User 1: Create space with two rooms
+    // User 1: Create account with two rooms
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
-    const spaceId = await chatPage.getSpaceId();
 
     await chatPage.enterRoom('general');
     const generalRoomId = getRoomIdFromUrl(page);
@@ -186,16 +179,8 @@ test.describe('Virtualizer stability', () => {
     // Create a second room
     const secondRoomName = await chatPage.createRoom(`other-room-${Date.now()}`);
 
-    // User 2: Join the space
-    const context2 = await browser!.newContext({ baseURL: serverURL });
-    const page2 = await context2.newPage();
-
-    try {
-      await createAndLoginTestUser(page2);
-      await joinSpace(page2);
-      // Navigate to the space so the room list is visible
-      await page2.goto(routes.space());
-      const chatPage2 = new ChatPage(page2);
+    // User 2: Open the server
+    await withServerUser(browser!, serverURL, async ({ page: page2, chatPage: chatPage2 }) => {
       await chatPage2.enterRoom('general');
       await waitForRoomReady(page2, 'general');
 
@@ -254,8 +239,6 @@ test.describe('Virtualizer stability', () => {
       await expect(page.getByText('Seed message 15')).toBeVisible({
         timeout: TIMEOUTS.UI_STANDARD
       });
-    } finally {
-      await context2.close();
-    }
+    });
   });
 });

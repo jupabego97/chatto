@@ -49,13 +49,6 @@ func (r *Resolver) requireCanManageBot(ctx context.Context, botUserID string) (*
 	if !canManage {
 		return nil, core.ErrPermissionDenied
 	}
-	outranks, err := r.core.OutranksUser(ctx, caller.Id, bot.GetId())
-	if err != nil {
-		return nil, err
-	}
-	if !outranks {
-		return nil, core.ErrPermissionDenied
-	}
 	return caller, nil
 }
 

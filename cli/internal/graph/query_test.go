@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -160,7 +161,6 @@ func TestGraphQLDefaultAuthentication(t *testing.T) {
 			query ServerBootstrap {
 				server {
 					version
-					enabledAuthProviders
 					profile {
 						name
 						logoUrl
@@ -177,9 +177,8 @@ func TestGraphQLDefaultAuthentication(t *testing.T) {
 
 		var data struct {
 			Server *struct {
-				Version              string   `json:"version"`
-				EnabledAuthProviders []string `json:"enabledAuthProviders"`
-				Profile              struct {
+				Version string `json:"version"`
+				Profile struct {
 					Name      string  `json:"name"`
 					LogoURL   *string `json:"logoUrl"`
 					BannerURL *string `json:"bannerUrl"`
@@ -225,7 +224,7 @@ func TestGraphQLDefaultAuthentication(t *testing.T) {
 		}
 	})
 
-	t.Run("viewer root requires authentication", func(t *testing.T) {
+	t.Run("viewer root returns null for unauthenticated callers", func(t *testing.T) {
 		resp := executeGraphQL(t, env, env.unauthContext(), `
 			query Viewer {
 				viewer {
@@ -236,11 +235,21 @@ func TestGraphQLDefaultAuthentication(t *testing.T) {
 			}
 		`, nil)
 
-		if len(resp.Errors) == 0 {
-			t.Fatal("Expected GraphQL authentication error")
+		if len(resp.Errors) != 0 {
+			t.Fatalf("Unexpected GraphQL errors: %v", resp.Errors)
 		}
-		if resp.Errors[0].Message != ErrNotAuthenticated.Error() {
-			t.Errorf("Expected authentication error, got %q", resp.Errors[0].Message)
+		var data struct {
+			Viewer *struct {
+				User struct {
+					ID string `json:"id"`
+				} `json:"user"`
+			} `json:"viewer"`
+		}
+		if err := json.Unmarshal(resp.Data, &data); err != nil {
+			t.Fatalf("Failed to unmarshal response data: %v", err)
+		}
+		if data.Viewer != nil {
+			t.Fatalf("Expected nil viewer, got %+v", data.Viewer)
 		}
 	})
 
@@ -577,6 +586,88 @@ func TestQueryResolver_RoomEvents(t *testing.T) {
 		// Should have at least the message we posted
 		if len(result.Events) == 0 {
 			t.Error("Expected at least one event")
+		}
+	})
+}
+
+func TestRoomResolver_Attachments(t *testing.T) {
+	env := setupTestResolver(t)
+
+	rootAttachment, err := env.core.UploadAttachment(env.ctx, core.SystemActorID, env.testRoom.Id, "root.txt", "text/plain", bytes.NewReader([]byte("root")))
+	if err != nil {
+		t.Fatalf("Upload root attachment: %v", err)
+	}
+	rootEvent, err := env.core.PostMessage(env.ctx, core.KindChannel, env.testRoom.Id, env.testUser.Id, "Root file", []string{rootAttachment.Id}, "", "", nil, false)
+	if err != nil {
+		t.Fatalf("Post root message: %v", err)
+	}
+
+	threadAttachment, err := env.core.UploadAttachment(env.ctx, core.SystemActorID, env.testRoom.Id, "thread.txt", "text/plain", bytes.NewReader([]byte("thread")))
+	if err != nil {
+		t.Fatalf("Upload thread attachment: %v", err)
+	}
+	threadEvent, err := env.core.PostMessage(env.ctx, core.KindChannel, env.testRoom.Id, env.testUser.Id, "Thread file", []string{threadAttachment.Id}, rootEvent.Id, "", nil, false)
+	if err != nil {
+		t.Fatalf("Post thread message: %v", err)
+	}
+
+	t.Run("unauthenticated user is rejected", func(t *testing.T) {
+		attachments, err := env.resolver.Room().Attachments(env.unauthContext(), env.testRoom, nil, nil)
+		if !errors.Is(err, ErrNotAuthenticated) {
+			t.Errorf("Expected ErrNotAuthenticated, got %v", err)
+		}
+		if attachments != nil {
+			t.Errorf("Expected nil attachments, got %+v", attachments)
+		}
+	})
+
+	t.Run("non-room-member is rejected", func(t *testing.T) {
+		outsider, err := env.core.CreateUser(env.ctx, "system", "outsider-files", "Outsider", "password123")
+		if err != nil {
+			t.Fatalf("Create outsider: %v", err)
+		}
+
+		attachments, err := env.resolver.Room().Attachments(env.authContextForUser(outsider), env.testRoom, nil, nil)
+		if !errors.Is(err, ErrNotRoomMember) {
+			t.Errorf("Expected ErrNotRoomMember, got %v", err)
+		}
+		if attachments != nil {
+			t.Errorf("Expected nil attachments, got %+v", attachments)
+		}
+	})
+
+	t.Run("room member can fetch root and thread attachments", func(t *testing.T) {
+		limit := int32(1)
+		first, err := env.resolver.Room().Attachments(env.authContext(), env.testRoom, &limit, nil)
+		if err != nil {
+			t.Fatalf("Attachments first page: %v", err)
+		}
+		if first.TotalCount != 2 || !first.HasMore || len(first.Items) != 1 {
+			t.Fatalf("first page = count %d hasMore %v len %d, want count 2 hasMore true len 1", first.TotalCount, first.HasMore, len(first.Items))
+		}
+		if first.Items[0].Attachment.Filename != "thread.txt" {
+			t.Fatalf("first attachment filename = %q, want thread.txt", first.Items[0].Attachment.Filename)
+		}
+		if first.Items[0].MessageEventID != threadEvent.Id {
+			t.Fatalf("thread messageEventId = %q, want %q", first.Items[0].MessageEventID, threadEvent.Id)
+		}
+		if first.Items[0].ThreadRootEventID == nil || *first.Items[0].ThreadRootEventID != rootEvent.Id {
+			t.Fatalf("threadRootEventId = %v, want %q", first.Items[0].ThreadRootEventID, rootEvent.Id)
+		}
+
+		offset := int32(1)
+		second, err := env.resolver.Room().Attachments(env.authContext(), env.testRoom, &limit, &offset)
+		if err != nil {
+			t.Fatalf("Attachments second page: %v", err)
+		}
+		if second.TotalCount != 2 || second.HasMore || len(second.Items) != 1 {
+			t.Fatalf("second page = count %d hasMore %v len %d, want count 2 hasMore false len 1", second.TotalCount, second.HasMore, len(second.Items))
+		}
+		if second.Items[0].Attachment.Filename != "root.txt" {
+			t.Fatalf("second attachment filename = %q, want root.txt", second.Items[0].Attachment.Filename)
+		}
+		if second.Items[0].ThreadRootEventID != nil {
+			t.Fatalf("root threadRootEventId = %v, want nil", *second.Items[0].ThreadRootEventID)
 		}
 	})
 }
@@ -971,18 +1062,24 @@ func TestQueryResolver_Server(t *testing.T) {
 		}
 	})
 
-	t.Run("returns empty auth providers when none configured", func(t *testing.T) {
+	t.Run("returns auth provider metadata", func(t *testing.T) {
 		resolver := &Resolver{
-			version:    "1.0.0",
-			authConfig: config.AuthConfig{},
+			version: "1.0.0",
+			authConfig: config.AuthConfig{Providers: []config.AuthProviderConfig{
+				{ID: "chatto-hub", Type: config.AuthProviderTypeOpenIDConnect},
+				{ID: "github-main", Type: config.AuthProviderTypeGitHub},
+			}},
 		}
 
 		instance, err := resolver.Query().Server(context.Background())
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
-		if len(instance.EnabledAuthProviders) != 0 {
-			t.Errorf("Expected 0 providers, got %d", len(instance.EnabledAuthProviders))
+		if len(instance.AuthProviders) != 2 {
+			t.Fatalf("AuthProviders len = %d, want 2", len(instance.AuthProviders))
+		}
+		if got := instance.AuthProviders[0]; got.ID != "chatto-hub" || got.Type != config.AuthProviderTypeOpenIDConnect {
+			t.Fatalf("AuthProviders[0] = %+v", got)
 		}
 	})
 

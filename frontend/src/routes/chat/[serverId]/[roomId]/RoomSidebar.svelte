@@ -2,19 +2,22 @@
 @component
 
 The **Room Sidebar** — right-hand pane scoped to the current room. Currently
-shows the member list; will grow to host other room-scoped surfaces (pinned
-messages, files, etc.). See the "UI" section of `docs/GLOSSARY.md`.
+hosts room-scoped extras. The members panel is the first full surface; files,
+calls, and similar room-specific panels can plug into the same shell. See the
+"UI" section of `docs/GLOSSARY.md`.
 -->
+<script module lang="ts">
+  export type RoomSidebarPanel = 'members' | 'files';
+</script>
+
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import { graphql } from '$lib/gql';
   import { startDMWith } from '$lib/dm/startDM';
   import UserAvatar from '$lib/components/UserAvatar.svelte';
   import UserContextMenu from '$lib/components/menus/UserContextMenu.svelte';
   import type { PresenceStatus } from '$lib/gql/graphql';
-  import {
-    getRoomMembersState,
-    type RoomMember
-  } from '$lib/state/room';
+  import type { RoomFilesStore, RoomMember, RoomMembersStore } from '$lib/state/room';
   import { getPresenceCache } from '$lib/state/presenceCache.svelte';
   import { getLiveDisplayName, getLiveLogin } from '$lib/state/userProfiles.svelte';
   import { getServerPermissions } from '$lib/state/server/permissions.svelte';
@@ -27,7 +30,9 @@ messages, files, etc.). See the "UI" section of `docs/GLOSSARY.md`.
   import { ROOM_SIDEBAR_MAX_WIDTH, ROOM_SIDEBAR_MIN_WIDTH } from '$lib/storage/roomSidebarWidth';
   import { serverStorageKey } from '$lib/storage/serverStorage';
   import { toast } from '$lib/ui/toast';
+  import HeaderIconButton from '$lib/ui/HeaderIconButton.svelte';
   import BanRoomMemberModal from '$lib/components/moderation/BanRoomMemberModal.svelte';
+  import RoomFilesPanel from './RoomFilesPanel.svelte';
 
   const BanRoomMemberMutation = graphql(`
     mutation BanRoomMemberFromSidebar($input: BanRoomMemberInput!) {
@@ -38,24 +43,35 @@ messages, files, etc.). See the "UI" section of `docs/GLOSSARY.md`.
   let {
     loading = false,
     roomId,
+    activePanel = 'members',
+    presentation = 'desktop',
     canBanRoomMembers = false,
     currentUserId = null,
-    onLoadMoreMembers
+    membersStore,
+    filesStore,
+    fileGroupingNow,
+    onOpenFile,
+    onClose
   }: {
     loading?: boolean;
     roomId: string;
+    activePanel?: RoomSidebarPanel;
+    presentation?: 'desktop' | 'overlay';
     canBanRoomMembers?: boolean;
     currentUserId?: string | null;
-    onLoadMoreMembers?: () => void | Promise<void>;
+    membersStore: RoomMembersStore;
+    filesStore?: RoomFilesStore;
+    fileGroupingNow?: Date;
+    onOpenFile?: (messageEventId: string, threadRootEventId: string | null) => void;
+    onClose?: () => void;
   } = $props();
 
   const connection = useConnection();
   const presenceCache = getPresenceCache();
 
-  // Get members from shared store (populated by Room.svelte)
-  const membersState = $derived(getRoomMembersState());
-  const members = $derived(membersState.members);
-  const memberCount = $derived(membersState.totalCount);
+  const members = $derived(membersStore.members);
+  const memberCount = $derived(membersStore.totalCount);
+  const title = $derived(activePanel === 'members' ? `Members (${memberCount})` : 'Files');
 
   // Check if user can start DMs (from centralized server permissions)
   const serverPerms = getServerPermissions();
@@ -67,6 +83,11 @@ messages, files, etc.). See the "UI" section of `docs/GLOSSARY.md`.
   let banningMemberId = $state<string | null>(null);
   let banDialogMember = $state<RoomMember | null>(null);
   let banError = $state<string | null>(null);
+  let memberSearchTimer: ReturnType<typeof setTimeout> | null = null;
+
+  onDestroy(() => {
+    if (memberSearchTimer) clearTimeout(memberSearchTimer);
+  });
 
   function togglePopover(memberId: string, e: MouseEvent) {
     if (popoverMemberId === memberId) {
@@ -100,20 +121,18 @@ messages, files, etc.). See the "UI" section of `docs/GLOSSARY.md`.
   // values change, so it would miss updates like OFFLINE→ONLINE.
   function sortByName(list: RoomMember[]): RoomMember[] {
     return [...list].sort((a, b) =>
-      getLiveDisplayName(a.id, a.displayName).localeCompare(
-        getLiveDisplayName(b.id, b.displayName)
-      )
+      getLiveDisplayName(a.id, a.displayName).localeCompare(getLiveDisplayName(b.id, b.displayName))
     );
   }
 
   const onlineMembers = $derived(
     (presenceCache.version,
-    membersState.presenceVersion,
+    membersStore.presenceVersion,
     sortByName(members.filter((m) => isOnlineStatus(getPresence(m)))))
   );
   const offlineMembers = $derived(
     (presenceCache.version,
-    membersState.presenceVersion,
+    membersStore.presenceVersion,
     sortByName(members.filter((m) => !isOnlineStatus(getPresence(m)))))
   );
 
@@ -124,10 +143,12 @@ messages, files, etc.). See the "UI" section of `docs/GLOSSARY.md`.
   );
 
   const canRemovePopoverMember = $derived(
-    !!popoverMember && canBanRoomMembers && popoverMember.id !== currentUserId
+    !!popoverMember && !popoverMember.deleted && canBanRoomMembers && popoverMember.id !== currentUserId
   );
 
   function openBanDialog(member: RoomMember) {
+    if (member.deleted) return;
+
     banDialogMember = member;
     banError = null;
     closePopover();
@@ -154,84 +175,146 @@ messages, files, etc.). See the "UI" section of `docs/GLOSSARY.md`.
     toast.success(`Banned ${displayName} from room`);
     banDialogMember = null;
   }
+
+  function loadMoreMembersWhenVisible(node: HTMLElement) {
+    if (typeof IntersectionObserver === 'undefined') return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        if (!membersStore.hasMore || membersStore.isLoadingMore) return;
+        void membersStore.loadMore();
+      },
+      { rootMargin: '160px 0px' }
+    );
+    observer.observe(node);
+
+    return () => observer.disconnect();
+  }
+
+  function scheduleMemberSearch(event: Event) {
+    const value = event.currentTarget instanceof HTMLInputElement ? event.currentTarget.value : '';
+    membersStore.searchInput = value;
+    if (memberSearchTimer) clearTimeout(memberSearchTimer);
+    memberSearchTimer = setTimeout(() => {
+      void membersStore.setSearch(value);
+    }, 250);
+  }
 </script>
 
 <aside
-  class="relative flex flex-col border-l border-border"
-  style:width="{roomSidebarWidth.value}px"
-  aria-label="Room members"
+  class={[
+    'relative flex min-h-0 flex-col bg-background',
+    presentation === 'desktop' ? 'border-l border-border' : 'w-full min-w-0 flex-1 overflow-hidden'
+  ]}
+  style:width={presentation === 'desktop' ? `${roomSidebarWidth.value}px` : undefined}
+  aria-label="Room extras"
 >
-  <ResizeHandle
-    width={roomSidebarWidth.value}
-    min={ROOM_SIDEBAR_MIN_WIDTH}
-    max={ROOM_SIDEBAR_MAX_WIDTH}
-    onResize={(w) => roomSidebarWidth.set(w)}
-    onReset={() => roomSidebarWidth.reset()}
-    edge="left"
-    label="Resize members pane"
-  />
-  <PaneHeader title="Members ({memberCount})" {loading} skeletonButtons={0} />
+  {#if presentation === 'desktop'}
+    <ResizeHandle
+      width={roomSidebarWidth.value}
+      min={ROOM_SIDEBAR_MIN_WIDTH}
+      max={ROOM_SIDEBAR_MAX_WIDTH}
+      onResize={(w) => roomSidebarWidth.set(w)}
+      onReset={() => roomSidebarWidth.reset()}
+      edge="left"
+      label="Resize room extras pane"
+    />
+  {/if}
+  <PaneHeader {title} {loading} skeletonButtons={0}>
+    {#snippet actions()}
+      <HeaderIconButton icon="uil--times" label="Hide room extras" onclick={() => onClose?.()} />
+    {/snippet}
+  </PaneHeader>
 
-  <nav class="flex flex-1 flex-col overflow-y-auto p-2" aria-label="Member list">
-    {#if loading}
-      <ul role="list">
-        {#each Array(8) as _, i (i)}
-          <li class="flex items-center gap-2 rounded-md px-2 py-1.5">
-            <div class="skeleton h-8 w-8 shrink-0 rounded-full"></div>
-            <div class="min-w-0 flex-1 space-y-1">
-              <div class="skeleton h-3.5 w-24 rounded"></div>
-              <div class="skeleton h-3 w-16 rounded"></div>
-            </div>
-          </li>
-        {/each}
-      </ul>
+  {#if activePanel === 'members'}
+    <nav class="flex flex-1 flex-col overflow-y-auto p-2" aria-label="Members">
+      <div class="sticky top-0 z-10 bg-background pb-2">
+        <label class="sr-only" for="room-member-search">Search room members</label>
+        <div class="relative">
+          <span
+            class="iconify uil--search pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
+            aria-hidden="true"
+          ></span>
+          <input
+            id="room-member-search"
+            type="search"
+            value={membersStore.searchInput}
+            oninput={scheduleMemberSearch}
+            placeholder="Search members"
+            class="h-8 w-full rounded-md bg-surface py-1 pl-8 pr-2 text-sm outline-none transition-colors placeholder:text-muted"
+          />
+        </div>
+      </div>
+
+      {#if loading || membersStore.isInitialLoading}
+        <ul role="list">
+          {#each Array(8) as _, i (i)}
+            <li class="flex items-center gap-2 rounded-md px-2 py-1.5">
+              <div class="skeleton h-8 w-8 shrink-0 rounded-full"></div>
+              <div class="min-w-0 flex-1 space-y-1">
+                <div class="skeleton h-3.5 w-24 rounded"></div>
+                <div class="skeleton h-3 w-16 rounded"></div>
+              </div>
+            </li>
+          {/each}
+        </ul>
+      {:else}
+        {#if members.length === 0}
+          <div class="px-2 py-8 text-center text-sm text-muted">No members found.</div>
+        {:else if onlineMembers.length > 0}
+          <CollapsibleGroup
+            label="Online ({onlineMembers.length})"
+            items={onlineMembers}
+            item={memberRow}
+            persistKey={serverStorageKey(getActiveServer(), 'collapsible:room-members:online')}
+          />
+        {/if}
+
+        {#if offlineMembers.length > 0}
+          <CollapsibleGroup
+            label="Offline ({offlineMembers.length})"
+            items={offlineMembers}
+            item={memberRow}
+            persistKey={serverStorageKey(getActiveServer(), 'collapsible:room-members:offline')}
+            defaultCollapsed
+            class="mt-4"
+          />
+        {/if}
+
+        {#if membersStore.hasMore}
+          <div
+            class="flex justify-center px-3 py-4 text-sm text-muted"
+            data-testid="room-members-load-more-sentinel"
+            {@attach loadMoreMembersWhenVisible}
+          >
+            {membersStore.isLoadingMore ? 'Loading members...' : ''}
+          </div>
+        {/if}
+      {/if}
+
+      {#if popoverMember && popoverAnchorRect}
+        <UserContextMenu
+          user={popoverMember}
+          anchorRect={popoverAnchorRect}
+          canSendMessage={canStartDMs}
+          canBanFromRoom={canRemovePopoverMember}
+          banningFromRoom={banningMemberId === popoverMember.id}
+          onSendMessage={() => startDMWith(getActiveServer(), popoverMember!.id)}
+          onBanFromRoom={() => openBanDialog(popoverMember!)}
+          onClose={closePopover}
+        />
+      {/if}
+    </nav>
+  {:else if activePanel === 'files'}
+    {#if filesStore}
+      <RoomFilesPanel store={filesStore} serverId={getActiveServer()} {fileGroupingNow} {onOpenFile} />
     {:else}
-      {#if onlineMembers.length > 0}
-        <CollapsibleGroup
-          label="Online ({onlineMembers.length})"
-          items={onlineMembers}
-          item={memberRow}
-          persistKey={serverStorageKey(getActiveServer(), 'collapsible:room-members:online')}
-        />
-      {/if}
-
-      {#if offlineMembers.length > 0}
-        <CollapsibleGroup
-          label="Offline ({offlineMembers.length})"
-          items={offlineMembers}
-          item={memberRow}
-          persistKey={serverStorageKey(getActiveServer(), 'collapsible:room-members:offline')}
-          defaultCollapsed
-          class="mt-4"
-        />
-      {/if}
-
-      {#if membersState.hasMore}
-        <button
-          type="button"
-          class="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-semibold text-muted transition-colors hover:border-text/30 hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={membersState.loadingMore}
-          onclick={() => onLoadMoreMembers?.()}
-        >
-          <span class="iconify text-base uil--angle-down"></span>
-          {membersState.loadingMore ? 'Loading members...' : 'Load more members'}
-        </button>
-      {/if}
+      <div class="flex min-h-0 flex-1 items-center justify-center p-4 text-sm text-muted">
+        No files in this room yet.
+      </div>
     {/if}
-
-    {#if popoverMember && popoverAnchorRect}
-      <UserContextMenu
-        user={popoverMember}
-        anchorRect={popoverAnchorRect}
-        canSendMessage={canStartDMs}
-        canBanFromRoom={canRemovePopoverMember}
-        banningFromRoom={banningMemberId === popoverMember.id}
-        onSendMessage={() => startDMWith(getActiveServer(), popoverMember!.id)}
-        onBanFromRoom={() => openBanDialog(popoverMember!)}
-        onClose={closePopover}
-      />
-    {/if}
-  </nav>
+  {/if}
 
   {#if banDialogMember}
     <BanRoomMemberModal
@@ -248,13 +331,22 @@ messages, files, etc.). See the "UI" section of `docs/GLOSSARY.md`.
   {@const isOnline = isOnlineStatus(getPresence(member))}
   <button
     type="button"
-    class={['sidebar-item w-full cursor-pointer text-left', !isOnline && 'opacity-50']}
-    onclick={(e: MouseEvent) => togglePopover(member.id, e)}
+    class={[
+      'sidebar-item w-full text-left',
+      member.deleted ? 'cursor-default' : 'cursor-pointer',
+      !isOnline && 'opacity-50'
+    ]}
+    disabled={member.deleted}
+    onclick={(e: MouseEvent) => {
+      if (!member.deleted) togglePopover(member.id, e);
+    }}
     oncontextmenu={(e: MouseEvent) => {
       e.preventDefault();
-      togglePopover(member.id, e);
+      if (!member.deleted) togglePopover(member.id, e);
     }}
-    title={`View profile of ${getLiveDisplayName(member.id, member.displayName)}`}
+    title={member.deleted
+      ? 'Deleted User'
+      : `View profile of ${getLiveDisplayName(member.id, member.displayName)}`}
   >
     <UserAvatar user={member} size="sm" />
     <div class="min-w-0 flex-1">

@@ -11,6 +11,7 @@
   const serverSegment = $derived(serverIdToSegment(activeInstanceId));
   import Dialog from '$lib/ui/Dialog.svelte';
   import ConfirmDialog from '$lib/ui/ConfirmDialog.svelte';
+  import { Button } from '$lib/ui/form';
   import CreateRoom from '$lib/CreateRoom.svelte';
 
   import ImageModal from '$lib/ui/ImageModal.svelte';
@@ -20,6 +21,7 @@
   import { toast } from '$lib/ui/toast';
   import { clearLastRoom } from '$lib/storage/lastRoom';
   import { notifyLogout } from '$lib/auth/sessionChannel';
+  import { csrfFetch } from '$lib/auth/csrf';
 
   /** Get the GraphQL client for the currently active instance (derived from URL). */
   function getActiveClient() {
@@ -35,6 +37,7 @@
   }
 
   let leavingRoom = $state(false);
+  let joiningRoom = $state(false);
   let leavingServer = $state(false);
   let deletingMessage = $state(false);
   let deletingLinkPreview = $state(false);
@@ -66,6 +69,24 @@
 
     clearLastRoom(activeInstanceId);
     goto(resolve('/chat/[serverId]', { serverId: serverSegment }));
+  }
+
+  async function handleJoinRoom(roomId: string) {
+    joiningRoom = true;
+    const stores = serverRegistry.getStore(activeInstanceId);
+    const result = await stores.roomDirectory.joinRoom(roomId);
+    joiningRoom = false;
+
+    if (!result.ok) {
+      toast.error('Failed to join room');
+      console.error('Error joining room:', result.error);
+      closeModal();
+      return;
+    }
+
+    toast.success(result.room ? `Joined #${result.room.name}` : 'Joined room');
+    await stores.rooms.refresh();
+    goto(resolve('/chat/[serverId]/[roomId]', { serverId: serverSegment, roomId }));
   }
 
   async function handleLeaveServer() {
@@ -228,9 +249,12 @@
     actionLabel="Sign Out"
     actionIcon="iconify uil--signout"
     onconfirm={async () => {
-      // Revoke the origin session cookie (if authenticated on origin)
+      const originToken = serverRegistry.originServer?.token;
       if (serverRegistry.originServer) {
-        await fetch('/auth/logout', { method: 'POST' }).catch(() => {});
+        await csrfFetch('/auth/logout', {
+          method: 'POST',
+          headers: originToken ? { Authorization: `Bearer ${originToken}` } : undefined
+        }).catch(() => {});
       }
       // Clear all registered instances and their state
       serverRegistry.removeAll();
@@ -242,6 +266,33 @@
     This will disconnect all instances and sign you out. Your accounts on each instance are not
     affected.
   </ConfirmDialog>
+{:else if modalType === 'joinRoom' && roomId}
+  {#if page.state.modal?.viewerCanJoinRoom}
+    <ConfirmDialog
+      title="Join Room"
+      tone="info"
+      actionLabel="Join Room"
+      actionIcon="iconify uil--plus"
+      loading={joiningRoom}
+      onconfirm={() => handleJoinRoom(roomId)}
+      onclose={closeModal}
+    >
+      Join <strong>#{roomName}</strong> to read and participate in this room.
+    </ConfirmDialog>
+  {:else}
+    <Dialog visible title="Room Access" size="sm" onclose={closeModal}>
+      {#snippet footer()}
+        <div class="flex justify-end">
+          <Button variant="accent" onclick={closeModal}>
+            <span class="iconify uil--check"></span>
+            Got it
+          </Button>
+        </div>
+      {/snippet}
+
+      <p class="text-muted">You do not have permission to join this room.</p>
+    </Dialog>
+  {/if}
 {:else if modalType === 'leaveRoom' && roomId}
   <ConfirmDialog
     title="Leave Room"

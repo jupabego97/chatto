@@ -7,9 +7,15 @@
   import { serverRegistry } from '$lib/state/server/registry.svelte';
   import { getActiveServer } from '$lib/state/activeServer.svelte';
 
-  const notificationStore = serverRegistry.getStore(getActiveServer()).notifications;
+  const stores = serverRegistry.getStore(getActiveServer());
+  const notificationStore = stores.notifications;
   import { appState } from '$lib/state/globals.svelte';
-  import { getRoomMembers, createComposerContext, MessagesStore } from '$lib/state/room';
+  import {
+    getRoomMembers,
+    createComposerContext,
+    MessagesStore,
+    type QuoteInsertionRequest
+  } from '$lib/state/room';
   import PaneHeader from '$lib/ui/PaneHeader.svelte';
   import HeaderIconButton from '$lib/ui/HeaderIconButton.svelte';
   import MessageComposer, {
@@ -24,18 +30,24 @@
     threadRootEventId,
     onClose,
     canPostInThread = true,
+    canAttach = true,
     canEchoMessage = false,
     highlightEventId = null,
-    onHighlightComplete
+    pendingQuote = null,
+    onHighlightComplete,
+    onQuoteConsumed
   }: {
     roomId: string;
     roomName: string;
     threadRootEventId: string;
     onClose: () => void;
     canPostInThread?: boolean;
+    canAttach?: boolean;
     canEchoMessage?: boolean;
     highlightEventId?: string | null;
+    pendingQuote?: QuoteInsertionRequest | null;
     onHighlightComplete?: () => void;
+    onQuoteConsumed?: () => void;
   } = $props();
 
   const connection = useConnection();
@@ -83,6 +95,8 @@
   // not the main room's.
   const composerContext = createComposerContext({ scroll: true });
   const replyState = composerContext.replyState;
+  let consumedQuoteId = 0;
+  let composerApi = $state<MessageComposerApi | null>(null);
 
   // Thread-scoped jump state so "in reply to" clicks scroll within the thread.
   const jumpState = composerContext.jumpState;
@@ -102,6 +116,16 @@
   $effect(() => {
     if (!highlightEventId || store.isInitialLoading) return;
     jumpState.jumpToMessage(highlightEventId);
+  });
+
+  $effect(() => {
+    const quote = pendingQuote;
+    const api = composerApi;
+    if (!quote || !api || quote.id === consumedQuoteId) return;
+
+    consumedQuoteId = quote.id;
+    composerContext.quoteInsertionState.requestInsertQuote(quote.text);
+    onQuoteConsumed?.();
   });
 
   // Subscribe to server events: clear typing indicator on a thread reply,
@@ -206,7 +230,13 @@
   $effect(() => {
     if (!appState.isFocused) return;
     const threadId = threadRootEventId;
-    notificationStore.dismissThreadNotifications(threadId);
+    const currentRoomId = roomId;
+    void notificationStore.dismissThreadNotifications(threadId).then((counts) => {
+      const dismissedForRoom = counts.byRoom[currentRoomId] ?? 0;
+      if (dismissedForRoom > 0) {
+        stores.rooms.decrementUnreadNotification(currentRoomId, dismissedForRoom);
+      }
+    });
   });
 
   async function markThreadAsRead(currentThreadId: string, upToEventId?: string) {
@@ -326,10 +356,21 @@
     onCancelReply={() => replyState.cancelReply()}
     placeholder="Reply in thread..."
     {canPost}
+    {canAttach}
     showAlsoSendToChannel={canEchoMessage}
     onEscape={onClose}
-    onReady={(api: MessageComposerApi) => api.focus()}
+    onReady={(api: MessageComposerApi) => {
+      composerApi = api;
+      api.focus();
+    }}
     onTyping={() => typingIndicator?.sendTypingIndicator()}
-    onMessageSent={() => typingIndicator?.resetDebounce()}
+    onMessageSent={(event) => {
+      typingIndicator?.resetDebounce();
+      if (event) {
+        store.ingestEvent(event);
+      } else {
+        void store.refreshCurrentWindow(null);
+      }
+    }}
   />
 </div>

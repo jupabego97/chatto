@@ -17,13 +17,13 @@ import { RoomsStore } from './rooms.svelte';
 import { RoomDirectoryStore } from './roomDirectory.svelte';
 import { AdminRoomLayoutStore } from './adminRoomLayout.svelte';
 import { eventBusManager } from './eventBus.svelte';
-import type { EventHandler } from '$lib/eventBus.svelte';
+import type { EventBusCatchUpReason, EventHandler } from '$lib/eventBus.svelte';
 import type { GraphQLClient } from './graphqlClient.svelte';
 import type { RegisteredServer } from './registry.svelte';
 
 /**
- * What kind of indicator dot a server (or the DM area) should display.
- * - 'notification' = orange dot, has a pending mention/reply/room-message
+ * What kind of indicator a server (or the DM area) should display.
+ * - 'notification' = warning badge, has a pending mention/reply/room-message
  * - 'unread' = grey dot, has unread rooms but no pending notification
  * - null = no indicator
  */
@@ -42,6 +42,8 @@ const EMPTY_PERMISSIONS: ServerPermissions = {
   canCreateBots: false,
   canManageBots: false
 };
+
+const CATCH_UP_REFRESH_DEDUPE_MS = 1_000;
 
 export class ServerStateStore {
   readonly serverId: string;
@@ -70,6 +72,9 @@ export class ServerStateStore {
 
   /** Disposer for the internal effect root that wires lifecycle reactivity. */
   readonly #disposeEffects: () => void;
+  #lastSuccessfulCatchUpRefreshAt = 0;
+  #catchUpRefreshInFlight = false;
+  #queuedCatchUpRefreshReason: EventBusCatchUpReason | null = null;
 
   constructor(registered: RegisteredServer, gqlClient: GraphQLClient) {
     this.serverId = registered.id;
@@ -89,20 +94,6 @@ export class ServerStateStore {
     this.rooms = new RoomsStore(client, this.notificationLevels, this.roomUnread);
     this.roomDirectory = new RoomDirectoryStore(client);
     this.adminRoomLayout = new AdminRoomLayoutStore(client);
-
-    // Gate session-revalidation and auth-failure dispatch to cookie-auth
-    // servers only. Bearer auth's `handleAuthFailure` would clear
-    // `currentUser.user` while leaving the bearer token intact, producing
-    // an inconsistent state where `isAuthenticated` (token != null) is
-    // still true but the user is gone. Until the data model has a clean
-    // way to represent "remote with revoked token", keep the existing
-    // behavior of letting the next failed query surface the error.
-    if (cookieAuth) {
-      gqlClient.setAuthHandlers({
-        onAuthFailure: () => this.currentUser.handleAuthFailure(),
-        onSessionValidation: () => this.currentUser.validateSession()
-      });
-    }
 
     // Self-managed lifecycle for the substores that need fetch / event
     // wiring. Living here (in the per-server bundle) means consumers
@@ -153,15 +144,98 @@ export class ServerStateStore {
               });
             }
           }
-          if (event.event?.__typename === 'RoomGroupsUpdatedEvent') {
-            void this.rooms.refresh();
-            this.roomDirectory.ingestRoomLayoutUpdated();
-          }
+        };
+        const catchUpHandler = (reason: EventBusCatchUpReason) => {
+          void this.refreshProjectedStateAfterMissedEvents(reason);
         };
         bus.handlers.add(handler);
-        return () => bus.handlers.delete(handler);
+        bus.catchUpHandlers.add(catchUpHandler);
+        return () => {
+          bus.handlers.delete(handler);
+          bus.catchUpHandlers.delete(catchUpHandler);
+        };
       });
     });
+  }
+
+  private async refreshProjectedStateAfterMissedEvents(
+    reason: EventBusCatchUpReason,
+    force = false
+  ): Promise<void> {
+    if (!this.isAuthenticated) return;
+
+    if (this.#catchUpRefreshInFlight) {
+      this.#queuedCatchUpRefreshReason = reason;
+      console.debug(
+        `[server:${this.#registered.url}] queued catch-up refresh while one is running`,
+        {
+          reason
+        }
+      );
+      return;
+    }
+
+    const now = Date.now();
+    if (!force && now - this.#lastSuccessfulCatchUpRefreshAt < CATCH_UP_REFRESH_DEDUPE_MS) {
+      console.debug(`[server:${this.#registered.url}] skipped duplicate catch-up refresh`, {
+        reason
+      });
+      return;
+    }
+
+    this.#catchUpRefreshInFlight = true;
+    let failed = false;
+
+    try {
+      console.debug(
+        `[server:${this.#registered.url}] refreshing projected state after event bus gap`,
+        {
+          reason
+        }
+      );
+
+      const run = async (label: string, task: () => Promise<unknown>) => {
+        try {
+          await task();
+        } catch (err) {
+          failed = true;
+          console.error(`[server:${this.#registered.url}] catch-up refresh failed: ${label}`, err);
+        }
+      };
+
+      const tasks: Promise<void>[] = [
+        run('server profile', () => this.serverInfo.refreshProfile()),
+        run('authenticated settings', () => this.serverInfo.refreshAuthenticatedSettings()),
+        run('notifications', () => this.notifications.fetch()),
+        run('rooms', () => this.rooms.refresh()),
+        run('room directory', () => this.roomDirectory.refresh()),
+        run('admin room layout', () => this.adminRoomLayout.refresh()),
+        this.serverInfo.livekitUrl
+          ? run('active calls', () => this.activeCallRooms.load())
+          : Promise.resolve()
+      ];
+      await Promise.all(tasks);
+
+      if (!failed) {
+        this.#lastSuccessfulCatchUpRefreshAt = Date.now();
+        console.debug(
+          `[server:${this.#registered.url}] projected state catch-up refresh completed`,
+          {
+            reason
+          }
+        );
+      }
+    } finally {
+      this.#catchUpRefreshInFlight = false;
+      const queuedReason = this.#queuedCatchUpRefreshReason;
+      this.#queuedCatchUpRefreshReason = null;
+      if (queuedReason) {
+        console.debug(`[server:${this.#registered.url}] running queued catch-up refresh`, {
+          reason: queuedReason
+        });
+        void this.refreshProjectedStateAfterMissedEvents(queuedReason, true);
+      }
+    }
   }
 
   /**
@@ -200,6 +274,7 @@ export class ServerStateStore {
    */
   serverIndicator(): ServerIndicator {
     // Channel + DM activity both roll up to the single server indicator.
+    if (this.notifications.unreadNotificationCount > 0) return 'notification';
     if (this.notifications.hasSpaceNotification()) return 'notification';
     if (this.notifications.hasDMNotifications()) return 'notification';
     if (this.roomUnread.hasAnyUnread) return 'unread';
@@ -214,6 +289,13 @@ export class ServerStateStore {
     if (this.notifications.hasDMNotifications()) return 'notification';
     // We no longer track DM unread separately — `hasAnyUnread` covers it.
     return null;
+  }
+
+  /** Remove optimistic call UI state after a local join attempt fails. */
+  handleVoiceCallJoinFailed(roomId: string): void {
+    const currentUserId = this.rooms.currentUserId;
+    this.activeCallRooms.handleLeave(roomId, null, currentUserId);
+    this.callParticipants.handleLeave(roomId, null, currentUserId);
   }
 
   /** Clean up resources. */

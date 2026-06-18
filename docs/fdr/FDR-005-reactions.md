@@ -31,9 +31,9 @@ Users can react to a message with emoji. Reactions are aggregated into pills sho
 
 ### 3. Durable events, in-memory projection is source of truth
 
-**Decision:** Reaction add/remove changes append durable room-aggregate events to EVT (`evt.room.{roomId}.reaction_added` / `reaction_removed`). Current reaction state is derived by an in-memory projection keyed by message event ID, emoji shortcode, and actor/user ID. Live subscribers receive reactions through the EVT stream's `live.evt.>` republish path after projection readiness and authorization checks.
-**Why:** Reactions are durable room facts. Keeping them in the room stream makes add/remove ordering explicit, gives replayable state, and removes the old KV bucket from the hot read/write path.
-**Tradeoff:** The first projection version keeps all current reaction state in RAM. That is simple and correct; bounded or demand-loaded projections can follow once the rest of the event-sourcing architecture is in place and real access patterns are measured.
+**Decision:** Reaction add/remove changes append durable room-aggregate events to EVT (`evt.room.{roomId}.reaction_added` / `reaction_removed`). Current reaction state is derived by an in-memory projection keyed by message event ID, emoji shortcode, and actor/user ID. The projection consumes the room aggregate namespace so mutation snapshots can pair current reaction state with the room's applied OCC sequence. Live subscribers receive reactions through the EVT stream's `live.evt.>` republish path after projection readiness and authorization checks.
+**Why:** Reactions are durable room facts. Keeping them in the room stream makes add/remove ordering explicit, gives replayable state, removes the old KV bucket from the hot read/write path, and lets duplicate add/remove decisions retry safely under multi-replica contention.
+**Tradeoff:** The first projection version keeps all current reaction state in RAM and consumes more room facts than it derives. That is simple and correct; bounded or demand-loaded projections can follow once the rest of the event-sourcing architecture is in place and real access patterns are measured.
 
 ### 4. GraphQL exposes reactor names as a bounded preview
 
@@ -47,11 +47,11 @@ Users can react to a message with emoji. Reactions are aggregated into pills sho
 **Why:** Server-side recents would mean a "your recents" query on every message hover (frequent and small) and a new write per reaction. Local storage is free and fast. The downside — losing recents between devices — is small relative to the cost.
 **Tradeoff:** Recents don't sync across devices.
 
-### 6. Reconnect catch-up uses resumable myEvents, not visible timeline rows
+### 6. Web reconnect catch-up refreshes the current room window
 
-**Decision:** Missed reaction add/remove events are recovered through `Subscription.myEvents(after:)`. Durable EVT-backed subscription events carry a server-signed, user-bound opaque `deliveryCursor`; the web client remembers the latest cursor and passes it when the singleton event bus resubscribes after reconnect or wake.
-**Why:** Reactions mutate existing message rows. If a client reconnects after missing only a reaction, visible timeline pagination has no new row to return. Replaying the raw durable reaction event through `myEvents` keeps the API model simple: queries fetch current projected state, and the subscription delivers the durable facts the client missed.
-**Tradeoff:** Replay is limited to durable room EVT facts for rooms the user is currently a member of. Invalid, expired, or over-budget cursors force a full refresh from projected query state instead of replaying. Transient sync signals and presence changes remain live-only, and clients still refetch the affected message row when a replayed reaction arrives.
+**Decision:** On browser wake/reconnect, the web client refreshes the currently viewed room window from projected GraphQL reads instead of replaying missed reaction events through its event bus. If the user is at the bottom it fetches the latest room page; if scrolled up it refetches around the visible anchor event and preserves scroll by event ID.
+**Why:** Reactions mutate existing message rows. Refetching projected message rows updates reactions, edits, retractions, attachment processing state, and newly posted messages through one path, while avoiding fragile reconnect replay state in the browser.
+**Tradeoff:** Message-row catch-up is scoped to the room/thread the user is actually viewing. Other rooms catch up through normal queries when opened, while server-scoped projected state such as notifications, unread/sidebar state, room layout, server profile/settings, and active-call indicators is refetched after event-bus gaps. The `myEvents` subscription is intentionally live-only and no longer exposes a replay cursor.
 
 ## Permissions
 

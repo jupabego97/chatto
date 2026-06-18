@@ -7,6 +7,7 @@
   import { TextInput, Button, FormError } from '$lib/ui/form';
   import { useQuery } from '$lib/hooks';
   import { notifyLogout } from '$lib/auth/sessionChannel';
+  import { csrfFetch } from '$lib/auth/csrf';
 
   const currentUser = $derived(serverRegistry.getStore(getActiveServer()).currentUser);
   const connection = useConnection();
@@ -54,8 +55,8 @@
 
     try {
       // Step 1: Request a confirmation token (XSS protection)
-      const tokenResult = await connection().client
-        .mutation(
+      const tokenResult = await connection()
+        .client.mutation(
           graphql(`
             mutation RequestAccountDeletion {
               requestAccountDeletion
@@ -77,8 +78,8 @@
       }
 
       // Step 2: Delete account with the confirmation token
-      const result = await connection().client
-        .mutation(
+      const result = await connection()
+        .client.mutation(
           graphql(`
             mutation DeleteMyAccount($input: DeleteMyAccountInput!) {
               deleteMyAccount(input: $input)
@@ -95,7 +96,11 @@
 
       if (result.data?.deleteMyAccount) {
         // Log out and redirect to home
-        await fetch('/auth/logout', { method: 'POST' });
+        const originToken = serverRegistry.originServer?.token;
+        await csrfFetch('/auth/logout', {
+          method: 'POST',
+          headers: originToken ? { Authorization: `Bearer ${originToken}` } : undefined
+        });
         notifyLogout();
         window.location.href = '/';
       } else {

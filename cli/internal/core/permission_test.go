@@ -119,6 +119,9 @@ func TestPermissionAppliesAtScope(t *testing.T) {
 		{"message.post at server", PermMessagePost, ScopeServer, true},
 		{"message.post at group", PermMessagePost, ScopeGroup, true},
 		{"message.post at room", PermMessagePost, ScopeRoom, true},
+		{"message.attach at server", PermMessageAttach, ScopeServer, true},
+		{"message.attach at group", PermMessageAttach, ScopeGroup, true},
+		{"message.attach at room", PermMessageAttach, ScopeRoom, true},
 		{"room.join at server", PermRoomJoin, ScopeServer, true},
 		{"room.join at room", PermRoomJoin, ScopeRoom, true},
 		{"room.manage at server", PermRoomManage, ScopeServer, true},
@@ -252,9 +255,12 @@ func TestDefaultEveryonePermissions(t *testing.T) {
 
 	mustInclude := []Permission{
 		PermUserDeleteSelf,
+		PermRoomList,
 		PermRoomJoin,
 		PermMessagePost,
 		PermMessagePostInThread,
+		PermMessageReact,
+		PermMessageEcho,
 	}
 	for _, want := range mustInclude {
 		if !slices.Contains(perms, want) {
@@ -262,10 +268,20 @@ func TestDefaultEveryonePermissions(t *testing.T) {
 		}
 	}
 
-	// Admin-level and opt-in permissions must not leak in.
-	for _, mustNotInclude := range []Permission{PermServerManage, PermRoleManage, PermRoomCreate, PermAdminUsersView} {
+	// Admin-level and seed-only permissions must not leak into the boot backfill list.
+	for _, mustNotInclude := range []Permission{PermServerManage, PermRoleManage, PermRoomCreate, PermAdminUsersView, PermMessageAttach} {
 		if slices.Contains(perms, mustNotInclude) {
 			t.Errorf("everyone defaults must not include %v", mustNotInclude)
+		}
+	}
+}
+
+func TestDefaultSeedEveryonePermissions(t *testing.T) {
+	perms := DefaultSeedEveryonePermissions()
+
+	for _, want := range append(DefaultEveryonePermissions(), PermMessageAttach) {
+		if !slices.Contains(perms, want) {
+			t.Errorf("Expected %v in fresh seed everyone defaults", want)
 		}
 	}
 }
@@ -274,8 +290,9 @@ func TestDefaultModeratorPermissions(t *testing.T) {
 	perms := DefaultModeratorPermissions()
 
 	mustInclude := []Permission{
-		PermMessageManage,
 		PermAdminUsersView,
+		PermMessageManage,
+		PermRoomMemberBan,
 	}
 	for _, want := range mustInclude {
 		if !slices.Contains(perms, want) {
@@ -288,6 +305,14 @@ func TestDefaultModeratorPermissions(t *testing.T) {
 		if slices.Contains(perms, mustNotInclude) {
 			t.Errorf("moderator defaults must not include %v", mustNotInclude)
 		}
+	}
+}
+
+func TestDefaultRoomEveryonePermissions(t *testing.T) {
+	perms := DefaultRoomEveryonePermissions()
+
+	if len(perms) != 0 {
+		t.Errorf("Expected room everyone defaults to be empty, got %v", perms)
 	}
 }
 
@@ -334,6 +359,14 @@ func TestPermissionConsistency(t *testing.T) {
 		}
 	})
 
+	t.Run("everyone seed defaults are valid", func(t *testing.T) {
+		for _, perm := range DefaultSeedEveryonePermissions() {
+			if err := ValidatePermission(perm); err != nil {
+				t.Errorf("Invalid permission in everyone seed defaults: %v", perm)
+			}
+		}
+	})
+
 	t.Run("moderator defaults are valid", func(t *testing.T) {
 		for _, perm := range DefaultModeratorPermissions() {
 			if err := ValidatePermission(perm); err != nil {
@@ -346,6 +379,32 @@ func TestPermissionConsistency(t *testing.T) {
 		for _, perm := range DefaultAdminPermissions() {
 			if err := ValidatePermission(perm); err != nil {
 				t.Errorf("Invalid permission in admin defaults: %v", perm)
+			}
+		}
+	})
+
+	t.Run("admin defaults grant room administration and message management", func(t *testing.T) {
+		for _, want := range []Permission{
+			PermRoomCreate,
+			PermRoomJoin,
+			PermRoomList,
+			PermRoomManage,
+			PermRoomMemberBan,
+			PermMessageManage,
+		} {
+			if !slices.Contains(DefaultAdminPermissions(), want) {
+				t.Errorf("admin server defaults should include %v", want)
+			}
+		}
+		for _, mustNotInclude := range []Permission{
+			PermMessagePost,
+			PermMessagePostInThread,
+			PermMessageAttach,
+			PermMessageReact,
+			PermMessageEcho,
+		} {
+			if slices.Contains(DefaultAdminPermissions(), mustNotInclude) {
+				t.Errorf("admin-specific defaults should rely on everyone for %v", mustNotInclude)
 			}
 		}
 	})

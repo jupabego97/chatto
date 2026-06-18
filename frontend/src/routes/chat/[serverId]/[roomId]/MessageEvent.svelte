@@ -29,7 +29,6 @@
   const notificationStore = stores.notifications;
   const serverInfo = stores.serverInfo;
   import { getLiveDisplayName } from '$lib/state/userProfiles.svelte';
-  import { isUserMentioned } from '$lib/mentions';
   import MessageActionSheet from './MessageActionSheet.svelte';
   import MessageContextMenu from '$lib/components/menus/MessageContextMenu.svelte';
   import MessageHoverBar from './MessageHoverBar.svelte';
@@ -43,10 +42,16 @@
   import { useMessageActions } from '$lib/hooks';
   import { emojiToName } from '$lib/emoji';
   import { toast } from '$lib/ui/toast';
-  import { buildMessageLinkURL, parseMessageLink, type MessageLink } from '$lib/messageLinks';
+  import {
+    copyMessageLinkToClipboard,
+    parseMessageLink,
+    type MessageLink
+  } from '$lib/messageLinks';
   import { serverIdToSegment } from '$lib/navigation';
   import { extractURLs } from '$lib/linkPreview';
   import MessagePreviewCard from '$lib/components/MessagePreviewCard.svelte';
+  import { shouldHighlightCurrentUserMention } from './messageMentionHighlight';
+  import { selectedQuoteTextForMessageBody } from './selectedReplyQuote';
 
   // Long-press thresholds in milliseconds
   const HIGHLIGHT_DELAY_MS = 150; // Delay before showing visual feedback (avoids flicker on scroll)
@@ -63,7 +68,11 @@
     compact?: boolean;
     roomId: string;
     messageStore?: MessagesStore | null;
-    onOpenThread?: (threadRootEventId: string, highlightEventId?: string) => void;
+    onOpenThread?: (
+      threadRootEventId: string,
+      highlightEventId?: string,
+      quoteText?: string
+    ) => void;
   } = $props();
 
   const connection = useConnection();
@@ -116,6 +125,8 @@
     alignRight?: boolean;
     centerX?: boolean;
   } | null>(null);
+  let messageBodySelectionRoot = $state<HTMLElement>();
+  let selectedReplyQuoteSnapshot = $state<string | null>(null);
 
   // Emoji picker state (position doubles as visibility flag; on mobile ContextMenu ignores it)
   let emojiPickerPos = $state<{ x: number; y: number } | null>(null);
@@ -143,6 +154,7 @@
     if (!msg) return;
 
     const params = {
+      serverId: getActiveServer(),
       roomId,
       messageEventId: event.id,
       eventId: isEcho ? messageEvent!.echoOfEventId! : event.id,
@@ -216,6 +228,7 @@
   // Open context menu from the toolbar's "more actions" button,
   // positioned to cover the toolbar exactly.
   function openMenuFromToolbar(e: MouseEvent) {
+    selectedReplyQuoteSnapshot = getSelectedReplyQuote();
     const button = e.currentTarget as HTMLElement;
     const toolbar = button.closest('[role="toolbar"]') as HTMLElement;
     const rect = toolbar?.getBoundingClientRect() ?? button.getBoundingClientRect();
@@ -233,7 +246,9 @@
 
   const editEventId = $derived(isEcho ? messageEvent!.echoOfEventId! : event.id);
   const editThreadRootEventId = $derived(
-    isEcho ? (messageEvent?.echoFromThreadRootEventId ?? null) : (messageEvent?.threadRootEventId ?? null)
+    isEcho
+      ? (messageEvent?.echoFromThreadRootEventId ?? null)
+      : (messageEvent?.threadRootEventId ?? null)
   );
   const editChannelEchoEventId = $derived(
     isEcho ? event.id : (messageEvent?.channelEchoEventId ?? null)
@@ -262,12 +277,7 @@
     if (!event) return;
     e.preventDefault();
     e.stopPropagation();
-    try {
-      await navigator.clipboard.writeText(buildMessageLinkURL(getActiveServer(), roomId, event.id));
-      toast.success('Message link copied');
-    } catch {
-      toast.error('Failed to copy link');
-    }
+    await copyMessageLinkToClipboard(getActiveServer(), roomId, event.id);
   }
 
   // Check if message has been edited (updatedAt is non-null)
@@ -334,6 +344,9 @@
 
   // Check if message has attachments
   const hasAttachments = $derived((msg?.attachments?.length ?? 0) > 0);
+  const hasVisualEmbed = $derived(
+    hasAttachments || !!messageEvent?.linkPreview || embeddedMessageLinks.length > 0
+  );
 
   // Message is "deleted" if it has no body AND no attachments.
   // Deleted messages always render as a tombstone — hiding them entirely opened up
@@ -380,10 +393,13 @@
 
   // Check if current user is mentioned (but not by themselves)
   const isCurrentUserMentioned = $derived(
-    currentUser.user?.login &&
-      msg?.body &&
-      event?.actorId !== currentUser.user.id &&
-      isUserMentioned(msg.body, currentUser.user.login, members)
+    shouldHighlightCurrentUserMention({
+      actorId: event?.actorId,
+      body: msg?.body,
+      currentUserId: currentUser.user?.id,
+      currentUserLogin: currentUser.user?.login,
+      members
+    })
   );
 
   // User profile popover state
@@ -404,6 +420,7 @@
   const canBanPopoverUser = $derived.by(() => {
     if (
       !popoverUser ||
+      popoverUser.deleted ||
       !roomPermissions.canBanRoomMembers ||
       popoverUser.id === currentUser.user?.id
     ) {
@@ -414,6 +431,8 @@
   });
 
   function openBanDialog(member: RoomMember) {
+    if (member.deleted) return;
+
     banDialogUser = member;
     banError = null;
     closePopover();
@@ -521,16 +540,34 @@
     }
   }
 
+  function getSelectedReplyQuote(): string | null {
+    return selectedQuoteTextForMessageBody(
+      typeof window === 'undefined' ? null : window.getSelection(),
+      messageBodySelectionRoot
+    );
+  }
+
+  function takeSelectedReplyQuote(): string | null {
+    const quote = selectedReplyQuoteSnapshot ?? getSelectedReplyQuote();
+    selectedReplyQuoteSnapshot = null;
+    return quote;
+  }
+
   function handleReplyInRoom() {
+    const quote = takeSelectedReplyQuote();
     const excerpt = (msg?.body ?? '').slice(0, 80);
     replyState.startReply(event.id, displayName, excerpt);
+    if (quote) {
+      composerContext.quoteInsertionState.requestInsertQuote(quote);
+    }
   }
 
   function handleOpenThread() {
     if (onOpenThread) {
+      const quote = takeSelectedReplyQuote();
       // For echoes, use the original thread root event ID (not the echo's wrapper event ID)
       const threadRoot = (isEcho ? messageEvent?.echoFromThreadRootEventId : null) ?? event.id;
-      onOpenThread(threadRoot);
+      onOpenThread(threadRoot, undefined, quote ?? undefined);
       // Note: Thread notifications are dismissed by ThreadPane's $effect when it mounts,
       // which also handles direct URL navigation to threads.
     }
@@ -541,7 +578,7 @@
   <div
     class={[
       'group relative hover:z-10',
-      compact ? '' : 'mt-4',
+      compact ? (hasVisualEmbed ? 'mt-1.5' : '') : 'mt-4',
       isCurrentUserMentioned ? 'bg-warning/10' : ''
     ]}
     role="article"
@@ -674,7 +711,6 @@
                 <strong class="font-medium">{replyPreview.name}</strong>
               </button>
             {:else}
-              <div class="skeleton h-5 w-5 shrink-0 rounded-full"></div>
               <strong class="shrink-0 font-medium">{replyPreview.name}</strong>
             {/if}
             {#if replyPreview.body}
@@ -688,7 +724,7 @@
           <!-- Message deleted or encryption key removed -->
           <span class="text-muted/50 italic">This message has been deleted.</span>
         {:else if msg.body}
-          <div class="pointer-fine:select-text">
+          <div bind:this={messageBodySelectionRoot} class="pointer-fine:select-text">
             <MessageContent
               body={msg.body}
               {members}
@@ -776,7 +812,7 @@
     <UserContextMenu
       user={popoverUser}
       anchorRect={popoverAnchorRect}
-      canSendMessage={canStartDMs}
+      canSendMessage={canStartDMs && !popoverUser.deleted}
       canBanFromRoom={canBanPopoverUser}
       banningFromRoom={banningMemberId === popoverUser.id}
       onSendMessage={() => startDMWith(getActiveServer(), popoverUser!.id)}

@@ -82,10 +82,9 @@ func defaultRBACDecisions() []rbacSeedDecision {
 		role  string
 		perms []Permission
 	}{
-		{RoleOwner, DefaultOwnerPermissions()},
 		{RoleAdmin, DefaultAdminPermissions()},
 		{RoleModerator, DefaultModeratorPermissions()},
-		{RoleEveryone, DefaultEveryonePermissions()},
+		{RoleEveryone, DefaultSeedEveryonePermissions()},
 	}
 	var decisions []rbacSeedDecision
 	for _, spec := range roleDefaults {

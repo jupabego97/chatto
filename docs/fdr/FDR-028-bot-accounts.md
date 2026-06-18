@@ -27,7 +27,7 @@ Bot accounts are first-class Chatto users for automation and integrations. They 
 ### 1. Bots are visible users, not hidden integrations
 
 **Decision:** Bot accounts are ordinary user records with a bot kind, badge, and owner link.
-**Why:** Messages, mentions, reactions, membership, permissions, moderation, deletion, and crypto-shredding already revolve around users. A bot that posts a message should leave the same accountable identity trail as a human author. See ADR-040.
+**Why:** Messages, mentions, reactions, membership, permissions, moderation, deletion, and crypto-shredding already revolve around users. A bot that posts a message should leave the same accountable identity trail as a human author. See ADR-041.
 **Tradeoff:** User-facing surfaces need to handle bot badges and owner context rather than assuming every member is a human.
 
 ### 2. Ownership is human-only and not transferable in v1
@@ -39,7 +39,7 @@ Bot accounts are first-class Chatto users for automation and integrations. They 
 ### 3. Bot tokens are dedicated credentials
 
 **Decision:** Bots use dedicated named API tokens rather than passwords, OAuth identities, browser cookies, or human bearer sessions.
-**Why:** Bot credentials need names, explicit expiry, one-time secret display, revocation per token, and a recognizable prefix for secret scanning. Reusing human sessions would blur UI login with automation access. See ADR-040.
+**Why:** Bot credentials need names, explicit expiry, one-time secret display, revocation per token, and a recognizable prefix for secret scanning. Reusing human sessions would blur UI login with automation access. See ADR-041.
 **Tradeoff:** The API has an additional credential family to maintain and document.
 
 ### 4. Token expiry is chosen when the token is issued
@@ -50,9 +50,9 @@ Bot accounts are first-class Chatto users for automation and integrations. They 
 
 ### 5. `bot.create` manages own bots; `bot.manage` manages others' bots
 
-**Decision:** `bot.create` lets a human create self-owned bots and manage/delete bots they own. `bot.manage` lets a human manage other users' bot accounts and tokens when the actor outranks the bot account itself.
-**Why:** Owning an integration should not require full admin power, but admins need a way to recover or disable other users' bots. Checking rank against the bot, not the bot's owner, lets operators demote or constrain a bot directly.
-**Tradeoff:** If an owner gives their bot a very high-ranked role, fewer admins may be able to manage that bot until it is demoted.
+**Decision:** `bot.create` lets a human create self-owned bots and manage/delete bots they own. `bot.manage` lets a human manage other users' bot accounts and tokens.
+**Why:** Owning an integration should not require full admin power, but operators need a direct permission that recovers or disables other users' bots. This follows the permission-only RBAC model in ADR-040 instead of treating role display positions as authorization ranks.
+**Tradeoff:** `bot.manage` is a broad automation-administration capability and should be granted carefully.
 
 ### 6. Owner deletion cascades before human deletion
 
@@ -63,11 +63,11 @@ Bot accounts are first-class Chatto users for automation and integrations. They 
 ## Permissions
 
 - `bot.create` — create self-owned bot accounts and manage/delete bots owned by the caller.
-- `bot.manage` — manage/delete other users' bot accounts and tokens, subject to outranking the bot account itself.
+- `bot.manage` — manage/delete other users' bot accounts and tokens.
 
 ## Related
 
-- **ADRs:** ADR-004 (authorization at API boundary), ADR-007 (per-user encryption with crypto-shredding), ADR-024 (opaque bearer tokens), ADR-036 (runtime state), ADR-040 (bot accounts as user accounts with dedicated API tokens)
+- **ADRs:** ADR-004 (authorization at API boundary), ADR-007 (per-user encryption with crypto-shredding), ADR-024 (opaque bearer tokens), ADR-036 (runtime state), ADR-041 (bot accounts as user accounts with dedicated API tokens)
 - **FDRs:** FDR-001 (Roles & Permissions), FDR-018 (Account Lifecycle), FDR-023 (Authentication & Sessions), FDR-025 (User Search & Member Directory)
 
 ## Open Questions

@@ -6,6 +6,10 @@
  */
 
 import { graphql } from '$lib/gql';
+import {
+  NOTIFICATION_CLICK_ACK_MESSAGE_TYPE,
+  NOTIFICATION_CLICK_MESSAGE_TYPE
+} from '$lib/pwa/notificationClick.worker';
 import { graphqlClientManager } from '$lib/state/server/graphqlClient.svelte';
 
 // GraphQL mutations
@@ -20,6 +24,10 @@ const UnsubscribeFromPushMutationDoc = graphql(`
     unsubscribeFromPush(input: $input)
   }
 `);
+
+type EnsureRegisteredOptions = {
+  prompt: boolean;
+};
 
 /**
  * Check if push notifications are supported in this browser.
@@ -73,6 +81,13 @@ export async function isSubscribed(): Promise<boolean> {
   return subscription !== null;
 }
 
+export function getPermission(): NotificationPermission | null {
+  if (!isSupported()) {
+    return null;
+  }
+  return Notification.permission;
+}
+
 /**
  * Convert base64url string to Uint8Array (for VAPID key).
  */
@@ -91,23 +106,28 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
 }
 
 /**
- * Subscribe to push notifications.
- * This will:
- * 1. Request notification permission if needed
- * 2. Create a push subscription with the browser
- * 3. Send the subscription to the server
- *
- * @param vapidPublicKey - The server's VAPID public key
- * @returns true if subscription was successful
+ * Ensure the current browser push subscription is stored on the server.
+ * Browser/OS permission is the user-facing source of truth. When permission is
+ * already granted, this refreshes the server-side delivery cache without
+ * prompting the user.
  */
-export async function subscribe(vapidPublicKey: string): Promise<boolean> {
+export async function ensureRegistered(
+  vapidPublicKey: string,
+  options: EnsureRegisteredOptions
+): Promise<boolean> {
   if (!isSupported()) {
     console.warn('Push notifications not supported');
     return false;
   }
 
-  // Request notification permission
-  const permission = await Notification.requestPermission();
+  let permission = Notification.permission;
+  if (permission === 'default') {
+    if (!options.prompt) {
+      return false;
+    }
+    permission = await Notification.requestPermission();
+  }
+
   if (permission !== 'granted') {
     console.warn('Notification permission denied');
     return false;
@@ -120,11 +140,16 @@ export async function subscribe(vapidPublicKey: string): Promise<boolean> {
   }
 
   try {
-    // Create push subscription
-    const subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
-    });
+    let subscription = await registration.pushManager.getSubscription();
+    let createdSubscription = false;
+
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
+      });
+      createdSubscription = true;
+    }
 
     // Extract subscription details
     const json = subscription.toJSON();
@@ -147,8 +172,9 @@ export async function subscribe(vapidPublicKey: string): Promise<boolean> {
 
     if (result.error) {
       console.error('Failed to save push subscription:', result.error);
-      // Unsubscribe from browser since server save failed
-      await subscription.unsubscribe();
+      if (createdSubscription) {
+        await subscription.unsubscribe();
+      }
       return false;
     }
 
@@ -157,6 +183,16 @@ export async function subscribe(vapidPublicKey: string): Promise<boolean> {
     console.error('Failed to subscribe to push:', error);
     return false;
   }
+}
+
+/**
+ * Subscribe to push notifications after an explicit user action.
+ *
+ * @param vapidPublicKey - The server's VAPID public key
+ * @returns true if subscription was successful
+ */
+export async function subscribe(vapidPublicKey: string): Promise<boolean> {
+  return ensureRegistered(vapidPublicKey, { prompt: true });
 }
 
 /**
@@ -197,37 +233,30 @@ export async function unsubscribe(): Promise<boolean> {
 }
 
 /**
- * Listen for push subscription changes from the service worker.
- * Call this on app mount to handle subscription expiration/revocation.
- */
-export function onSubscriptionChange(callback: () => void): () => void {
-  if (!('serviceWorker' in navigator)) {
-    return () => {};
-  }
-
-  const handler = (event: MessageEvent) => {
-    if (event.data?.type === 'push-subscription-changed') {
-      callback();
-    }
-  };
-
-  navigator.serviceWorker.addEventListener('message', handler);
-  return () => navigator.serviceWorker.removeEventListener('message', handler);
-}
-
-/**
  * Listen for notification-click messages from the service worker.
  * The SW posts these instead of calling `WindowClient.navigate()` so the
  * SPA can route via `goto()` (client-side navigation, no full reload).
  */
-export function onNotificationClick(callback: (url: string) => void): () => void {
+export function onNotificationClick(callback: (url: string) => void | Promise<void>): () => void {
   if (!('serviceWorker' in navigator)) {
     return () => {};
   }
 
   const handler = (event: MessageEvent) => {
-    if (event.data?.type === 'notification-click' && typeof event.data.url === 'string') {
-      callback(event.data.url);
+    if (
+      event.data?.type === NOTIFICATION_CLICK_MESSAGE_TYPE &&
+      typeof event.data.url === 'string'
+    ) {
+      const responsePort = event.ports[0];
+      void (async () => {
+        try {
+          await callback(event.data.url);
+          responsePort?.postMessage({ type: NOTIFICATION_CLICK_ACK_MESSAGE_TYPE });
+        } catch {
+          // Leave the service worker unacknowledged so it can fall back to
+          // WindowClient.navigate() after its timeout.
+        }
+      })();
     }
   };
 

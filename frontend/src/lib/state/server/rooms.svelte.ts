@@ -1,7 +1,9 @@
 import { untrack } from 'svelte';
 import type { Client } from '@urql/svelte';
 import { graphql, useFragment } from '$lib/gql';
+import { isUnsupportedGraphQLFieldError } from '$lib/gql/compatibility';
 import {
+  RoomGroupItemType,
   RoomType,
   UserAvatarUserFragmentDoc,
   type UserAvatarUserFragment
@@ -14,6 +16,9 @@ export type RoomsListItem = {
   name: string;
   type: RoomType;
   hasUnread: boolean;
+  viewerIsMember: boolean;
+  viewerCanJoinRoom: boolean;
+  viewerNotificationCount: number;
   // Populated for DM rooms only — used to derive the display name in the sidebar.
   members: UserAvatarUserFragment[];
 };
@@ -22,50 +27,165 @@ export type RoomsListGroup = {
   id: string;
   name: string;
   roomIds: string[];
+  items?: RoomsListGroupItem[];
 };
+
+export type SidebarLinkListItem = {
+  id: string;
+  label: string;
+  url: string;
+};
+
+export type RoomsListGroupItem =
+  | {
+      id: string;
+      type: 'room';
+      roomId: string;
+    }
+  | {
+      id: string;
+      type: 'link';
+      link: SidebarLinkListItem;
+    };
 
 const MyRoomsQuery = graphql(`
   query GetMyServerRooms {
     viewer {
       user {
         id
-        rooms {
-          id
-          name
-          type
-          hasUnread
-          archived
-          viewerNotificationPreference {
-            level
-            effectiveLevel
-          }
-          members(limit: 100) {
-            users {
-              ...UserAvatarUser
-            }
-          }
-        }
       }
     }
     server {
+      channelRooms: rooms(type: CHANNEL) {
+        id
+        name
+        type
+        hasUnread
+        archived
+        viewerIsMember
+        viewerCanJoinRoom
+        viewerNotificationPreference {
+          level
+          effectiveLevel
+        }
+      }
+      dmRooms: rooms(type: DM) {
+        id
+        name
+        type
+        hasUnread
+        archived
+        viewerIsMember
+        viewerCanJoinRoom
+        viewerNotificationPreference {
+          level
+          effectiveLevel
+        }
+        members(limit: 100) {
+          users {
+            ...UserAvatarUser
+          }
+        }
+      }
       roomGroups {
         id
         name
         rooms {
           id
         }
+        items {
+          type
+          id
+          room {
+            id
+          }
+          link {
+            id
+            label
+            url
+          }
+        }
       }
     }
   }
 `);
 
-function uniqueById<T extends { id: string }>(items: T[]): T[] {
+const MyRoomNotificationCountsQuery = graphql(`
+  query GetMyServerRoomNotificationCounts {
+    server {
+      rooms {
+        id
+        viewerNotifications(limit: 1) {
+          totalCount
+        }
+      }
+    }
+  }
+`);
+
+function uniqueById<T extends { id: string }>(items: readonly T[] | null | undefined): T[] {
   const seen: Record<string, true> = Object.create(null);
-  return items.filter((item) => {
+  return (items ?? []).filter((item) => {
     if (seen[item.id]) return false;
     seen[item.id] = true;
     return true;
   });
+}
+
+function sidebarItemsFromQuery(group: {
+  rooms: Array<{ id: string }>;
+  items?: Array<{
+    type: RoomGroupItemType;
+    id: string;
+    room?: { id: string } | null;
+    link?: { id: string; label: string; url: string } | null;
+  }> | null;
+}): RoomsListGroupItem[] {
+  if (!group.items || group.items.length === 0) {
+    return uniqueById(group.rooms).map((room) => ({
+      id: `room:${room.id}`,
+      type: 'room',
+      roomId: room.id
+    }));
+  }
+  return group.items
+    .map((item): RoomsListGroupItem | null => {
+      if (item.type === RoomGroupItemType.Room && item.room) {
+        return {
+          id: `room:${item.room.id}`,
+          type: 'room',
+          roomId: item.room.id
+        };
+      }
+      if (item.type === RoomGroupItemType.SidebarLink && item.link) {
+        return {
+          id: `link:${item.link.id}`,
+          type: 'link',
+          link: {
+            id: item.link.id,
+            label: item.link.label,
+            url: item.link.url
+          }
+        };
+      }
+      return null;
+    })
+    .filter((item): item is RoomsListGroupItem => item != null);
+}
+
+const roomStateRefreshEvents = new Set([
+  'RoomCreatedEvent',
+  'RoomDeletedEvent',
+  'RoomGroupsUpdatedEvent',
+  'RoomUpdatedEvent',
+  'RoomArchivedEvent',
+  'RoomUnarchivedEvent',
+  'UserJoinedRoomEvent',
+  'UserLeftRoomEvent'
+]);
+
+export function isRoomStateRefreshEvent(typename: string | undefined): boolean {
+  return !!typename && roomStateRefreshEvents.has(typename);
 }
 
 /**
@@ -88,11 +208,9 @@ export class RoomsStore {
   rooms = $state<RoomsListItem[]>([]);
   roomGroups = $state<RoomsListGroup[] | null>(null);
   isInitialLoading = $state(true);
-  // The viewer's user ID, captured from the same `viewer { user { id, rooms } }`
-  // query that produced `rooms`. Use this in preference to a global auth
-  // context when filtering self out of `room.members` — by construction it is
-  // set whenever there are rooms (with members) to render, eliminating any
-  // race with the auth context being briefly empty during route transitions.
+  // The viewer's user ID, captured from the same sidebar bootstrap query that
+  // produced DM `room.members`. Use this in preference to a global auth
+  // context when filtering self out of DM labels and avatars.
   currentUserId = $state<string | null>(null);
 
   private loadId = 0;
@@ -114,7 +232,12 @@ export class RoomsStore {
 
     if (result.data?.viewer?.user) {
       this.currentUserId = result.data.viewer.user.id;
-      const allRooms = uniqueById(result.data.viewer.user.rooms);
+    }
+
+    if (result.data?.server) {
+      const channelRooms = uniqueById(result.data.server.channelRooms);
+      const dmRooms = uniqueById(result.data.server.dmRooms);
+      const allRooms = uniqueById([...channelRooms, ...dmRooms]);
 
       for (const room of allRooms) {
         const pref = room.viewerNotificationPreference;
@@ -123,29 +246,77 @@ export class RoomsStore {
         }
       }
 
-      const visible = allRooms.filter((r: { archived: boolean }) => !r.archived);
-      this.rooms = visible.map((r: typeof allRooms[number]) => ({
-        id: r.id,
-        name: r.name,
-        type: r.type,
-        hasUnread: r.hasUnread,
-        members: r.members.users.map((m: typeof r.members.users[number]) => useFragment(UserAvatarUserFragmentDoc, m))
-      }));
-      this.roomUnread.initRooms(visible);
-    }
+      const visibleChannels = channelRooms.filter((r) => !r.archived);
+      const visibleDms = dmRooms.filter((r) => !r.archived);
 
-    if (result.data?.server?.roomGroups) {
-      type SetT = NonNullable<typeof result.data.server.roomGroups>[number];
-      this.roomGroups = result.data.server.roomGroups.map((s: SetT) => ({
-        id: s.id,
-        name: s.name,
-        roomIds: uniqueById(s.rooms).map((r: SetT['rooms'][number]) => r.id)
-      }));
+      this.rooms = [
+        ...visibleChannels.map((r) => ({
+          id: r.id,
+          name: r.name,
+          type: r.type,
+          hasUnread: r.hasUnread,
+          viewerIsMember: r.viewerIsMember,
+          viewerCanJoinRoom: r.viewerCanJoinRoom,
+          viewerNotificationCount: 0,
+          members: []
+        })),
+        ...visibleDms.map((r) => ({
+          id: r.id,
+          name: r.name,
+          type: r.type,
+          hasUnread: r.hasUnread,
+          viewerIsMember: r.viewerIsMember,
+          viewerCanJoinRoom: r.viewerCanJoinRoom,
+          viewerNotificationCount: 0,
+          members: r.members.users.map((m) => useFragment(UserAvatarUserFragmentDoc, m))
+        }))
+      ];
+      this.roomUnread.initRooms([...visibleChannels, ...visibleDms]);
+      void this.refreshNotificationCounts(thisLoad);
+
+      if (result.data.server.roomGroups) {
+        type SetT = (typeof result.data.server.roomGroups)[number];
+        this.roomGroups = result.data.server.roomGroups.map((s: SetT) => ({
+          id: s.id,
+          name: s.name,
+          roomIds: uniqueById(s.rooms).map((r: SetT['rooms'][number]) => r.id),
+          items: sidebarItemsFromQuery(s)
+        }));
+      }
     } else {
       this.roomGroups = null;
     }
 
     this.isInitialLoading = false;
+  }
+
+  private async refreshNotificationCounts(loadId: number): Promise<void> {
+    try {
+      const result = await this.client.query(MyRoomNotificationCountsQuery, {}).toPromise();
+      if (this.loadId !== loadId) return;
+
+      if (result.error) {
+        if (!isUnsupportedGraphQLFieldError(result.error, 'viewerNotifications')) {
+          console.warn('failed to load room notification counts', result.error);
+        }
+        return;
+      }
+
+      const rooms = result.data?.server?.rooms ?? [];
+      const countsByRoomId: Record<string, number> = Object.create(null);
+      for (const room of rooms) {
+        countsByRoomId[room.id] = room.viewerNotifications.totalCount;
+      }
+
+      untrack(() => {
+        this.rooms = this.rooms.map((room) => ({
+          ...room,
+          viewerNotificationCount: countsByRoomId[room.id] ?? 0
+        }));
+      });
+    } catch (err) {
+      console.warn('failed to load room notification counts', err);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -158,6 +329,33 @@ export class RoomsStore {
 
   setUnread(roomId: string): void {
     this.patchRoom(roomId, { hasUnread: true });
+  }
+
+  incrementUnreadNotification(roomId: string): void {
+    const room = this.rooms.find((r) => r.id === roomId);
+    if (!room) return;
+    this.patchRoom(roomId, { viewerNotificationCount: room.viewerNotificationCount + 1 });
+  }
+
+  decrementUnreadNotification(roomId: string, amount = 1): void {
+    const room = this.rooms.find((r) => r.id === roomId);
+    if (!room) return;
+    this.patchRoom(roomId, {
+      viewerNotificationCount: Math.max(0, room.viewerNotificationCount - amount)
+    });
+  }
+
+  clearUnreadNotifications(roomId: string): void {
+    this.patchRoom(roomId, { viewerNotificationCount: 0 });
+  }
+
+  clearAllUnreadNotifications(): void {
+    untrack(() => {
+      this.rooms = this.rooms.map((room) => ({
+        ...room,
+        viewerNotificationCount: 0
+      }));
+    });
   }
 
   /**
@@ -192,23 +390,19 @@ export class RoomsStore {
   // -------------------------------------------------------------------------
 
   /**
-   * Refresh the room list when membership or room metadata changes. Other
-   * event types (messages, reactions, presence) are no-ops at this level
-   * unless the message arrives for a room we don't yet know about — that's
-   * how a freshly-created empty DM (filtered from the active member-room DM
-   * list until its first message lands) shows up in the sidebar without a
-   * manual reload.
+   * Refresh the room list when membership, room metadata, or group layout
+   * changes. Other event types (messages, reactions, presence) are no-ops at
+   * this level unless the message arrives for a room we don't yet know about —
+   * that's how a freshly-created empty DM (filtered from the active
+   * member-room DM list until its first message lands) shows up in the
+   * sidebar without a manual reload.
    */
-  ingestServerEvent(serverEvent: { event?: { __typename?: string; roomId?: string } | null }): void {
+  ingestServerEvent(serverEvent: {
+    event?: { __typename?: string; roomId?: string } | null;
+  }): void {
     const event = serverEvent.event;
     if (!event) return;
-    if (
-      event.__typename === 'UserJoinedRoomEvent' ||
-      event.__typename === 'UserLeftRoomEvent' ||
-      event.__typename === 'RoomUpdatedEvent' ||
-      event.__typename === 'RoomArchivedEvent' ||
-      event.__typename === 'RoomUnarchivedEvent'
-    ) {
+    if (isRoomStateRefreshEvent(event.__typename)) {
       void this.refresh();
       return;
     }

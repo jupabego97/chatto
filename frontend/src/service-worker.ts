@@ -10,11 +10,8 @@
  */
 
 import { build, files, version } from '$service-worker';
-import {
-  OFFLINE_SHELL_PATH,
-  classifyServiceWorkerRequest,
-  normalizeSameOriginUrl
-} from '$lib/pwa/serviceWorkerPolicy';
+import { OFFLINE_SHELL_PATH, classifyServiceWorkerRequest } from '$lib/pwa/serviceWorkerPolicy';
+import { routeNotificationClick } from '$lib/pwa/notificationClick.worker';
 import {
   handleAssetProxyFetch,
   handleAssetProxyMessage,
@@ -26,7 +23,7 @@ declare const self: ServiceWorkerGlobalScope;
 const CACHE_PREFIX = 'chatto-shell';
 const CACHE_NAME = `${CACHE_PREFIX}-${version}`;
 const SHELL_ASSETS = new Set([...build, ...files, OFFLINE_SHELL_PATH]);
-const PRECACHE_ASSETS = Array.from(new Set([...SHELL_ASSETS, '/']));
+const PRECACHE_ASSETS = Array.from(new Set([...build, ...files, OFFLINE_SHELL_PATH, '/']));
 
 type BadgeCapableNavigator = Navigator & {
   setAppBadge?: (contents?: number) => Promise<void>;
@@ -95,7 +92,13 @@ self.addEventListener('fetch', (event) => {
         const cache = await caches.open(CACHE_NAME);
         const url = new URL(event.request.url);
         const cached = await cache.match(url.pathname);
-        return cached ?? fetch(event.request);
+        if (cached) return cached;
+
+        const response = await fetch(event.request);
+        if (response.ok) {
+          await cache.put(url.pathname, response.clone());
+        }
+        return response;
       })()
     );
     return;
@@ -220,66 +223,12 @@ self.addEventListener('notificationclick', (event) => {
 
   const rawUrl =
     typeof event.notification.data?.url === 'string' ? event.notification.data.url : undefined;
-  const url = normalizeSameOriginUrl(rawUrl, self.location.origin);
-  if (!url) return;
-
   event.waitUntil(
-    (async () => {
-      const clientList = await self.clients.matchAll({
-        type: 'window',
-        includeUncontrolled: true
-      });
-
-      // Prefer postMessage to an existing client — the SPA listener handles
-      // navigation via goto(), avoiding a full document reload when the user
-      // is already on the target URL (or anywhere in the SPA).
-      for (const client of clientList) {
-        if ('focus' in client) {
-          try {
-            const focusedClient = await client.focus();
-            if (focusedClient) {
-              focusedClient.postMessage({ type: 'notification-click', url });
-              return;
-            }
-          } catch (err) {
-            console.warn('[SW] Failed to focus existing window:', err);
-          }
-          // Focus didn't yield a client — fall back to navigate().
-          try {
-            if ('navigate' in client) {
-              const navigatedClient = await (client as WindowClient).navigate(url);
-              if (navigatedClient) {
-                return;
-              }
-            }
-          } catch (err) {
-            console.warn('[SW] Failed to navigate existing window:', err);
-          }
-          break;
-        }
+    routeNotificationClick(rawUrl, self.location.origin, self.clients, { logger: console }).catch(
+      (err) => {
+        console.error('[SW] Error handling notification click:', err);
       }
-
-      // Fallback: open a new window
-      await self.clients.openWindow(url);
-    })().catch((err) => {
-      console.error('[SW] Error handling notification click:', err);
-    })
-  );
-});
-
-/**
- * Handle push subscription changes.
- * This can happen when the browser's push subscription expires or is revoked.
- * We re-subscribe and update the server.
- */
-self.addEventListener('pushsubscriptionchange', (event) => {
-  // Send a message to any open clients to trigger re-subscription
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window' }).then((clients) => {
-      clients.forEach((client) => {
-        client.postMessage({ type: 'push-subscription-changed' });
-      });
-    })
+    )
   );
 });
 

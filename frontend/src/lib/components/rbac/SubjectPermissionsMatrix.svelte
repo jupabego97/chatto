@@ -55,31 +55,37 @@ apply at that scope's tier).
 
   const CATEGORY_META: Record<string, { title: string; description: string }> = {
     space: {
-      title: 'Space Permissions',
-      description: 'Control who can browse, create, join, and manage spaces'
+      title: 'Server Permissions',
+      description: 'Server-level capabilities kept under the legacy category key for compatibility'
     },
     room: {
       title: 'Room Permissions',
-      description: 'Control who can create, join, and manage rooms'
+      description:
+        'Server defaults for room discovery and joining, plus room creation. Add room/group denies for local restrictions'
     },
     message: {
       title: 'Message Permissions',
-      description: 'Control what users can do with messages'
+      description:
+        'Server defaults for posting, threads, reactions, echoing, and message moderation. Room/group denies create local exceptions'
     },
     member: {
       title: 'Member Permissions',
-      description: 'Control who can invite and remove space members'
+      description: 'Control who can invite and remove server members'
     },
     role: {
       title: 'Role Permissions',
-      description: 'Control who can create roles and assign them to users'
+      description: 'Control who can edit roles, assign roles, and manage permission presets'
     },
     admin: {
       title: 'Admin Permissions',
-      description: 'Access to server-wide admin functions'
+      description: 'Control access to server-wide administrative views and diagnostics'
     },
-    dm: { title: 'DM Permissions', description: 'Control access to direct messaging' },
-    user: { title: 'User Permissions', description: 'Control user account operations' }
+    dm: { title: 'DM Permissions', description: 'Control access to direct messaging entry points' },
+    user: {
+      title: 'User Permissions',
+      description:
+        'Control user account and per-user permission operations. Any non-owner deny cancels grants'
+    }
   };
 
   let {
@@ -87,6 +93,8 @@ apply at that scope's tier).
     updatingKey = null,
     onCycle,
     subjectKind = 'subject',
+    forceAllow = false,
+    readOnly = false,
     categoryOrder = DEFAULT_CATEGORY_ORDER
   }: {
     data: MatrixData;
@@ -95,6 +103,10 @@ apply at that scope's tier).
     onCycle: (scope: MatrixScope, permission: string, next: CellState) => void;
     /** Used in aria/title text — "user", "role", etc. */
     subjectKind?: string;
+    /** Display every existing cell as allowed regardless of stored decisions. */
+    forceAllow?: boolean;
+    /** Disable cell mutation controls. */
+    readOnly?: boolean;
     categoryOrder?: string[];
   } = $props();
 
@@ -246,23 +258,32 @@ apply at that scope's tier).
                   {#if cell}
                     {@const ov = decisionToState(cell.override)}
                     {@const eff = decisionToState(cell.effective)}
-                    {@const ariaLabel =
-                      ov !== 'neutral'
+                    {@const displayOverride = forceAllow ? 'allow' : ov}
+                    {@const displayEffective = forceAllow ? 'neutral' : eff}
+                    {@const ariaLabel = forceAllow
+                      ? `${subjectKind} is always granted ${permission} at ${scope.label}`
+                      : ov !== 'neutral'
                         ? `Override ${ov} for ${permission} at ${scope.label}`
                         : `No override for ${permission} at ${scope.label}, effective ${eff}`}
-                    {@const titleParts = [
-                      ov !== 'neutral'
-                        ? `${ov === 'allow' ? 'Allow' : 'Deny'} (${subjectKind} override at ${scope.label})`
-                        : null,
-                      ov === 'neutral' && eff !== 'neutral'
-                        ? `Effective ${eff === 'allow' ? 'Allow' : 'Deny'} (inherited)`
-                        : null,
-                      ov === 'neutral' && eff === 'neutral' ? 'No decision' : null
-                    ].filter(Boolean)}
+                    {@const titleParts = forceAllow
+                      ? [
+                          'Allow (owners are always granted all permissions)',
+                          'Owner permissions are not editable'
+                        ]
+                      : [
+                          ov !== 'neutral'
+                            ? `${ov === 'allow' ? 'Allow' : 'Deny'} (${subjectKind} override at ${scope.label})`
+                            : null,
+                          ov === 'neutral' && eff !== 'neutral'
+                            ? `Effective ${eff === 'allow' ? 'Allow' : 'Deny'} (inherited)`
+                            : null,
+                          ov === 'neutral' && eff === 'neutral' ? 'No decision' : null
+                        ].filter(Boolean)}
                     <MatrixCell
-                      override={ov}
-                      inherited={eff}
+                      override={displayOverride}
+                      inherited={displayEffective}
                       updating={isUpdating}
+                      disabled={readOnly}
                       {ariaLabel}
                       title={titleParts.join(' · ')}
                       onCycle={(next) => onCycle(scope, permission, next)}

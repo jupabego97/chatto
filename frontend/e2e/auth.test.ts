@@ -1,4 +1,5 @@
 import { test, expect } from './setup';
+import { csrfHeaders } from './fixtures/csrf';
 import { createAndLoginTestUser } from './fixtures/testUser';
 import * as routes from './routes';
 
@@ -376,9 +377,7 @@ test.describe('Authentication', () => {
       // Click sign out button - should show confirmation modal
       await authPage.logoutButton.click();
       await expect(authPage.logoutDialog).toBeVisible();
-      await expect(
-        authPage.logoutDialog.getByText('disconnect all instances')
-      ).toBeVisible();
+      await expect(authPage.logoutDialog.getByText('disconnect all instances')).toBeVisible();
     });
 
     test('can cancel logout and stay logged in', async ({ authPage }) => {
@@ -440,7 +439,11 @@ test.describe('Authentication', () => {
       // Register via the two-step email flow (token proves email ownership).
       // registerViaApi uses page.request which shares cookies, so the user is
       // automatically logged in after registration — no separate login needed.
-      const data = await authPage.registerViaApi(`verified${timestamp}`, testEmail, 'testpassword123');
+      const data = await authPage.registerViaApi(
+        `verified${timestamp}`,
+        testEmail,
+        'testpassword123'
+      );
       expect(data.success).toBe(true);
 
       // Navigate to chat to ensure the authenticated context is loaded
@@ -476,6 +479,7 @@ test.describe('Authentication', () => {
 
       // Check that user has verified email via GraphQL
       const meResponse = await page.request.post('/api/graphql', {
+        headers: { 'Content-Type': 'application/json', 'X-REQUEST-TYPE': 'GraphQL' },
         data: {
           query: `query { viewer { user { id hasVerifiedEmail verifiedEmails } } }`
         }
@@ -497,18 +501,17 @@ test.describe('Authentication', () => {
       const userId = firstData.user.id;
 
       // Clear session by logging out
-      await page.request.post('/auth/logout');
+      await page.request.post('/auth/logout', { headers: await csrfHeaders(page) });
 
       // Second OAuth login - should find existing user by verified email
       const secondData = await authPage.simulateOAuthCallback(oauthEmail, 'Existing OAuth User');
       expect(secondData.isNewUser).toBe(false);
       expect(secondData.user.id).toBe(userId); // Same user ID
     });
-
   });
 });
 
-test('complete user journey: signup -> create space -> post message', async ({
+test('complete user journey: signup -> open server -> post message', async ({
   page,
   chatPage,
   roomPage
@@ -516,9 +519,8 @@ test('complete user journey: signup -> create space -> post message', async ({
   // Step 1: Create and login test user
   const testUser = await createAndLoginTestUser(page);
 
-  // Step 2: Navigate to chat and create a new space
+  // Step 2: Navigate to chat and open the primary server
   await chatPage.goto();
-  await chatPage.createSpace();
 
   // Step 3: Navigate to #general room (should be auto-created)
   await chatPage.enterRoom('general');

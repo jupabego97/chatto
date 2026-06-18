@@ -139,7 +139,7 @@ var (
 // regardless of whether it contains ASCII or multi-byte UTF-8 characters.
 const (
 	// MessageEditWindow is the duration after posting during which a user can edit
-	// their own message. Moderators with message.edit.any can edit at any time.
+	// their own message. Moderators with message.manage can edit at any time.
 	MessageEditWindow = 3 * time.Hour
 
 	// MaxMessageBodyLength is the maximum length of a message body in bytes.
@@ -198,6 +198,12 @@ const (
 
 	// MaxRoomGroupDescriptionLength is the maximum length of a room group description in bytes.
 	MaxRoomGroupDescriptionLength = 500
+
+	// MaxSidebarLinkLabelLength is the maximum length of a sidebar link label in bytes.
+	MaxSidebarLinkLabelLength = 80
+
+	// MaxSidebarLinkURLLength is the maximum length of a sidebar link URL in bytes.
+	MaxSidebarLinkURLLength = 2048
 
 	// MaxPushEndpointLength is the maximum length of a Push API endpoint URL in bytes.
 	MaxPushEndpointLength = 4096

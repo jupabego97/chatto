@@ -166,6 +166,13 @@ type ComplexityRoot struct {
 		Width             func(childComplexity int) int
 	}
 
+	AuthProvider struct {
+		ID       func(childComplexity int) int
+		Label    func(childComplexity int) int
+		LoginURL func(childComplexity int) int
+		Type     func(childComplexity int) int
+	}
+
 	BotToken struct {
 		Bot          func(childComplexity int) int
 		CreatedAt    func(childComplexity int) int
@@ -185,6 +192,7 @@ type ComplexityRoot struct {
 	}
 
 	CallParticipant struct {
+		CallID   func(childComplexity int) int
 		JoinedAt func(childComplexity int) int
 		User     func(childComplexity int) int
 	}
@@ -227,12 +235,11 @@ type ComplexityRoot struct {
 	}
 
 	Event struct {
-		Actor          func(childComplexity int) int
-		ActorID        func(childComplexity int) int
-		CreatedAt      func(childComplexity int) int
-		DeliveryCursor func(childComplexity int) int
-		Event          func(childComplexity int) int
-		ID             func(childComplexity int) int
+		Actor     func(childComplexity int) int
+		ActorID   func(childComplexity int) int
+		CreatedAt func(childComplexity int) int
+		Event     func(childComplexity int) int
+		ID        func(childComplexity int) int
 	}
 
 	EventLogConnection struct {
@@ -338,6 +345,7 @@ type ComplexityRoot struct {
 		RoomID                    func(childComplexity int) int
 		ThreadParticipants        func(childComplexity int, first *int32) int
 		ThreadReplies             func(childComplexity int, limit *int32, before *string, after *string) int
+		ThreadRepliesAround       func(childComplexity int, eventID string, limit *int32) int
 		ThreadRootEventID         func(childComplexity int) int
 		UpdatedAt                 func(childComplexity int) int
 		ViewerIsFollowingThread   func(childComplexity int) int
@@ -364,6 +372,7 @@ type ComplexityRoot struct {
 		CreateRole                 func(childComplexity int, input model.CreateRoleInput) int
 		CreateRoom                 func(childComplexity int, input model.CreateRoomInput) int
 		CreateRoomGroup            func(childComplexity int, input model.CreateRoomGroupInput) int
+		CreateSidebarLink          func(childComplexity int, input model.CreateSidebarLinkInput) int
 		DeleteAttachment           func(childComplexity int, input model.DeleteAttachmentInput) int
 		DeleteAvatar               func(childComplexity int, input model.DeleteAvatarInput) int
 		DeleteBot                  func(childComplexity int, botUserID string) int
@@ -374,6 +383,7 @@ type ComplexityRoot struct {
 		DeleteRoomGroup            func(childComplexity int, input model.DeleteRoomGroupInput) int
 		DeleteServerBanner         func(childComplexity int) int
 		DeleteServerLogo           func(childComplexity int) int
+		DeleteSidebarLink          func(childComplexity int, input model.DeleteSidebarLinkInput) int
 		DenyGroupPermission        func(childComplexity int, input model.GroupPermissionInput) int
 		DenyPermission             func(childComplexity int, input model.DenyPermissionInput) int
 		DenyRoomPermission         func(childComplexity int, input model.DenyRoomPermissionInput) int
@@ -393,11 +403,13 @@ type ComplexityRoot struct {
 		MarkRoomAsRead             func(childComplexity int, input model.MarkRoomAsReadInput) int
 		MarkThreadAsRead           func(childComplexity int, input model.MarkThreadAsReadInput) int
 		MoveRoomToGroup            func(childComplexity int, input model.MoveRoomToGroupInput) int
+		MoveSidebarLinkToGroup     func(childComplexity int, input model.MoveSidebarLinkToGroupInput) int
 		PostMessage                func(childComplexity int, input model.PostMessageInput) int
 		RemoveReaction             func(childComplexity int, input model.RemoveReactionInput) int
 		ReorderRoles               func(childComplexity int, input model.ReorderRolesInput) int
 		ReorderRoomGroups          func(childComplexity int, input model.ReorderRoomGroupsInput) int
 		ReorderRoomsInGroup        func(childComplexity int, input model.ReorderRoomsInGroupInput) int
+		ReorderSidebarItemsInGroup func(childComplexity int, input model.ReorderSidebarItemsInGroupInput) int
 		RequestAccountDeletion     func(childComplexity int) int
 		RevokeBotToken             func(childComplexity int, input model.RevokeBotTokenInput) int
 		RevokePermission           func(childComplexity int, input model.RevokePermissionInput) int
@@ -419,6 +431,7 @@ type ComplexityRoot struct {
 		UpdateRoomGroup            func(childComplexity int, input model.UpdateRoomGroupInput) int
 		UpdateServerConfig         func(childComplexity int, input model.UpdateServerConfigInput) int
 		UpdateSettings             func(childComplexity int, input model.UpdateSettingsInput) int
+		UpdateSidebarLink          func(childComplexity int, input model.UpdateSidebarLinkInput) int
 		UploadAvatar               func(childComplexity int, input model.UploadAvatarInput) int
 		UploadServerBanner         func(childComplexity int, input model.UploadServerBannerInput) int
 		UploadServerLogo           func(childComplexity int, input model.UploadServerLogoInput) int
@@ -541,6 +554,7 @@ type ComplexityRoot struct {
 		Failed                 func(childComplexity int) int
 		FailedSequence         func(childComplexity int) int
 		Failure                func(childComplexity int) int
+		Key                    func(childComplexity int) int
 		Lag                    func(childComplexity int) int
 		LastAppliedSequence    func(childComplexity int) int
 		MatchingStreamSequence func(childComplexity int) int
@@ -630,6 +644,7 @@ type ComplexityRoot struct {
 
 	Room struct {
 		Archived                     func(childComplexity int) int
+		Attachments                  func(childComplexity int, limit *int32, offset *int32) int
 		AvailableRoomPermissions     func(childComplexity int) int
 		CallParticipants             func(childComplexity int) int
 		Description                  func(childComplexity int) int
@@ -639,10 +654,11 @@ type ComplexityRoot struct {
 		GroupID                      func(childComplexity int) int
 		HasUnread                    func(childComplexity int) int
 		Id                           func(childComplexity int) int
-		Members                      func(childComplexity int, limit *int32, offset *int32) int
+		Members                      func(childComplexity int, search *string, limit *int32, offset *int32) int
 		Name                         func(childComplexity int) int
 		RoomPermissionOverrides      func(childComplexity int) int
 		Type                         func(childComplexity int) int
+		ViewerCanAttach              func(childComplexity int) int
 		ViewerCanBanRoomMembers      func(childComplexity int) int
 		ViewerCanEchoMessage         func(childComplexity int) int
 		ViewerCanJoinRoom            func(childComplexity int) int
@@ -652,12 +668,27 @@ type ComplexityRoot struct {
 		ViewerCanPostInThread        func(childComplexity int) int
 		ViewerCanPostMessage         func(childComplexity int) int
 		ViewerCanReact               func(childComplexity int) int
+		ViewerIsMember               func(childComplexity int) int
 		ViewerNotificationPreference func(childComplexity int) int
+		ViewerNotifications          func(childComplexity int, limit *int32, offset *int32) int
 		VoiceCallToken               func(childComplexity int) int
 	}
 
 	RoomArchivedEvent struct {
 		RoomId func(childComplexity int) int
+	}
+
+	RoomAttachmentItem struct {
+		Attachment        func(childComplexity int) int
+		CreatedAt         func(childComplexity int) int
+		MessageEventID    func(childComplexity int) int
+		ThreadRootEventID func(childComplexity int) int
+	}
+
+	RoomAttachmentsConnection struct {
+		HasMore    func(childComplexity int) int
+		Items      func(childComplexity int) int
+		TotalCount func(childComplexity int) int
 	}
 
 	RoomBan struct {
@@ -703,8 +734,16 @@ type ComplexityRoot struct {
 	RoomGroup struct {
 		Description func(childComplexity int) int
 		ID          func(childComplexity int) int
+		Items       func(childComplexity int) int
 		Name        func(childComplexity int) int
 		Rooms       func(childComplexity int) int
+	}
+
+	RoomGroupItem struct {
+		ID   func(childComplexity int) int
+		Link func(childComplexity int) int
+		Room func(childComplexity int) int
+		Type func(childComplexity int) int
 	}
 
 	RoomGroupRolePermissions struct {
@@ -771,40 +810,42 @@ type ComplexityRoot struct {
 	}
 
 	Server struct {
-		AssetCount                   func(childComplexity int) int
-		AvailablePermissions         func(childComplexity int) int
-		DirectRegistrationEnabled    func(childComplexity int) int
-		EnabledAuthProviders         func(childComplexity int) int
-		LivekitURL                   func(childComplexity int) int
-		MaxUploadSize                func(childComplexity int) int
-		MaxVideoUploadSize           func(childComplexity int) int
-		Member                       func(childComplexity int, userID string) int
-		MemberCount                  func(childComplexity int) int
-		Members                      func(childComplexity int, search *string, limit *int32, offset *int32) int
-		MessageEditWindowSeconds     func(childComplexity int) int
-		Profile                      func(childComplexity int) int
-		PushNotificationsEnabled     func(childComplexity int) int
-		Role                         func(childComplexity int, name string) int
-		RoleUsers                    func(childComplexity int, roleName string) int
-		Roles                        func(childComplexity int) int
-		RoomCount                    func(childComplexity int) int
-		RoomGroups                   func(childComplexity int) int
-		Rooms                        func(childComplexity int, typeArg *model.RoomType) int
-		UserEffectiveDenials         func(childComplexity int, userID string) int
-		UserEffectivePermissions     func(childComplexity int, userID string) int
-		VapidPublicKey               func(childComplexity int) int
-		Version                      func(childComplexity int) int
-		VideoProcessingEnabled       func(childComplexity int) int
-		ViewerCanAssignRoles         func(childComplexity int) int
-		ViewerCanCreateRoom          func(childComplexity int) int
-		ViewerCanManageRoles         func(childComplexity int) int
-		ViewerCanManageRooms         func(childComplexity int) int
-		ViewerCanManageServer        func(childComplexity int) int
-		ViewerCanManageUser          func(childComplexity int, userID string) int
-		ViewerHasAnyAdminPermission  func(childComplexity int) int
-		ViewerHasUnreadRooms         func(childComplexity int) int
-		ViewerNotificationPreference func(childComplexity int) int
-		ViewerPermissions            func(childComplexity int) int
+		AssetCount                     func(childComplexity int) int
+		AuthProviders                  func(childComplexity int) int
+		AvailablePermissions           func(childComplexity int) int
+		DirectRegistrationEnabled      func(childComplexity int) int
+		LivekitURL                     func(childComplexity int) int
+		MaxUploadSize                  func(childComplexity int) int
+		MaxVideoUploadSize             func(childComplexity int) int
+		Member                         func(childComplexity int, userID string) int
+		MemberCount                    func(childComplexity int) int
+		Members                        func(childComplexity int, search *string, limit *int32, offset *int32) int
+		MessageEditWindowSeconds       func(childComplexity int) int
+		Profile                        func(childComplexity int) int
+		PushNotificationsEnabled       func(childComplexity int) int
+		Role                           func(childComplexity int, name string) int
+		RoleUsers                      func(childComplexity int, roleName string) int
+		Roles                          func(childComplexity int) int
+		RoomCount                      func(childComplexity int) int
+		RoomGroups                     func(childComplexity int) int
+		Rooms                          func(childComplexity int, typeArg *model.RoomType) int
+		UserEffectiveDenials           func(childComplexity int, userID string) int
+		UserEffectivePermissions       func(childComplexity int, userID string) int
+		VapidPublicKey                 func(childComplexity int) int
+		Version                        func(childComplexity int) int
+		VideoProcessingEnabled         func(childComplexity int) int
+		ViewerCanAssignRoles           func(childComplexity int) int
+		ViewerCanCreateRoom            func(childComplexity int) int
+		ViewerCanManageRoles           func(childComplexity int) int
+		ViewerCanManageRooms           func(childComplexity int) int
+		ViewerCanManageServer          func(childComplexity int) int
+		ViewerCanManageUser            func(childComplexity int, userID string) int
+		ViewerCanManageUserPermissions func(childComplexity int) int
+		ViewerHasAnyAdminPermission    func(childComplexity int) int
+		ViewerHasUnreadRooms           func(childComplexity int) int
+		ViewerNotificationPreference   func(childComplexity int) int
+		ViewerNotifications            func(childComplexity int, limit *int32, offset *int32) int
+		ViewerPermissions              func(childComplexity int) int
 	}
 
 	ServerMemberDeletedEvent struct {
@@ -848,8 +889,14 @@ type ComplexityRoot struct {
 		Reason func(childComplexity int) int
 	}
 
+	SidebarLink struct {
+		Id    func(childComplexity int) int
+		Label func(childComplexity int) int
+		Url   func(childComplexity int) int
+	}
+
 	Subscription struct {
-		MyEvents func(childComplexity int, after *string) int
+		MyEvents func(childComplexity int) int
 	}
 
 	SystemInfo struct {
@@ -895,6 +942,7 @@ type ComplexityRoot struct {
 		AvatarURL                   func(childComplexity int, width *int32, height *int32, fit *model.FitMode) int
 		BotOwner                    func(childComplexity int) int
 		CreatedAt                   func(childComplexity int) int
+		Deleted                     func(childComplexity int) int
 		DisplayName                 func(childComplexity int) int
 		HasVerifiedEmail            func(childComplexity int) int
 		Id                          func(childComplexity int) int
@@ -998,6 +1046,7 @@ type ComplexityRoot struct {
 	}
 
 	VoiceCallToken struct {
+		CallID  func(childComplexity int) int
 		E2EEKey func(childComplexity int) int
 		Token   func(childComplexity int) int
 	}
@@ -1063,7 +1112,6 @@ type EventResolver interface {
 	CreatedAt(ctx context.Context, obj core.EventEnvelope) (*timestamppb.Timestamp, error)
 	ActorID(ctx context.Context, obj core.EventEnvelope) (*string, error)
 	Actor(ctx context.Context, obj core.EventEnvelope) (*corev1.User, error)
-	DeliveryCursor(ctx context.Context, obj core.EventEnvelope) (*string, error)
 	Event(ctx context.Context, obj core.EventEnvelope) (model.EventType, error)
 }
 type FollowedThreadResolver interface {
@@ -1110,6 +1158,7 @@ type MessagePostedEventResolver interface {
 	ThreadParticipants(ctx context.Context, obj *model.MessagePostedEvent, first *int32) ([]*corev1.User, error)
 	ViewerIsFollowingThread(ctx context.Context, obj *model.MessagePostedEvent) (*bool, error)
 	ThreadReplies(ctx context.Context, obj *model.MessagePostedEvent, limit *int32, before *string, after *string) (*model.RoomEventsConnection, error)
+	ThreadRepliesAround(ctx context.Context, obj *model.MessagePostedEvent, eventID string, limit *int32) (*model.RoomEventsConnection, error)
 	LinkPreview(ctx context.Context, obj *model.MessagePostedEvent) (*corev1.LinkPreview, error)
 }
 type MessageRetractedEventResolver interface {
@@ -1166,6 +1215,11 @@ type MutationResolver interface {
 	ReorderRoomGroups(ctx context.Context, input model.ReorderRoomGroupsInput) ([]*model.RoomGroupModel, error)
 	MoveRoomToGroup(ctx context.Context, input model.MoveRoomToGroupInput) (*corev1.Room, error)
 	ReorderRoomsInGroup(ctx context.Context, input model.ReorderRoomsInGroupInput) (*model.RoomGroupModel, error)
+	CreateSidebarLink(ctx context.Context, input model.CreateSidebarLinkInput) (*corev1.SidebarLink, error)
+	UpdateSidebarLink(ctx context.Context, input model.UpdateSidebarLinkInput) (*corev1.SidebarLink, error)
+	DeleteSidebarLink(ctx context.Context, input model.DeleteSidebarLinkInput) (bool, error)
+	MoveSidebarLinkToGroup(ctx context.Context, input model.MoveSidebarLinkToGroupInput) (*corev1.SidebarLink, error)
+	ReorderSidebarItemsInGroup(ctx context.Context, input model.ReorderSidebarItemsInGroupInput) (*model.RoomGroupModel, error)
 	GrantGroupPermission(ctx context.Context, input model.GroupPermissionInput) (bool, error)
 	DenyGroupPermission(ctx context.Context, input model.GroupPermissionInput) (bool, error)
 	ClearGroupPermissionState(ctx context.Context, input model.GroupPermissionInput) (bool, error)
@@ -1240,11 +1294,15 @@ type RoleResolver interface {
 type RoomResolver interface {
 	Type(ctx context.Context, obj *corev1.Room) (model.RoomType, error)
 
-	Members(ctx context.Context, obj *corev1.Room, limit *int32, offset *int32) (*model.RoomMembersConnection, error)
+	Members(ctx context.Context, obj *corev1.Room, search *string, limit *int32, offset *int32) (*model.RoomMembersConnection, error)
+	Attachments(ctx context.Context, obj *corev1.Room, limit *int32, offset *int32) (*model.RoomAttachmentsConnection, error)
 	HasUnread(ctx context.Context, obj *corev1.Room) (bool, error)
+	ViewerNotifications(ctx context.Context, obj *corev1.Room, limit *int32, offset *int32) (*model.NotificationsConnection, error)
 	ViewerCanPostMessage(ctx context.Context, obj *corev1.Room) (bool, error)
 	ViewerCanPostInThread(ctx context.Context, obj *corev1.Room) (bool, error)
+	ViewerCanAttach(ctx context.Context, obj *corev1.Room) (bool, error)
 	ViewerCanReact(ctx context.Context, obj *corev1.Room) (bool, error)
+	ViewerIsMember(ctx context.Context, obj *corev1.Room) (bool, error)
 	ViewerCanManageOthersMessage(ctx context.Context, obj *corev1.Room) (bool, error)
 	ViewerCanListRoom(ctx context.Context, obj *corev1.Room) (bool, error)
 	ViewerCanJoinRoom(ctx context.Context, obj *corev1.Room) (bool, error)
@@ -1274,6 +1332,7 @@ type RoomCreatedEventResolver interface {
 }
 type RoomGroupResolver interface {
 	Rooms(ctx context.Context, obj *model.RoomGroupModel) ([]*corev1.Room, error)
+	Items(ctx context.Context, obj *model.RoomGroupModel) ([]*model.RoomGroupItem, error)
 }
 type RoomGroupsUpdatedEventResolver interface {
 	Changed(ctx context.Context, obj *corev1.RoomGroupsUpdatedEvent) (bool, error)
@@ -1306,6 +1365,7 @@ type ServerResolver interface {
 	ViewerCanCreateRoom(ctx context.Context, obj *model.Server) (bool, error)
 	ViewerCanManageRooms(ctx context.Context, obj *model.Server) (bool, error)
 	ViewerHasUnreadRooms(ctx context.Context, obj *model.Server) (bool, error)
+	ViewerNotifications(ctx context.Context, obj *model.Server, limit *int32, offset *int32) (*model.NotificationsConnection, error)
 	ViewerNotificationPreference(ctx context.Context, obj *model.Server) (*model.ViewerNotificationPreference, error)
 	Member(ctx context.Context, obj *model.Server, userID string) (*corev1.User, error)
 	Members(ctx context.Context, obj *model.Server, search *string, limit *int32, offset *int32) (*model.ServerMembersConnection, error)
@@ -1315,6 +1375,7 @@ type ServerResolver interface {
 	ViewerPermissions(ctx context.Context, obj *model.Server) ([]string, error)
 	ViewerCanManageRoles(ctx context.Context, obj *model.Server) (bool, error)
 	ViewerCanAssignRoles(ctx context.Context, obj *model.Server) (bool, error)
+	ViewerCanManageUserPermissions(ctx context.Context, obj *model.Server) (bool, error)
 	ViewerCanManageUser(ctx context.Context, obj *model.Server, userID string) (bool, error)
 	RoleUsers(ctx context.Context, obj *model.Server, roleName string) ([]*corev1.User, error)
 	UserEffectivePermissions(ctx context.Context, obj *model.Server, userID string) ([]string, error)
@@ -1338,7 +1399,7 @@ type ServerUserPreferencesUpdatedEventResolver interface {
 	TimeFormat(ctx context.Context, obj *corev1.ServerUserPreferencesUpdatedEvent) (model.TimeFormat, error)
 }
 type SubscriptionResolver interface {
-	MyEvents(ctx context.Context, after *string) (<-chan core.EventEnvelope, error)
+	MyEvents(ctx context.Context) (<-chan core.EventEnvelope, error)
 }
 type UserResolver interface {
 	AvatarURL(ctx context.Context, obj *corev1.User, width *int32, height *int32, fit *model.FitMode) (*string, error)
@@ -1774,6 +1835,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Attachment.Width(childComplexity), true
 
+	case "AuthProvider.id":
+		if e.ComplexityRoot.AuthProvider.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AuthProvider.ID(childComplexity), true
+	case "AuthProvider.label":
+		if e.ComplexityRoot.AuthProvider.Label == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AuthProvider.Label(childComplexity), true
+	case "AuthProvider.loginUrl":
+		if e.ComplexityRoot.AuthProvider.LoginURL == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AuthProvider.LoginURL(childComplexity), true
+	case "AuthProvider.type":
+		if e.ComplexityRoot.AuthProvider.Type == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AuthProvider.Type(childComplexity), true
+
 	case "BotToken.bot":
 		if e.ComplexityRoot.BotToken.Bot == nil {
 			break
@@ -1848,6 +1934,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.CallEndedEvent.RoomId(childComplexity), true
 
+	case "CallParticipant.callId":
+		if e.ComplexityRoot.CallParticipant.CallID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CallParticipant.CallID(childComplexity), true
 	case "CallParticipant.joinedAt":
 		if e.ComplexityRoot.CallParticipant.JoinedAt == nil {
 			break
@@ -1999,12 +2091,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Event.CreatedAt(childComplexity), true
-	case "Event.deliveryCursor":
-		if e.ComplexityRoot.Event.DeliveryCursor == nil {
-			break
-		}
-
-		return e.ComplexityRoot.Event.DeliveryCursor(childComplexity), true
 	case "Event.event":
 		if e.ComplexityRoot.Event.Event == nil {
 			break
@@ -2446,6 +2532,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.MessagePostedEvent.ThreadReplies(childComplexity, args["limit"].(*int32), args["before"].(*string), args["after"].(*string)), true
+	case "MessagePostedEvent.threadRepliesAround":
+		if e.ComplexityRoot.MessagePostedEvent.ThreadRepliesAround == nil {
+			break
+		}
+
+		args, err := ec.field_MessagePostedEvent_threadRepliesAround_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.MessagePostedEvent.ThreadRepliesAround(childComplexity, args["eventId"].(string), args["limit"].(*int32)), true
 	case "MessagePostedEvent.threadRootEventId":
 		if e.ComplexityRoot.MessagePostedEvent.ThreadRootEventID == nil {
 			break
@@ -2633,6 +2730,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CreateRoomGroup(childComplexity, args["input"].(model.CreateRoomGroupInput)), true
+	case "Mutation.createSidebarLink":
+		if e.ComplexityRoot.Mutation.CreateSidebarLink == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_createSidebarLink_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CreateSidebarLink(childComplexity, args["input"].(model.CreateSidebarLinkInput)), true
 	case "Mutation.deleteAttachment":
 		if e.ComplexityRoot.Mutation.DeleteAttachment == nil {
 			break
@@ -2733,6 +2841,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.DeleteServerLogo(childComplexity), true
+	case "Mutation.deleteSidebarLink":
+		if e.ComplexityRoot.Mutation.DeleteSidebarLink == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_deleteSidebarLink_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.DeleteSidebarLink(childComplexity, args["input"].(model.DeleteSidebarLinkInput)), true
 	case "Mutation.denyGroupPermission":
 		if e.ComplexityRoot.Mutation.DenyGroupPermission == nil {
 			break
@@ -2937,6 +3056,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.MoveRoomToGroup(childComplexity, args["input"].(model.MoveRoomToGroupInput)), true
+	case "Mutation.moveSidebarLinkToGroup":
+		if e.ComplexityRoot.Mutation.MoveSidebarLinkToGroup == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_moveSidebarLinkToGroup_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.MoveSidebarLinkToGroup(childComplexity, args["input"].(model.MoveSidebarLinkToGroupInput)), true
 	case "Mutation.postMessage":
 		if e.ComplexityRoot.Mutation.PostMessage == nil {
 			break
@@ -2992,6 +3122,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ReorderRoomsInGroup(childComplexity, args["input"].(model.ReorderRoomsInGroupInput)), true
+	case "Mutation.reorderSidebarItemsInGroup":
+		if e.ComplexityRoot.Mutation.ReorderSidebarItemsInGroup == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_reorderSidebarItemsInGroup_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ReorderSidebarItemsInGroup(childComplexity, args["input"].(model.ReorderSidebarItemsInGroupInput)), true
 	case "Mutation.requestAccountDeletion":
 		if e.ComplexityRoot.Mutation.RequestAccountDeletion == nil {
 			break
@@ -3218,6 +3359,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.UpdateSettings(childComplexity, args["input"].(model.UpdateSettingsInput)), true
+	case "Mutation.updateSidebarLink":
+		if e.ComplexityRoot.Mutation.UpdateSidebarLink == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateSidebarLink_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateSidebarLink(childComplexity, args["input"].(model.UpdateSidebarLinkInput)), true
 	case "Mutation.uploadAvatar":
 		if e.ComplexityRoot.Mutation.UploadAvatar == nil {
 			break
@@ -3710,6 +3862,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ProjectionState.Failure(childComplexity), true
+	case "ProjectionState.key":
+		if e.ComplexityRoot.ProjectionState.Key == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProjectionState.Key(childComplexity), true
 	case "ProjectionState.lag":
 		if e.ComplexityRoot.ProjectionState.Lag == nil {
 			break
@@ -4125,6 +4283,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Room.Archived(childComplexity), true
+	case "Room.attachments":
+		if e.ComplexityRoot.Room.Attachments == nil {
+			break
+		}
+
+		args, err := ec.field_Room_attachments_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Room.Attachments(childComplexity, args["limit"].(*int32), args["offset"].(*int32)), true
 	case "Room.availableRoomPermissions":
 		if e.ComplexityRoot.Room.AvailableRoomPermissions == nil {
 			break
@@ -4204,7 +4373,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Room.Members(childComplexity, args["limit"].(*int32), args["offset"].(*int32)), true
+		return e.ComplexityRoot.Room.Members(childComplexity, args["search"].(*string), args["limit"].(*int32), args["offset"].(*int32)), true
 	case "Room.name":
 		if e.ComplexityRoot.Room.Name == nil {
 			break
@@ -4223,6 +4392,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Room.Type(childComplexity), true
+	case "Room.viewerCanAttach":
+		if e.ComplexityRoot.Room.ViewerCanAttach == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Room.ViewerCanAttach(childComplexity), true
 	case "Room.viewerCanBanRoomMembers":
 		if e.ComplexityRoot.Room.ViewerCanBanRoomMembers == nil {
 			break
@@ -4277,12 +4452,29 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Room.ViewerCanReact(childComplexity), true
+	case "Room.viewerIsMember":
+		if e.ComplexityRoot.Room.ViewerIsMember == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Room.ViewerIsMember(childComplexity), true
 	case "Room.viewerNotificationPreference":
 		if e.ComplexityRoot.Room.ViewerNotificationPreference == nil {
 			break
 		}
 
 		return e.ComplexityRoot.Room.ViewerNotificationPreference(childComplexity), true
+	case "Room.viewerNotifications":
+		if e.ComplexityRoot.Room.ViewerNotifications == nil {
+			break
+		}
+
+		args, err := ec.field_Room_viewerNotifications_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Room.ViewerNotifications(childComplexity, args["limit"].(*int32), args["offset"].(*int32)), true
 	case "Room.voiceCallToken":
 		if e.ComplexityRoot.Room.VoiceCallToken == nil {
 			break
@@ -4296,6 +4488,50 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.RoomArchivedEvent.RoomId(childComplexity), true
+
+	case "RoomAttachmentItem.attachment":
+		if e.ComplexityRoot.RoomAttachmentItem.Attachment == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoomAttachmentItem.Attachment(childComplexity), true
+	case "RoomAttachmentItem.createdAt":
+		if e.ComplexityRoot.RoomAttachmentItem.CreatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoomAttachmentItem.CreatedAt(childComplexity), true
+	case "RoomAttachmentItem.messageEventId":
+		if e.ComplexityRoot.RoomAttachmentItem.MessageEventID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoomAttachmentItem.MessageEventID(childComplexity), true
+	case "RoomAttachmentItem.threadRootEventId":
+		if e.ComplexityRoot.RoomAttachmentItem.ThreadRootEventID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoomAttachmentItem.ThreadRootEventID(childComplexity), true
+
+	case "RoomAttachmentsConnection.hasMore":
+		if e.ComplexityRoot.RoomAttachmentsConnection.HasMore == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoomAttachmentsConnection.HasMore(childComplexity), true
+	case "RoomAttachmentsConnection.items":
+		if e.ComplexityRoot.RoomAttachmentsConnection.Items == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoomAttachmentsConnection.Items(childComplexity), true
+	case "RoomAttachmentsConnection.totalCount":
+		if e.ComplexityRoot.RoomAttachmentsConnection.TotalCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoomAttachmentsConnection.TotalCount(childComplexity), true
 
 	case "RoomBan.createdAt":
 		if e.ComplexityRoot.RoomBan.CreatedAt == nil {
@@ -4464,6 +4700,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.RoomGroup.ID(childComplexity), true
+	case "RoomGroup.items":
+		if e.ComplexityRoot.RoomGroup.Items == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoomGroup.Items(childComplexity), true
 	case "RoomGroup.name":
 		if e.ComplexityRoot.RoomGroup.Name == nil {
 			break
@@ -4476,6 +4718,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.RoomGroup.Rooms(childComplexity), true
+
+	case "RoomGroupItem.id":
+		if e.ComplexityRoot.RoomGroupItem.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoomGroupItem.ID(childComplexity), true
+	case "RoomGroupItem.link":
+		if e.ComplexityRoot.RoomGroupItem.Link == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoomGroupItem.Link(childComplexity), true
+	case "RoomGroupItem.room":
+		if e.ComplexityRoot.RoomGroupItem.Room == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoomGroupItem.Room(childComplexity), true
+	case "RoomGroupItem.type":
+		if e.ComplexityRoot.RoomGroupItem.Type == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoomGroupItem.Type(childComplexity), true
 
 	case "RoomGroupRolePermissions.groupId":
 		if e.ComplexityRoot.RoomGroupRolePermissions.GroupID == nil {
@@ -4674,6 +4941,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Server.AssetCount(childComplexity), true
+	case "Server.authProviders":
+		if e.ComplexityRoot.Server.AuthProviders == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Server.AuthProviders(childComplexity), true
 	case "Server.availablePermissions":
 		if e.ComplexityRoot.Server.AvailablePermissions == nil {
 			break
@@ -4686,12 +4959,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Server.DirectRegistrationEnabled(childComplexity), true
-	case "Server.enabledAuthProviders":
-		if e.ComplexityRoot.Server.EnabledAuthProviders == nil {
-			break
-		}
-
-		return e.ComplexityRoot.Server.EnabledAuthProviders(childComplexity), true
 	case "Server.livekitUrl":
 		if e.ComplexityRoot.Server.LivekitURL == nil {
 			break
@@ -4888,6 +5155,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Server.ViewerCanManageUser(childComplexity, args["userId"].(string)), true
+	case "Server.viewerCanManageUserPermissions":
+		if e.ComplexityRoot.Server.ViewerCanManageUserPermissions == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Server.ViewerCanManageUserPermissions(childComplexity), true
 	case "Server.viewerHasAnyAdminPermission":
 		if e.ComplexityRoot.Server.ViewerHasAnyAdminPermission == nil {
 			break
@@ -4906,6 +5179,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Server.ViewerNotificationPreference(childComplexity), true
+	case "Server.viewerNotifications":
+		if e.ComplexityRoot.Server.ViewerNotifications == nil {
+			break
+		}
+
+		args, err := ec.field_Server_viewerNotifications_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Server.ViewerNotifications(childComplexity, args["limit"].(*int32), args["offset"].(*int32)), true
 	case "Server.viewerPermissions":
 		if e.ComplexityRoot.Server.ViewerPermissions == nil {
 			break
@@ -5040,17 +5324,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.SessionTerminatedEvent.Reason(childComplexity), true
 
+	case "SidebarLink.id":
+		if e.ComplexityRoot.SidebarLink.Id == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SidebarLink.Id(childComplexity), true
+	case "SidebarLink.label":
+		if e.ComplexityRoot.SidebarLink.Label == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SidebarLink.Label(childComplexity), true
+	case "SidebarLink.url":
+		if e.ComplexityRoot.SidebarLink.Url == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SidebarLink.Url(childComplexity), true
+
 	case "Subscription.myEvents":
 		if e.ComplexityRoot.Subscription.MyEvents == nil {
 			break
 		}
 
-		args, err := ec.field_Subscription_myEvents_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.ComplexityRoot.Subscription.MyEvents(childComplexity, args["after"].(*string)), true
+		return e.ComplexityRoot.Subscription.MyEvents(childComplexity), true
 
 	case "SystemInfo.account":
 		if e.ComplexityRoot.SystemInfo.Account == nil {
@@ -5207,6 +5505,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.User.CreatedAt(childComplexity), true
+	case "User.deleted":
+		if e.ComplexityRoot.User.Deleted == nil {
+			break
+		}
+
+		return e.ComplexityRoot.User.Deleted(childComplexity), true
 	case "User.displayName":
 		if e.ComplexityRoot.User.DisplayName == nil {
 			break
@@ -5619,6 +5923,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.ViewerNotificationPreference.Level(childComplexity), true
 
+	case "VoiceCallToken.callId":
+		if e.ComplexityRoot.VoiceCallToken.CallID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.VoiceCallToken.CallID(childComplexity), true
 	case "VoiceCallToken.e2eeKey":
 		if e.ComplexityRoot.VoiceCallToken.E2EEKey == nil {
 			break
@@ -5654,6 +5964,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputCreateRoleInput,
 		ec.unmarshalInputCreateRoomGroupInput,
 		ec.unmarshalInputCreateRoomInput,
+		ec.unmarshalInputCreateSidebarLinkInput,
 		ec.unmarshalInputDeleteAttachmentInput,
 		ec.unmarshalInputDeleteAvatarInput,
 		ec.unmarshalInputDeleteLinkPreviewInput,
@@ -5661,6 +5972,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputDeleteMyAccountInput,
 		ec.unmarshalInputDeleteRoleInput,
 		ec.unmarshalInputDeleteRoomGroupInput,
+		ec.unmarshalInputDeleteSidebarLinkInput,
 		ec.unmarshalInputDenyPermissionInput,
 		ec.unmarshalInputDenyRoomPermissionInput,
 		ec.unmarshalInputDenyUserPermissionInput,
@@ -5677,18 +5989,21 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputMarkRoomAsReadInput,
 		ec.unmarshalInputMarkThreadAsReadInput,
 		ec.unmarshalInputMoveRoomToGroupInput,
+		ec.unmarshalInputMoveSidebarLinkToGroupInput,
 		ec.unmarshalInputPostMessageInput,
 		ec.unmarshalInputPushSubscriptionInput,
 		ec.unmarshalInputRemoveReactionInput,
 		ec.unmarshalInputReorderRolesInput,
 		ec.unmarshalInputReorderRoomGroupsInput,
 		ec.unmarshalInputReorderRoomsInGroupInput,
+		ec.unmarshalInputReorderSidebarItemsInGroupInput,
 		ec.unmarshalInputRevokeBotTokenInput,
 		ec.unmarshalInputRevokePermissionInput,
 		ec.unmarshalInputRevokeRoleInput,
 		ec.unmarshalInputSendTypingIndicatorInput,
 		ec.unmarshalInputSetRoomNotificationLevelInput,
 		ec.unmarshalInputSetServerNotificationLevelInput,
+		ec.unmarshalInputSidebarGroupEntryInput,
 		ec.unmarshalInputStartDMInput,
 		ec.unmarshalInputUnarchiveRoomInput,
 		ec.unmarshalInputUnbanRoomMemberInput,
@@ -5703,6 +6018,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputUpdateRoomInput,
 		ec.unmarshalInputUpdateServerConfigInput,
 		ec.unmarshalInputUpdateSettingsInput,
+		ec.unmarshalInputUpdateSidebarLinkInput,
 		ec.unmarshalInputUploadAvatarInput,
 		ec.unmarshalInputUploadServerBannerInput,
 		ec.unmarshalInputUploadServerLogoInput,
@@ -5960,6 +6276,20 @@ func (ec *executionContext) childFields_Attachment(ctx context.Context, field gr
 	return nil, fmt.Errorf("no field named %q was found under type Attachment", field.Name)
 }
 
+func (ec *executionContext) childFields_AuthProvider(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_AuthProvider_id(ctx, field)
+	case "type":
+		return ec.fieldContext_AuthProvider_type(ctx, field)
+	case "label":
+		return ec.fieldContext_AuthProvider_label(ctx, field)
+	case "loginUrl":
+		return ec.fieldContext_AuthProvider_loginUrl(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type AuthProvider", field.Name)
+}
+
 func (ec *executionContext) childFields_BotToken(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "id":
@@ -5992,6 +6322,8 @@ func (ec *executionContext) childFields_CallParticipant(ctx context.Context, fie
 		return ec.fieldContext_CallParticipant_user(ctx, field)
 	case "joinedAt":
 		return ec.fieldContext_CallParticipant_joinedAt(ctx, field)
+	case "callId":
+		return ec.fieldContext_CallParticipant_callId(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type CallParticipant", field.Name)
 }
@@ -6034,8 +6366,6 @@ func (ec *executionContext) childFields_Event(ctx context.Context, field graphql
 		return ec.fieldContext_Event_actorId(ctx, field)
 	case "actor":
 		return ec.fieldContext_Event_actor(ctx, field)
-	case "deliveryCursor":
-		return ec.fieldContext_Event_deliveryCursor(ctx, field)
 	case "event":
 		return ec.fieldContext_Event_event(ctx, field)
 	}
@@ -6322,6 +6652,8 @@ func (ec *executionContext) childFields_ProjectionMetric(ctx context.Context, fi
 
 func (ec *executionContext) childFields_ProjectionState(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
+	case "key":
+		return ec.fieldContext_ProjectionState_key(ctx, field)
 	case "name":
 		return ec.fieldContext_ProjectionState_name(ctx, field)
 	case "subjects":
@@ -6448,14 +6780,22 @@ func (ec *executionContext) childFields_Room(ctx context.Context, field graphql.
 		return ec.fieldContext_Room_description(ctx, field)
 	case "members":
 		return ec.fieldContext_Room_members(ctx, field)
+	case "attachments":
+		return ec.fieldContext_Room_attachments(ctx, field)
 	case "hasUnread":
 		return ec.fieldContext_Room_hasUnread(ctx, field)
+	case "viewerNotifications":
+		return ec.fieldContext_Room_viewerNotifications(ctx, field)
 	case "viewerCanPostMessage":
 		return ec.fieldContext_Room_viewerCanPostMessage(ctx, field)
 	case "viewerCanPostInThread":
 		return ec.fieldContext_Room_viewerCanPostInThread(ctx, field)
+	case "viewerCanAttach":
+		return ec.fieldContext_Room_viewerCanAttach(ctx, field)
 	case "viewerCanReact":
 		return ec.fieldContext_Room_viewerCanReact(ctx, field)
+	case "viewerIsMember":
+		return ec.fieldContext_Room_viewerIsMember(ctx, field)
 	case "viewerCanManageOthersMessage":
 		return ec.fieldContext_Room_viewerCanManageOthersMessage(ctx, field)
 	case "viewerCanListRoom":
@@ -6490,6 +6830,32 @@ func (ec *executionContext) childFields_Room(ctx context.Context, field graphql.
 		return ec.fieldContext_Room_availableRoomPermissions(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type Room", field.Name)
+}
+
+func (ec *executionContext) childFields_RoomAttachmentItem(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "attachment":
+		return ec.fieldContext_RoomAttachmentItem_attachment(ctx, field)
+	case "messageEventId":
+		return ec.fieldContext_RoomAttachmentItem_messageEventId(ctx, field)
+	case "threadRootEventId":
+		return ec.fieldContext_RoomAttachmentItem_threadRootEventId(ctx, field)
+	case "createdAt":
+		return ec.fieldContext_RoomAttachmentItem_createdAt(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RoomAttachmentItem", field.Name)
+}
+
+func (ec *executionContext) childFields_RoomAttachmentsConnection(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "items":
+		return ec.fieldContext_RoomAttachmentsConnection_items(ctx, field)
+	case "totalCount":
+		return ec.fieldContext_RoomAttachmentsConnection_totalCount(ctx, field)
+	case "hasMore":
+		return ec.fieldContext_RoomAttachmentsConnection_hasMore(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RoomAttachmentsConnection", field.Name)
 }
 
 func (ec *executionContext) childFields_RoomBan(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -6562,8 +6928,24 @@ func (ec *executionContext) childFields_RoomGroup(ctx context.Context, field gra
 		return ec.fieldContext_RoomGroup_description(ctx, field)
 	case "rooms":
 		return ec.fieldContext_RoomGroup_rooms(ctx, field)
+	case "items":
+		return ec.fieldContext_RoomGroup_items(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type RoomGroup", field.Name)
+}
+
+func (ec *executionContext) childFields_RoomGroupItem(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "type":
+		return ec.fieldContext_RoomGroupItem_type(ctx, field)
+	case "id":
+		return ec.fieldContext_RoomGroupItem_id(ctx, field)
+	case "room":
+		return ec.fieldContext_RoomGroupItem_room(ctx, field)
+	case "link":
+		return ec.fieldContext_RoomGroupItem_link(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RoomGroupItem", field.Name)
 }
 
 func (ec *executionContext) childFields_RoomGroupRolePermissions(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -6622,8 +7004,8 @@ func (ec *executionContext) childFields_Server(ctx context.Context, field graphq
 	switch field.Name {
 	case "version":
 		return ec.fieldContext_Server_version(ctx, field)
-	case "enabledAuthProviders":
-		return ec.fieldContext_Server_enabledAuthProviders(ctx, field)
+	case "authProviders":
+		return ec.fieldContext_Server_authProviders(ctx, field)
 	case "profile":
 		return ec.fieldContext_Server_profile(ctx, field)
 	case "pushNotificationsEnabled":
@@ -6662,6 +7044,8 @@ func (ec *executionContext) childFields_Server(ctx context.Context, field graphq
 		return ec.fieldContext_Server_viewerCanManageRooms(ctx, field)
 	case "viewerHasUnreadRooms":
 		return ec.fieldContext_Server_viewerHasUnreadRooms(ctx, field)
+	case "viewerNotifications":
+		return ec.fieldContext_Server_viewerNotifications(ctx, field)
 	case "viewerNotificationPreference":
 		return ec.fieldContext_Server_viewerNotificationPreference(ctx, field)
 	case "member":
@@ -6680,6 +7064,8 @@ func (ec *executionContext) childFields_Server(ctx context.Context, field graphq
 		return ec.fieldContext_Server_viewerCanManageRoles(ctx, field)
 	case "viewerCanAssignRoles":
 		return ec.fieldContext_Server_viewerCanAssignRoles(ctx, field)
+	case "viewerCanManageUserPermissions":
+		return ec.fieldContext_Server_viewerCanManageUserPermissions(ctx, field)
 	case "viewerCanManageUser":
 		return ec.fieldContext_Server_viewerCanManageUser(ctx, field)
 	case "roleUsers":
@@ -6732,6 +7118,18 @@ func (ec *executionContext) childFields_ServerStats(ctx context.Context, field g
 		return ec.fieldContext_ServerStats_dmRoomCount(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type ServerStats", field.Name)
+}
+
+func (ec *executionContext) childFields_SidebarLink(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_SidebarLink_id(ctx, field)
+	case "label":
+		return ec.fieldContext_SidebarLink_label(ctx, field)
+	case "url":
+		return ec.fieldContext_SidebarLink_url(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type SidebarLink", field.Name)
 }
 
 func (ec *executionContext) childFields_SystemInfo(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -6800,6 +7198,8 @@ func (ec *executionContext) childFields_User(ctx context.Context, field graphql.
 		return ec.fieldContext_User_displayName(ctx, field)
 	case "createdAt":
 		return ec.fieldContext_User_createdAt(ctx, field)
+	case "deleted":
+		return ec.fieldContext_User_deleted(ctx, field)
 	case "avatarUrl":
 		return ec.fieldContext_User_avatarUrl(ctx, field)
 	case "hasVerifiedEmail":
@@ -6948,6 +7348,8 @@ func (ec *executionContext) childFields_VoiceCallToken(ctx context.Context, fiel
 		return ec.fieldContext_VoiceCallToken_token(ctx, field)
 	case "e2eeKey":
 		return ec.fieldContext_VoiceCallToken_e2eeKey(ctx, field)
+	case "callId":
+		return ec.fieldContext_VoiceCallToken_callId(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type VoiceCallToken", field.Name)
 }
@@ -7412,6 +7814,28 @@ func (ec *executionContext) field_MessagePostedEvent_threadParticipants_args(ctx
 	return args, nil
 }
 
+func (ec *executionContext) field_MessagePostedEvent_threadRepliesAround_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "eventId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["eventId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "limit",
+		func(ctx context.Context, v any) (*int32, error) {
+			return ec.unmarshalOInt2ᚖint32(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_MessagePostedEvent_threadReplies_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -7624,6 +8048,20 @@ func (ec *executionContext) field_Mutation_createRoom_args(ctx context.Context, 
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_createSidebarLink_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.CreateSidebarLinkInput, error) {
+			return ec.unmarshalNCreateSidebarLinkInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐCreateSidebarLinkInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_deleteAttachment_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -7728,6 +8166,20 @@ func (ec *executionContext) field_Mutation_deleteRoomGroup_args(ctx context.Cont
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
 		func(ctx context.Context, v any) (model.DeleteRoomGroupInput, error) {
 			return ec.unmarshalNDeleteRoomGroupInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐDeleteRoomGroupInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_deleteSidebarLink_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.DeleteSidebarLinkInput, error) {
+			return ec.unmarshalNDeleteSidebarLinkInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐDeleteSidebarLinkInput(ctx, v)
 		})
 	if err != nil {
 		return nil, err
@@ -7988,6 +8440,20 @@ func (ec *executionContext) field_Mutation_moveRoomToGroup_args(ctx context.Cont
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_moveSidebarLinkToGroup_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.MoveSidebarLinkToGroupInput, error) {
+			return ec.unmarshalNMoveSidebarLinkToGroupInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐMoveSidebarLinkToGroupInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_postMessage_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -8050,6 +8516,20 @@ func (ec *executionContext) field_Mutation_reorderRoomsInGroup_args(ctx context.
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
 		func(ctx context.Context, v any) (model.ReorderRoomsInGroupInput, error) {
 			return ec.unmarshalNReorderRoomsInGroupInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐReorderRoomsInGroupInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_reorderSidebarItemsInGroup_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.ReorderSidebarItemsInGroupInput, error) {
+			return ec.unmarshalNReorderSidebarItemsInGroupInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐReorderSidebarItemsInGroupInput(ctx, v)
 		})
 	if err != nil {
 		return nil, err
@@ -8338,6 +8818,20 @@ func (ec *executionContext) field_Mutation_updateSettings_args(ctx context.Conte
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_updateSidebarLink_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.UpdateSidebarLinkInput, error) {
+			return ec.unmarshalNUpdateSidebarLinkInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐUpdateSidebarLinkInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_uploadAvatar_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -8588,6 +9082,28 @@ func (ec *executionContext) field_ReactionSummary_users_args(ctx context.Context
 	return args, nil
 }
 
+func (ec *executionContext) field_Room_attachments_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "limit",
+		func(ctx context.Context, v any) (*int32, error) {
+			return ec.unmarshalOInt2ᚖint32(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "offset",
+		func(ctx context.Context, v any) (*int32, error) {
+			return ec.unmarshalOInt2ᚖint32(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["offset"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Room_event_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -8655,6 +9171,36 @@ func (ec *executionContext) field_Room_events_args(ctx context.Context, rawArgs 
 }
 
 func (ec *executionContext) field_Room_members_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "search",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOString2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["search"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "limit",
+		func(ctx context.Context, v any) (*int32, error) {
+			return ec.unmarshalOInt2ᚖint32(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["limit"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "offset",
+		func(ctx context.Context, v any) (*int32, error) {
+			return ec.unmarshalOInt2ᚖint32(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["offset"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Room_viewerNotifications_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "limit",
@@ -8804,17 +9350,25 @@ func (ec *executionContext) field_Server_viewerCanManageUser_args(ctx context.Co
 	return args, nil
 }
 
-func (ec *executionContext) field_Subscription_myEvents_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+func (ec *executionContext) field_Server_viewerNotifications_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "after",
-		func(ctx context.Context, v any) (*string, error) {
-			return ec.unmarshalOString2ᚖstring(ctx, v)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "limit",
+		func(ctx context.Context, v any) (*int32, error) {
+			return ec.unmarshalOInt2ᚖint32(ctx, v)
 		})
 	if err != nil {
 		return nil, err
 	}
-	args["after"] = arg0
+	args["limit"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "offset",
+		func(ctx context.Context, v any) (*int32, error) {
+			return ec.unmarshalOInt2ᚖint32(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["offset"] = arg1
 	return args, nil
 }
 
@@ -10440,6 +10994,150 @@ func (ec *executionContext) fieldContext_Attachment_videoProcessing(_ context.Co
 	return fc, nil
 }
 
+func (ec *executionContext) _AuthProvider_id(ctx context.Context, field graphql.CollectedField, obj *model.AuthProvider) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AuthProvider_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				if ec.Directives.Public == nil {
+					var zeroVal string
+					return zeroVal, errors.New("directive public is not implemented")
+				}
+				return ec.Directives.Public(ctx, obj, directive0)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AuthProvider_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AuthProvider", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _AuthProvider_type(ctx context.Context, field graphql.CollectedField, obj *model.AuthProvider) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AuthProvider_type(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Type, nil
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				if ec.Directives.Public == nil {
+					var zeroVal string
+					return zeroVal, errors.New("directive public is not implemented")
+				}
+				return ec.Directives.Public(ctx, obj, directive0)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AuthProvider_type(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AuthProvider", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _AuthProvider_label(ctx context.Context, field graphql.CollectedField, obj *model.AuthProvider) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AuthProvider_label(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Label, nil
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				if ec.Directives.Public == nil {
+					var zeroVal string
+					return zeroVal, errors.New("directive public is not implemented")
+				}
+				return ec.Directives.Public(ctx, obj, directive0)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AuthProvider_label(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AuthProvider", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _AuthProvider_loginUrl(ctx context.Context, field graphql.CollectedField, obj *model.AuthProvider) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AuthProvider_loginUrl(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.LoginURL, nil
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				if ec.Directives.Public == nil {
+					var zeroVal string
+					return zeroVal, errors.New("directive public is not implemented")
+				}
+				return ec.Directives.Public(ctx, obj, directive0)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AuthProvider_loginUrl(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AuthProvider", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
 func (ec *executionContext) _BotToken_id(ctx context.Context, field graphql.CollectedField, obj *model.BotToken) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -10796,6 +11494,29 @@ func (ec *executionContext) _CallParticipant_joinedAt(ctx context.Context, field
 }
 func (ec *executionContext) fieldContext_CallParticipant_joinedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("CallParticipant", field, false, false, errors.New("field of type Time does not have child fields"))
+}
+
+func (ec *executionContext) _CallParticipant_callId(ctx context.Context, field graphql.CollectedField, obj *model.CallParticipant) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CallParticipant_callId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CallID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CallParticipant_callId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CallParticipant", field, false, false, errors.New("field of type ID does not have child fields"))
 }
 
 func (ec *executionContext) _CallParticipantJoinedEvent_roomId(ctx context.Context, field graphql.CollectedField, obj *corev1.CallParticipantJoinedEvent) (ret graphql.Marshaler) {
@@ -11361,29 +12082,6 @@ func (ec *executionContext) fieldContext_Event_actor(_ context.Context, field gr
 		},
 	}
 	return fc, nil
-}
-
-func (ec *executionContext) _Event_deliveryCursor(ctx context.Context, field graphql.CollectedField, obj core.EventEnvelope) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_Event_deliveryCursor(ctx, field)
-		},
-		func(ctx context.Context) (any, error) {
-			return ec.Resolvers.Event().DeliveryCursor(ctx, obj)
-		},
-		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
-			return ec.marshalOString2ᚖstring(ctx, selections, v)
-		},
-		true,
-		false,
-	)
-}
-func (ec *executionContext) fieldContext_Event_deliveryCursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("Event", field, true, true, errors.New("field of type String does not have child fields"))
 }
 
 func (ec *executionContext) _Event_event(ctx context.Context, field graphql.CollectedField, obj core.EventEnvelope) (ret graphql.Marshaler) {
@@ -13159,6 +13857,50 @@ func (ec *executionContext) fieldContext_MessagePostedEvent_threadReplies(ctx co
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_MessagePostedEvent_threadReplies_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MessagePostedEvent_threadRepliesAround(ctx context.Context, field graphql.CollectedField, obj *model.MessagePostedEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_MessagePostedEvent_threadRepliesAround(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.MessagePostedEvent().ThreadRepliesAround(ctx, obj, fc.Args["eventId"].(string), fc.Args["limit"].(*int32))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RoomEventsConnection) graphql.Marshaler {
+			return ec.marshalNRoomEventsConnection2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomEventsConnection(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_MessagePostedEvent_threadRepliesAround(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MessagePostedEvent",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RoomEventsConnection(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_MessagePostedEvent_threadRepliesAround_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -15382,6 +16124,226 @@ func (ec *executionContext) fieldContext_Mutation_reorderRoomsInGroup(ctx contex
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_reorderRoomsInGroup_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_createSidebarLink(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_createSidebarLink(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CreateSidebarLink(ctx, fc.Args["input"].(model.CreateSidebarLinkInput))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *corev1.SidebarLink) graphql.Marshaler {
+			return ec.marshalNSidebarLink2ᚖhmansᚗdeᚋchattoᚋinternalᚋpbᚋchattoᚋcoreᚋv1ᚐSidebarLink(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_createSidebarLink(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SidebarLink(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_createSidebarLink_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateSidebarLink(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_updateSidebarLink(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateSidebarLink(ctx, fc.Args["input"].(model.UpdateSidebarLinkInput))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *corev1.SidebarLink) graphql.Marshaler {
+			return ec.marshalNSidebarLink2ᚖhmansᚗdeᚋchattoᚋinternalᚋpbᚋchattoᚋcoreᚋv1ᚐSidebarLink(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_updateSidebarLink(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SidebarLink(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateSidebarLink_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_deleteSidebarLink(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_deleteSidebarLink(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().DeleteSidebarLink(ctx, fc.Args["input"].(model.DeleteSidebarLinkInput))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_deleteSidebarLink(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_deleteSidebarLink_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_moveSidebarLinkToGroup(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_moveSidebarLinkToGroup(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().MoveSidebarLinkToGroup(ctx, fc.Args["input"].(model.MoveSidebarLinkToGroupInput))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *corev1.SidebarLink) graphql.Marshaler {
+			return ec.marshalNSidebarLink2ᚖhmansᚗdeᚋchattoᚋinternalᚋpbᚋchattoᚋcoreᚋv1ᚐSidebarLink(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_moveSidebarLinkToGroup(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SidebarLink(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_moveSidebarLinkToGroup_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_reorderSidebarItemsInGroup(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_reorderSidebarItemsInGroup(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ReorderSidebarItemsInGroup(ctx, fc.Args["input"].(model.ReorderSidebarItemsInGroupInput))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RoomGroupModel) graphql.Marshaler {
+			return ec.marshalNRoomGroup2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomGroupModel(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_reorderSidebarItemsInGroup(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RoomGroup(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_reorderSidebarItemsInGroup_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -17956,6 +18918,29 @@ func (ec *executionContext) fieldContext_ProjectionMetric_bytes(_ context.Contex
 	return graphql.NewScalarFieldContext("ProjectionMetric", field, false, false, errors.New("field of type Int64 does not have child fields"))
 }
 
+func (ec *executionContext) _ProjectionState_key(ctx context.Context, field graphql.CollectedField, obj *model.ProjectionState) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ProjectionState_key(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Key, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ProjectionState_key(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ProjectionState", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
 func (ec *executionContext) _ProjectionState_name(ctx context.Context, field graphql.CollectedField, obj *model.ProjectionState) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -18627,7 +19612,20 @@ func (ec *executionContext) _Query_viewer(ctx context.Context, field graphql.Col
 		func(ctx context.Context) (any, error) {
 			return ec.Resolvers.Query().Viewer(ctx)
 		},
-		nil,
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				if ec.Directives.Public == nil {
+					var zeroVal *model.Viewer
+					return zeroVal, errors.New("directive public is not implemented")
+				}
+				return ec.Directives.Public(ctx, nil, directive0)
+			}
+
+			next = directive1
+			return next
+		},
 		func(ctx context.Context, selections ast.SelectionSet, v *model.Viewer) graphql.Marshaler {
 			return ec.marshalOViewer2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐViewer(ctx, selections, v)
 		},
@@ -19910,7 +20908,7 @@ func (ec *executionContext) _Room_members(ctx context.Context, field graphql.Col
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Room().Members(ctx, obj, fc.Args["limit"].(*int32), fc.Args["offset"].(*int32))
+			return ec.Resolvers.Room().Members(ctx, obj, fc.Args["search"].(*string), fc.Args["limit"].(*int32), fc.Args["offset"].(*int32))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v *model.RoomMembersConnection) graphql.Marshaler {
@@ -19944,6 +20942,50 @@ func (ec *executionContext) fieldContext_Room_members(ctx context.Context, field
 	return fc, nil
 }
 
+func (ec *executionContext) _Room_attachments(ctx context.Context, field graphql.CollectedField, obj *corev1.Room) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Room_attachments(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Room().Attachments(ctx, obj, fc.Args["limit"].(*int32), fc.Args["offset"].(*int32))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RoomAttachmentsConnection) graphql.Marshaler {
+			return ec.marshalNRoomAttachmentsConnection2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomAttachmentsConnection(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Room_attachments(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Room",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RoomAttachmentsConnection(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Room_attachments_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Room_hasUnread(ctx context.Context, field graphql.CollectedField, obj *corev1.Room) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -19965,6 +21007,50 @@ func (ec *executionContext) _Room_hasUnread(ctx context.Context, field graphql.C
 }
 func (ec *executionContext) fieldContext_Room_hasUnread(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("Room", field, true, true, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _Room_viewerNotifications(ctx context.Context, field graphql.CollectedField, obj *corev1.Room) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Room_viewerNotifications(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Room().ViewerNotifications(ctx, obj, fc.Args["limit"].(*int32), fc.Args["offset"].(*int32))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.NotificationsConnection) graphql.Marshaler {
+			return ec.marshalNNotificationsConnection2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐNotificationsConnection(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Room_viewerNotifications(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Room",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_NotificationsConnection(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Room_viewerNotifications_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
 }
 
 func (ec *executionContext) _Room_viewerCanPostMessage(ctx context.Context, field graphql.CollectedField, obj *corev1.Room) (ret graphql.Marshaler) {
@@ -20013,6 +21099,29 @@ func (ec *executionContext) fieldContext_Room_viewerCanPostInThread(_ context.Co
 	return graphql.NewScalarFieldContext("Room", field, true, true, errors.New("field of type Boolean does not have child fields"))
 }
 
+func (ec *executionContext) _Room_viewerCanAttach(ctx context.Context, field graphql.CollectedField, obj *corev1.Room) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Room_viewerCanAttach(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Room().ViewerCanAttach(ctx, obj)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Room_viewerCanAttach(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Room", field, true, true, errors.New("field of type Boolean does not have child fields"))
+}
+
 func (ec *executionContext) _Room_viewerCanReact(ctx context.Context, field graphql.CollectedField, obj *corev1.Room) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -20033,6 +21142,29 @@ func (ec *executionContext) _Room_viewerCanReact(ctx context.Context, field grap
 	)
 }
 func (ec *executionContext) fieldContext_Room_viewerCanReact(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Room", field, true, true, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _Room_viewerIsMember(ctx context.Context, field graphql.CollectedField, obj *corev1.Room) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Room_viewerIsMember(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Room().ViewerIsMember(ctx, obj)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Room_viewerIsMember(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("Room", field, true, true, errors.New("field of type Boolean does not have child fields"))
 }
 
@@ -20524,6 +21656,185 @@ func (ec *executionContext) _RoomArchivedEvent_roomId(ctx context.Context, field
 }
 func (ec *executionContext) fieldContext_RoomArchivedEvent_roomId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("RoomArchivedEvent", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _RoomAttachmentItem_attachment(ctx context.Context, field graphql.CollectedField, obj *model.RoomAttachmentItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoomAttachmentItem_attachment(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Attachment, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *corev1.Attachment) graphql.Marshaler {
+			return ec.marshalNAttachment2ᚖhmansᚗdeᚋchattoᚋinternalᚋpbᚋchattoᚋcoreᚋv1ᚐAttachment(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RoomAttachmentItem_attachment(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RoomAttachmentItem",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Attachment(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RoomAttachmentItem_messageEventId(ctx context.Context, field graphql.CollectedField, obj *model.RoomAttachmentItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoomAttachmentItem_messageEventId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.MessageEventID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RoomAttachmentItem_messageEventId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RoomAttachmentItem", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _RoomAttachmentItem_threadRootEventId(ctx context.Context, field graphql.CollectedField, obj *model.RoomAttachmentItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoomAttachmentItem_threadRootEventId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ThreadRootEventID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOID2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RoomAttachmentItem_threadRootEventId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RoomAttachmentItem", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _RoomAttachmentItem_createdAt(ctx context.Context, field graphql.CollectedField, obj *model.RoomAttachmentItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoomAttachmentItem_createdAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *timestamppb.Timestamp) graphql.Marshaler {
+			return ec.marshalNTime2ᚖgoogleᚗgolangᚗorgᚋprotobufᚋtypesᚋknownᚋtimestamppbᚐTimestamp(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RoomAttachmentItem_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RoomAttachmentItem", field, false, false, errors.New("field of type Time does not have child fields"))
+}
+
+func (ec *executionContext) _RoomAttachmentsConnection_items(ctx context.Context, field graphql.CollectedField, obj *model.RoomAttachmentsConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoomAttachmentsConnection_items(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Items, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*model.RoomAttachmentItem) graphql.Marshaler {
+			return ec.marshalNRoomAttachmentItem2ᚕᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomAttachmentItemᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RoomAttachmentsConnection_items(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RoomAttachmentsConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RoomAttachmentItem(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RoomAttachmentsConnection_totalCount(ctx context.Context, field graphql.CollectedField, obj *model.RoomAttachmentsConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoomAttachmentsConnection_totalCount(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TotalCount, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int32) graphql.Marshaler {
+			return ec.marshalNInt2int32(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RoomAttachmentsConnection_totalCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RoomAttachmentsConnection", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _RoomAttachmentsConnection_hasMore(ctx context.Context, field graphql.CollectedField, obj *model.RoomAttachmentsConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoomAttachmentsConnection_hasMore(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.HasMore, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RoomAttachmentsConnection_hasMore(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RoomAttachmentsConnection", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
 func (ec *executionContext) _RoomBan_id(ctx context.Context, field graphql.CollectedField, obj *model.RoomBan) (ret graphql.Marshaler) {
@@ -21242,6 +22553,148 @@ func (ec *executionContext) fieldContext_RoomGroup_rooms(_ context.Context, fiel
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_Room(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RoomGroup_items(ctx context.Context, field graphql.CollectedField, obj *model.RoomGroupModel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoomGroup_items(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.RoomGroup().Items(ctx, obj)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*model.RoomGroupItem) graphql.Marshaler {
+			return ec.marshalNRoomGroupItem2ᚕᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomGroupItemᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RoomGroup_items(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RoomGroup",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RoomGroupItem(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RoomGroupItem_type(ctx context.Context, field graphql.CollectedField, obj *model.RoomGroupItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoomGroupItem_type(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Type, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.RoomGroupItemType) graphql.Marshaler {
+			return ec.marshalNRoomGroupItemType2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomGroupItemType(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RoomGroupItem_type(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RoomGroupItem", field, false, false, errors.New("field of type RoomGroupItemType does not have child fields"))
+}
+
+func (ec *executionContext) _RoomGroupItem_id(ctx context.Context, field graphql.CollectedField, obj *model.RoomGroupItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoomGroupItem_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RoomGroupItem_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RoomGroupItem", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _RoomGroupItem_room(ctx context.Context, field graphql.CollectedField, obj *model.RoomGroupItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoomGroupItem_room(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Room, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *corev1.Room) graphql.Marshaler {
+			return ec.marshalORoom2ᚖhmansᚗdeᚋchattoᚋinternalᚋpbᚋchattoᚋcoreᚋv1ᚐRoom(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RoomGroupItem_room(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RoomGroupItem",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Room(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RoomGroupItem_link(ctx context.Context, field graphql.CollectedField, obj *model.RoomGroupItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoomGroupItem_link(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Link, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *corev1.SidebarLink) graphql.Marshaler {
+			return ec.marshalOSidebarLink2ᚖhmansᚗdeᚋchattoᚋinternalᚋpbᚋchattoᚋcoreᚋv1ᚐSidebarLink(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RoomGroupItem_link(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RoomGroupItem",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SidebarLink(ctx, field)
 		},
 	}
 	return fc, nil
@@ -22000,23 +23453,23 @@ func (ec *executionContext) fieldContext_Server_version(_ context.Context, field
 	return graphql.NewScalarFieldContext("Server", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
-func (ec *executionContext) _Server_enabledAuthProviders(ctx context.Context, field graphql.CollectedField, obj *model.Server) (ret graphql.Marshaler) {
+func (ec *executionContext) _Server_authProviders(ctx context.Context, field graphql.CollectedField, obj *model.Server) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
 		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_Server_enabledAuthProviders(ctx, field)
+			return ec.fieldContext_Server_authProviders(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return obj.EnabledAuthProviders, nil
+			return obj.AuthProviders, nil
 		},
 		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
 			directive0 := next
 
 			directive1 := func(ctx context.Context) (any, error) {
 				if ec.Directives.Public == nil {
-					var zeroVal []string
+					var zeroVal []*model.AuthProvider
 					return zeroVal, errors.New("directive public is not implemented")
 				}
 				return ec.Directives.Public(ctx, obj, directive0)
@@ -22025,15 +23478,24 @@ func (ec *executionContext) _Server_enabledAuthProviders(ctx context.Context, fi
 			next = directive1
 			return next
 		},
-		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
-			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		func(ctx context.Context, selections ast.SelectionSet, v []*model.AuthProvider) graphql.Marshaler {
+			return ec.marshalNAuthProvider2ᚕᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐAuthProviderᚄ(ctx, selections, v)
 		},
 		true,
 		true,
 	)
 }
-func (ec *executionContext) fieldContext_Server_enabledAuthProviders(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("Server", field, false, false, errors.New("field of type String does not have child fields"))
+func (ec *executionContext) fieldContext_Server_authProviders(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Server",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_AuthProvider(ctx, field)
+		},
+	}
+	return fc, nil
 }
 
 func (ec *executionContext) _Server_profile(ctx context.Context, field graphql.CollectedField, obj *model.Server) (ret graphql.Marshaler) {
@@ -22538,6 +24000,50 @@ func (ec *executionContext) fieldContext_Server_viewerHasUnreadRooms(_ context.C
 	return graphql.NewScalarFieldContext("Server", field, true, true, errors.New("field of type Boolean does not have child fields"))
 }
 
+func (ec *executionContext) _Server_viewerNotifications(ctx context.Context, field graphql.CollectedField, obj *model.Server) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Server_viewerNotifications(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Server().ViewerNotifications(ctx, obj, fc.Args["limit"].(*int32), fc.Args["offset"].(*int32))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.NotificationsConnection) graphql.Marshaler {
+			return ec.marshalNNotificationsConnection2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐNotificationsConnection(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Server_viewerNotifications(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Server",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_NotificationsConnection(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Server_viewerNotifications_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Server_viewerNotificationPreference(ctx context.Context, field graphql.CollectedField, obj *model.Server) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -22823,6 +24329,29 @@ func (ec *executionContext) _Server_viewerCanAssignRoles(ctx context.Context, fi
 	)
 }
 func (ec *executionContext) fieldContext_Server_viewerCanAssignRoles(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Server", field, true, true, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _Server_viewerCanManageUserPermissions(ctx context.Context, field graphql.CollectedField, obj *model.Server) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Server_viewerCanManageUserPermissions(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Server().ViewerCanManageUserPermissions(ctx, obj)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Server_viewerCanManageUserPermissions(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("Server", field, true, true, errors.New("field of type Boolean does not have child fields"))
 }
 
@@ -23536,6 +25065,75 @@ func (ec *executionContext) fieldContext_SessionTerminatedEvent_reason(_ context
 	return graphql.NewScalarFieldContext("SessionTerminatedEvent", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
+func (ec *executionContext) _SidebarLink_id(ctx context.Context, field graphql.CollectedField, obj *corev1.SidebarLink) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SidebarLink_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Id, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SidebarLink_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SidebarLink", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _SidebarLink_label(ctx context.Context, field graphql.CollectedField, obj *corev1.SidebarLink) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SidebarLink_label(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Label, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SidebarLink_label(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SidebarLink", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _SidebarLink_url(ctx context.Context, field graphql.CollectedField, obj *corev1.SidebarLink) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SidebarLink_url(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Url, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SidebarLink_url(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SidebarLink", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
 func (ec *executionContext) _Subscription_myEvents(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
 	return graphql.ResolveFieldStream(
 		ctx,
@@ -23545,8 +25143,7 @@ func (ec *executionContext) _Subscription_myEvents(ctx context.Context, field gr
 			return ec.fieldContext_Subscription_myEvents(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Subscription().MyEvents(ctx, fc.Args["after"].(*string))
+			return ec.Resolvers.Subscription().MyEvents(ctx)
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v core.EventEnvelope) graphql.Marshaler {
@@ -23556,7 +25153,7 @@ func (ec *executionContext) _Subscription_myEvents(ctx context.Context, field gr
 		true,
 	)
 }
-func (ec *executionContext) fieldContext_Subscription_myEvents(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Subscription_myEvents(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Subscription",
 		Field:      field,
@@ -23565,17 +25162,6 @@ func (ec *executionContext) fieldContext_Subscription_myEvents(ctx context.Conte
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_Event(ctx, field)
 		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Subscription_myEvents_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
 	}
 	return fc, nil
 }
@@ -24207,6 +25793,29 @@ func (ec *executionContext) _User_createdAt(ctx context.Context, field graphql.C
 }
 func (ec *executionContext) fieldContext_User_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("User", field, false, false, errors.New("field of type Time does not have child fields"))
+}
+
+func (ec *executionContext) _User_deleted(ctx context.Context, field graphql.CollectedField, obj *corev1.User) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_User_deleted(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Deleted, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_User_deleted(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("User", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
 func (ec *executionContext) _User_avatarUrl(ctx context.Context, field graphql.CollectedField, obj *corev1.User) (ret graphql.Marshaler) {
@@ -25867,6 +27476,29 @@ func (ec *executionContext) _VoiceCallToken_e2eeKey(ctx context.Context, field g
 }
 func (ec *executionContext) fieldContext_VoiceCallToken_e2eeKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("VoiceCallToken", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _VoiceCallToken_callId(ctx context.Context, field graphql.CollectedField, obj *core.VoiceCallToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_VoiceCallToken_callId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CallID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_VoiceCallToken_callId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("VoiceCallToken", field, false, false, errors.New("field of type ID does not have child fields"))
 }
 
 func (ec *executionContext) ___Directive_name(ctx context.Context, field graphql.CollectedField, obj *introspection.Directive) (ret graphql.Marshaler) {
@@ -27623,6 +29255,90 @@ func (ec *executionContext) unmarshalInputCreateRoomInput(ctx context.Context, o
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputCreateSidebarLinkInput(ctx context.Context, obj any) (model.CreateSidebarLinkInput, error) {
+	var it model.CreateSidebarLinkInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"groupId", "label", "url"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "groupId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("groupId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.GroupID = data
+		case "label":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("label"))
+			directive0 := func(ctx context.Context) (any, error) { return ec.unmarshalNString2string(ctx, v) }
+
+			directive1 := func(ctx context.Context) (any, error) {
+				max, err := ec.unmarshalNInt2int32(ctx, 80)
+				if err != nil {
+					var zeroVal string
+					return zeroVal, err
+				}
+				if ec.Directives.Length == nil {
+					var zeroVal string
+					return zeroVal, errors.New("directive length is not implemented")
+				}
+				return ec.Directives.Length(ctx, obj, directive0, nil, max, nil)
+			}
+
+			tmp, err := directive1(ctx)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			if data, ok := tmp.(string); ok {
+				it.Label = data
+			} else {
+				err := fmt.Errorf(`unexpected type %T from directive, should be string`, tmp)
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+		case "url":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("url"))
+			directive0 := func(ctx context.Context) (any, error) { return ec.unmarshalNString2string(ctx, v) }
+
+			directive1 := func(ctx context.Context) (any, error) {
+				max, err := ec.unmarshalNInt2int32(ctx, 2048)
+				if err != nil {
+					var zeroVal string
+					return zeroVal, err
+				}
+				if ec.Directives.Length == nil {
+					var zeroVal string
+					return zeroVal, errors.New("directive length is not implemented")
+				}
+				return ec.Directives.Length(ctx, obj, directive0, nil, max, nil)
+			}
+
+			tmp, err := directive1(ctx)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			if data, ok := tmp.(string); ok {
+				it.URL = data
+			} else {
+				err := fmt.Errorf(`unexpected type %T from directive, should be string`, tmp)
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputDeleteAttachmentInput(ctx context.Context, obj any) (model.DeleteAttachmentInput, error) {
 	var it model.DeleteAttachmentInput
 	if obj == nil {
@@ -27863,6 +29579,36 @@ func (ec *executionContext) unmarshalInputDeleteRoomGroupInput(ctx context.Conte
 				return it, err
 			}
 			it.ID = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputDeleteSidebarLinkInput(ctx context.Context, obj any) (model.DeleteSidebarLinkInput, error) {
+	var it model.DeleteSidebarLinkInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"linkId"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "linkId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("linkId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.LinkID = data
 		}
 	}
 	return it, nil
@@ -28675,6 +30421,43 @@ func (ec *executionContext) unmarshalInputMoveRoomToGroupInput(ctx context.Conte
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputMoveSidebarLinkToGroupInput(ctx context.Context, obj any) (model.MoveSidebarLinkToGroupInput, error) {
+	var it model.MoveSidebarLinkToGroupInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"linkId", "groupId"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "linkId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("linkId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.LinkID = data
+		case "groupId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("groupId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.GroupID = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputPostMessageInput(ctx context.Context, obj any) (model.PostMessageInput, error) {
 	var it model.PostMessageInput
 	if obj == nil {
@@ -29050,6 +30833,43 @@ func (ec *executionContext) unmarshalInputReorderRoomsInGroupInput(ctx context.C
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputReorderSidebarItemsInGroupInput(ctx context.Context, obj any) (model.ReorderSidebarItemsInGroupInput, error) {
+	var it model.ReorderSidebarItemsInGroupInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"groupId", "items"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "groupId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("groupId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.GroupID = data
+		case "items":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("items"))
+			data, err := ec.unmarshalNSidebarGroupEntryInput2ᚕᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐSidebarGroupEntryInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Items = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputRevokeBotTokenInput(ctx context.Context, obj any) (model.RevokeBotTokenInput, error) {
 	var it model.RevokeBotTokenInput
 	if obj == nil {
@@ -29260,6 +31080,43 @@ func (ec *executionContext) unmarshalInputSetServerNotificationLevelInput(ctx co
 				return it, err
 			}
 			it.Level = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputSidebarGroupEntryInput(ctx context.Context, obj any) (model.SidebarGroupEntryInput, error) {
+	var it model.SidebarGroupEntryInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"type", "id"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "type":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("type"))
+			data, err := ec.unmarshalNRoomGroupItemType2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomGroupItemType(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Type = data
+		case "id":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ID = data
 		}
 	}
 	return it, nil
@@ -30055,6 +31912,90 @@ func (ec *executionContext) unmarshalInputUpdateSettingsInput(ctx context.Contex
 				return it, err
 			}
 			it.TimeFormat = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputUpdateSidebarLinkInput(ctx context.Context, obj any) (model.UpdateSidebarLinkInput, error) {
+	var it model.UpdateSidebarLinkInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"linkId", "label", "url"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "linkId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("linkId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.LinkID = data
+		case "label":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("label"))
+			directive0 := func(ctx context.Context) (any, error) { return ec.unmarshalNString2string(ctx, v) }
+
+			directive1 := func(ctx context.Context) (any, error) {
+				max, err := ec.unmarshalNInt2int32(ctx, 80)
+				if err != nil {
+					var zeroVal string
+					return zeroVal, err
+				}
+				if ec.Directives.Length == nil {
+					var zeroVal string
+					return zeroVal, errors.New("directive length is not implemented")
+				}
+				return ec.Directives.Length(ctx, obj, directive0, nil, max, nil)
+			}
+
+			tmp, err := directive1(ctx)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			if data, ok := tmp.(string); ok {
+				it.Label = data
+			} else {
+				err := fmt.Errorf(`unexpected type %T from directive, should be string`, tmp)
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+		case "url":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("url"))
+			directive0 := func(ctx context.Context) (any, error) { return ec.unmarshalNString2string(ctx, v) }
+
+			directive1 := func(ctx context.Context) (any, error) {
+				max, err := ec.unmarshalNInt2int32(ctx, 2048)
+				if err != nil {
+					var zeroVal string
+					return zeroVal, err
+				}
+				if ec.Directives.Length == nil {
+					var zeroVal string
+					return zeroVal, errors.New("directive length is not implemented")
+				}
+				return ec.Directives.Length(ctx, obj, directive0, nil, max, nil)
+			}
+
+			tmp, err := directive1(ctx)
+			if err != nil {
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
+			if data, ok := tmp.(string); ok {
+				it.URL = data
+			} else {
+				err := fmt.Errorf(`unexpected type %T from directive, should be string`, tmp)
+				return it, graphql.ErrorOnPath(ctx, err)
+			}
 		}
 	}
 	return it, nil
@@ -31815,6 +33756,60 @@ func (ec *executionContext) _Attachment(ctx context.Context, sel ast.SelectionSe
 	return out
 }
 
+var authProviderImplementors = []string{"AuthProvider"}
+
+func (ec *executionContext) _AuthProvider(ctx context.Context, sel ast.SelectionSet, obj *model.AuthProvider) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, authProviderImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AuthProvider")
+		case "id":
+			out.Values[i] = ec._AuthProvider_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "type":
+			out.Values[i] = ec._AuthProvider_type(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "label":
+			out.Values[i] = ec._AuthProvider_label(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "loginUrl":
+			out.Values[i] = ec._AuthProvider_loginUrl(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var botTokenImplementors = []string{"BotToken"}
 
 func (ec *executionContext) _BotToken(ctx context.Context, sel ast.SelectionSet, obj *model.BotToken) graphql.Marshaler {
@@ -32036,6 +34031,11 @@ func (ec *executionContext) _CallParticipant(ctx context.Context, sel ast.Select
 			}
 		case "joinedAt":
 			out.Values[i] = ec._CallParticipant_joinedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "callId":
+			out.Values[i] = ec._CallParticipant_callId(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -32577,39 +34577,6 @@ func (ec *executionContext) _Event(ctx context.Context, sel ast.SelectionSet, ob
 					}
 				}()
 				res = ec._Event_actor(ctx, field, obj)
-				return res
-			}
-
-			if field.Deferrable != nil {
-				dfs, ok := deferred[field.Deferrable.Label]
-				di := 0
-				if ok {
-					dfs.AddField(field)
-					di = len(dfs.Values) - 1
-				} else {
-					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
-					deferred[field.Deferrable.Label] = dfs
-				}
-				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
-					return innerFunc(ctx, dfs)
-				})
-
-				// don't run the out.Concurrently() call below
-				out.Values[i] = graphql.Null
-				continue
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
-		case "deliveryCursor":
-			field := field
-
-			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Event_deliveryCursor(ctx, field, obj)
 				return res
 			}
 
@@ -34266,6 +36233,42 @@ func (ec *executionContext) _MessagePostedEvent(ctx context.Context, sel ast.Sel
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "threadRepliesAround":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._MessagePostedEvent_threadRepliesAround(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "linkPreview":
 			field := field
 
@@ -34761,6 +36764,41 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "reorderRoomsInGroup":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_reorderRoomsInGroup(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createSidebarLink":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createSidebarLink(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateSidebarLink":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateSidebarLink(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deleteSidebarLink":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_deleteSidebarLink(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "moveSidebarLinkToGroup":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_moveSidebarLinkToGroup(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "reorderSidebarItemsInGroup":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_reorderSidebarItemsInGroup(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -35999,6 +38037,11 @@ func (ec *executionContext) _ProjectionState(ctx context.Context, sel ast.Select
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("ProjectionState")
+		case "key":
+			out.Values[i] = ec._ProjectionState_key(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "name":
 			out.Values[i] = ec._ProjectionState_name(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -37268,6 +39311,42 @@ func (ec *executionContext) _Room(ctx context.Context, sel ast.SelectionSet, obj
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "attachments":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Room_attachments(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "hasUnread":
 			field := field
 
@@ -37278,6 +39357,42 @@ func (ec *executionContext) _Room(ctx context.Context, sel ast.SelectionSet, obj
 					}
 				}()
 				res = ec._Room_hasUnread(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "viewerNotifications":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Room_viewerNotifications(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -37376,6 +39491,42 @@ func (ec *executionContext) _Room(ctx context.Context, sel ast.SelectionSet, obj
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "viewerCanAttach":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Room_viewerCanAttach(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "viewerCanReact":
 			field := field
 
@@ -37386,6 +39537,42 @@ func (ec *executionContext) _Room(ctx context.Context, sel ast.SelectionSet, obj
 					}
 				}()
 				res = ec._Room_viewerCanReact(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "viewerIsMember":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Room_viewerIsMember(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -38007,6 +40194,106 @@ func (ec *executionContext) _RoomArchivedEvent(ctx context.Context, sel ast.Sele
 	return out
 }
 
+var roomAttachmentItemImplementors = []string{"RoomAttachmentItem"}
+
+func (ec *executionContext) _RoomAttachmentItem(ctx context.Context, sel ast.SelectionSet, obj *model.RoomAttachmentItem) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, roomAttachmentItemImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RoomAttachmentItem")
+		case "attachment":
+			out.Values[i] = ec._RoomAttachmentItem_attachment(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "messageEventId":
+			out.Values[i] = ec._RoomAttachmentItem_messageEventId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "threadRootEventId":
+			out.Values[i] = ec._RoomAttachmentItem_threadRootEventId(ctx, field, obj)
+		case "createdAt":
+			out.Values[i] = ec._RoomAttachmentItem_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var roomAttachmentsConnectionImplementors = []string{"RoomAttachmentsConnection"}
+
+func (ec *executionContext) _RoomAttachmentsConnection(ctx context.Context, sel ast.SelectionSet, obj *model.RoomAttachmentsConnection) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, roomAttachmentsConnectionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RoomAttachmentsConnection")
+		case "items":
+			out.Values[i] = ec._RoomAttachmentsConnection_items(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalCount":
+			out.Values[i] = ec._RoomAttachmentsConnection_totalCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "hasMore":
+			out.Values[i] = ec._RoomAttachmentsConnection_hasMore(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var roomBanImplementors = []string{"RoomBan"}
 
 func (ec *executionContext) _RoomBan(ctx context.Context, sel ast.SelectionSet, obj *model.RoomBan) graphql.Marshaler {
@@ -38461,6 +40748,90 @@ func (ec *executionContext) _RoomGroup(ctx context.Context, sel ast.SelectionSet
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "items":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._RoomGroup_items(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var roomGroupItemImplementors = []string{"RoomGroupItem"}
+
+func (ec *executionContext) _RoomGroupItem(ctx context.Context, sel ast.SelectionSet, obj *model.RoomGroupItem) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, roomGroupItemImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RoomGroupItem")
+		case "type":
+			out.Values[i] = ec._RoomGroupItem_type(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "id":
+			out.Values[i] = ec._RoomGroupItem_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "room":
+			out.Values[i] = ec._RoomGroupItem_room(ctx, field, obj)
+		case "link":
+			out.Values[i] = ec._RoomGroupItem_link(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -39173,8 +41544,8 @@ func (ec *executionContext) _Server(ctx context.Context, sel ast.SelectionSet, o
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
-		case "enabledAuthProviders":
-			out.Values[i] = ec._Server_enabledAuthProviders(ctx, field, obj)
+		case "authProviders":
+			out.Values[i] = ec._Server_authProviders(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
@@ -39856,6 +42227,42 @@ func (ec *executionContext) _Server(ctx context.Context, sel ast.SelectionSet, o
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "viewerNotifications":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Server_viewerNotifications(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "viewerNotificationPreference":
 			field := field
 
@@ -40145,6 +42552,42 @@ func (ec *executionContext) _Server(ctx context.Context, sel ast.SelectionSet, o
 					}
 				}()
 				res = ec._Server_viewerCanAssignRoles(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "viewerCanManageUserPermissions":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Server_viewerCanManageUserPermissions(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -40990,6 +43433,55 @@ func (ec *executionContext) _SessionTerminatedEvent(ctx context.Context, sel ast
 	return out
 }
 
+var sidebarLinkImplementors = []string{"SidebarLink"}
+
+func (ec *executionContext) _SidebarLink(ctx context.Context, sel ast.SelectionSet, obj *corev1.SidebarLink) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, sidebarLinkImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SidebarLink")
+		case "id":
+			out.Values[i] = ec._SidebarLink_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "label":
+			out.Values[i] = ec._SidebarLink_label(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "url":
+			out.Values[i] = ec._SidebarLink_url(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferred), math.MaxInt32)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var subscriptionImplementors = []string{"Subscription"}
 
 func (ec *executionContext) _Subscription(ctx context.Context, sel ast.SelectionSet) func(ctx context.Context) graphql.Marshaler {
@@ -41347,6 +43839,11 @@ func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj
 			}
 		case "createdAt":
 			out.Values[i] = ec._User_createdAt(ctx, field, obj)
+		case "deleted":
+			out.Values[i] = ec._User_deleted(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		case "avatarUrl":
 			field := field
 
@@ -43098,6 +45595,11 @@ func (ec *executionContext) _VoiceCallToken(ctx context.Context, sel ast.Selecti
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "callId":
+			out.Values[i] = ec._VoiceCallToken_callId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -43540,6 +46042,32 @@ func (ec *executionContext) marshalNAttachment2ᚖhmansᚗdeᚋchattoᚋinternal
 	return ec._Attachment(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNAuthProvider2ᚕᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐAuthProviderᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.AuthProvider) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNAuthProvider2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐAuthProvider(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNAuthProvider2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐAuthProvider(ctx context.Context, sel ast.SelectionSet, v *model.AuthProvider) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AuthProvider(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNBanRoomMemberInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐBanRoomMemberInput(ctx context.Context, v any) (model.BanRoomMemberInput, error) {
 	res, err := ec.unmarshalInputBanRoomMemberInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -43678,6 +46206,11 @@ func (ec *executionContext) unmarshalNCreateRoomInput2hmansᚗdeᚋchattoᚋinte
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNCreateSidebarLinkInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐCreateSidebarLinkInput(ctx context.Context, v any) (model.CreateSidebarLinkInput, error) {
+	res, err := ec.unmarshalInputCreateSidebarLinkInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) marshalNCreatedBotToken2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐCreatedBotToken(ctx context.Context, sel ast.SelectionSet, v model.CreatedBotToken) graphql.Marshaler {
 	return ec._CreatedBotToken(ctx, sel, &v)
 }
@@ -43724,6 +46257,11 @@ func (ec *executionContext) unmarshalNDeleteRoleInput2hmansᚗdeᚋchattoᚋinte
 
 func (ec *executionContext) unmarshalNDeleteRoomGroupInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐDeleteRoomGroupInput(ctx context.Context, v any) (model.DeleteRoomGroupInput, error) {
 	res, err := ec.unmarshalInputDeleteRoomGroupInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNDeleteSidebarLinkInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐDeleteSidebarLinkInput(ctx context.Context, v any) (model.DeleteSidebarLinkInput, error) {
+	res, err := ec.unmarshalInputDeleteSidebarLinkInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
@@ -44037,6 +46575,11 @@ func (ec *executionContext) marshalNMarkThreadAsReadResult2ᚖhmansᚗdeᚋchatt
 
 func (ec *executionContext) unmarshalNMoveRoomToGroupInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐMoveRoomToGroupInput(ctx context.Context, v any) (model.MoveRoomToGroupInput, error) {
 	res, err := ec.unmarshalInputMoveRoomToGroupInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNMoveSidebarLinkToGroupInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐMoveSidebarLinkToGroupInput(ctx context.Context, v any) (model.MoveSidebarLinkToGroupInput, error) {
+	res, err := ec.unmarshalInputMoveSidebarLinkToGroupInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
@@ -44438,6 +46981,11 @@ func (ec *executionContext) unmarshalNReorderRoomsInGroupInput2hmansᚗdeᚋchat
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNReorderSidebarItemsInGroupInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐReorderSidebarItemsInGroupInput(ctx context.Context, v any) (model.ReorderSidebarItemsInGroupInput, error) {
+	res, err := ec.unmarshalInputReorderSidebarItemsInGroupInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNRevokeBotTokenInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRevokeBotTokenInput(ctx context.Context, v any) (model.RevokeBotTokenInput, error) {
 	res, err := ec.unmarshalInputRevokeBotTokenInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -44539,6 +47087,46 @@ func (ec *executionContext) marshalNRoom2ᚖhmansᚗdeᚋchattoᚋinternalᚋpb�
 	return ec._Room(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNRoomAttachmentItem2ᚕᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomAttachmentItemᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.RoomAttachmentItem) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNRoomAttachmentItem2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomAttachmentItem(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNRoomAttachmentItem2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomAttachmentItem(ctx context.Context, sel ast.SelectionSet, v *model.RoomAttachmentItem) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._RoomAttachmentItem(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNRoomAttachmentsConnection2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomAttachmentsConnection(ctx context.Context, sel ast.SelectionSet, v model.RoomAttachmentsConnection) graphql.Marshaler {
+	return ec._RoomAttachmentsConnection(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNRoomAttachmentsConnection2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomAttachmentsConnection(ctx context.Context, sel ast.SelectionSet, v *model.RoomAttachmentsConnection) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._RoomAttachmentsConnection(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNRoomBan2ᚕᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomBanᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.RoomBan) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
@@ -44621,6 +47209,42 @@ func (ec *executionContext) marshalNRoomGroup2ᚖhmansᚗdeᚋchattoᚋinternal�
 		return graphql.Null
 	}
 	return ec._RoomGroup(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNRoomGroupItem2ᚕᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomGroupItemᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.RoomGroupItem) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNRoomGroupItem2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomGroupItem(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNRoomGroupItem2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomGroupItem(ctx context.Context, sel ast.SelectionSet, v *model.RoomGroupItem) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._RoomGroupItem(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNRoomGroupItemType2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomGroupItemType(ctx context.Context, v any) (model.RoomGroupItemType, error) {
+	var res model.RoomGroupItemType
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNRoomGroupItemType2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomGroupItemType(ctx context.Context, sel ast.SelectionSet, v model.RoomGroupItemType) graphql.Marshaler {
+	return v
 }
 
 func (ec *executionContext) marshalNRoomGroupRolePermissions2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐRoomGroupRolePermissions(ctx context.Context, sel ast.SelectionSet, v model.RoomGroupRolePermissions) graphql.Marshaler {
@@ -44766,6 +47390,40 @@ func (ec *executionContext) unmarshalNSetRoomNotificationLevelInput2hmansᚗde�
 func (ec *executionContext) unmarshalNSetServerNotificationLevelInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐSetServerNotificationLevelInput(ctx context.Context, v any) (model.SetServerNotificationLevelInput, error) {
 	res, err := ec.unmarshalInputSetServerNotificationLevelInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNSidebarGroupEntryInput2ᚕᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐSidebarGroupEntryInputᚄ(ctx context.Context, v any) ([]*model.SidebarGroupEntryInput, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*model.SidebarGroupEntryInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNSidebarGroupEntryInput2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐSidebarGroupEntryInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNSidebarGroupEntryInput2ᚖhmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐSidebarGroupEntryInput(ctx context.Context, v any) (*model.SidebarGroupEntryInput, error) {
+	res, err := ec.unmarshalInputSidebarGroupEntryInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNSidebarLink2hmansᚗdeᚋchattoᚋinternalᚋpbᚋchattoᚋcoreᚋv1ᚐSidebarLink(ctx context.Context, sel ast.SelectionSet, v corev1.SidebarLink) graphql.Marshaler {
+	return ec._SidebarLink(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNSidebarLink2ᚖhmansᚗdeᚋchattoᚋinternalᚋpbᚋchattoᚋcoreᚋv1ᚐSidebarLink(ctx context.Context, sel ast.SelectionSet, v *corev1.SidebarLink) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._SidebarLink(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNStartDMInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐStartDMInput(ctx context.Context, v any) (model.StartDMInput, error) {
@@ -44963,6 +47621,11 @@ func (ec *executionContext) unmarshalNUpdateServerConfigInput2hmansᚗdeᚋchatt
 
 func (ec *executionContext) unmarshalNUpdateSettingsInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐUpdateSettingsInput(ctx context.Context, v any) (model.UpdateSettingsInput, error) {
 	res, err := ec.unmarshalInputUpdateSettingsInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNUpdateSidebarLinkInput2hmansᚗdeᚋchattoᚋinternalᚋgraphᚋmodelᚐUpdateSidebarLinkInput(ctx context.Context, v any) (model.UpdateSidebarLinkInput, error) {
+	res, err := ec.unmarshalInputUpdateSidebarLinkInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
@@ -45470,6 +48133,13 @@ func (ec *executionContext) marshalORoomType2ᚖhmansᚗdeᚋchattoᚋinternal�
 		return graphql.Null
 	}
 	return v
+}
+
+func (ec *executionContext) marshalOSidebarLink2ᚖhmansᚗdeᚋchattoᚋinternalᚋpbᚋchattoᚋcoreᚋv1ᚐSidebarLink(ctx context.Context, sel ast.SelectionSet, v *corev1.SidebarLink) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._SidebarLink(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOString2string(ctx context.Context, v any) (string, error) {

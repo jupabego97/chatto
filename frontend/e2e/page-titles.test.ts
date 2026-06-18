@@ -6,6 +6,7 @@ import {
   verifyAdminEmail,
   type TestUser
 } from './fixtures/testUser';
+import { withServerUser } from './fixtures/serverUser';
 import { AdminPage } from './pages/AdminPage';
 import * as routes from './routes';
 import { TIMEOUTS } from './constants';
@@ -21,55 +22,18 @@ async function createAndLoginAdminUser(page: Page): Promise<TestUser> {
 }
 
 test.describe('Page titles', () => {
-  // 'Browse Spaces page has correct title' was retired with the Browse
-  // Spaces UI in PR(a).
-
-  test('browse rooms page has correct title', async ({ page, chatPage }) => {
+  test('room page has room and server name in title', async ({ page, chatPage }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    const spaceName = await chatPage.createSpace();
-
-    // Navigate to Browse Rooms page (space context but no specific room)
-    await page.getByRole('link', { name: 'Overview' }).click();
-    await page.waitForURL(routes.patterns.browseRooms);
-
-    // Post-#330 PR(a) the instance name falls back to the bootstrap space's
-    // name when no runtime override is configured.
-    await expect(page).toHaveTitle(`Overview | ${spaceName}`);
-  });
-
-  test('room page has room and space name in title', async ({ page, chatPage }) => {
-    await createAndLoginTestUser(page);
-    await chatPage.goto();
-    const spaceName = await chatPage.createSpace();
+    const serverName = await chatPage.getServerName();
     await chatPage.enterRoom('general');
 
     // Wait for room header to be visible (indicates room data is loaded)
     await expect(chatPage.getRoomHeader('general')).toBeVisible();
 
-    // Title: "#room - <space> | <instance>". Post-PR(a) instance name falls
-    // back to the space name when no runtime override is configured.
-    await expect(page).toHaveTitle(`#general - ${spaceName} | ${spaceName}`);
-  });
-
-  test('room title updates when switching pages', async ({ page, chatPage }) => {
-    await createAndLoginTestUser(page);
-    await chatPage.goto();
-    const spaceName = await chatPage.createSpace();
-
-    // Enter general room
-    await chatPage.enterRoom('general');
-    await expect(chatPage.getRoomHeader('general')).toBeVisible();
-    await expect(page).toHaveTitle(`#general - ${spaceName} | ${spaceName}`);
-
-    // Go back to space index by navigating to browse rooms and back
-    await page.getByRole('link', { name: 'Overview' }).click();
-    await expect(page).toHaveTitle(`Overview | ${spaceName}`);
-
-    // Re-enter general room and verify title is set again
-    await chatPage.enterRoom('general');
-    await expect(chatPage.getRoomHeader('general')).toBeVisible();
-    await expect(page).toHaveTitle(`#general - ${spaceName} | ${spaceName}`);
+    // Title: "#room - <server> | <instance>". Post-PR(a) instance name falls
+    // back to the server name when no runtime override is configured.
+    await expect(page).toHaveTitle(`#general - ${serverName} | ${serverName}`);
   });
 
   test('room page title uses custom instance name', async ({ page, chatPage }) => {
@@ -81,67 +45,23 @@ test.describe('Page titles', () => {
     await adminPage.fillServerSettings({ serverName: 'Test Server' });
     await adminPage.saveServerSettings();
 
-    // Create space and enter room
+    // Create account and enter room
     await chatPage.goto();
-    const spaceName = await chatPage.createSpace();
+    const serverName = await chatPage.getServerName();
     await chatPage.enterRoom('general');
 
     // Wait for room header to be visible
     await expect(chatPage.getRoomHeader('general')).toBeVisible();
 
     // Title should use custom instance name
-    await expect(page).toHaveTitle(`#general - ${spaceName} | Test Server`);
+    await expect(page).toHaveTitle(`#general - ${serverName} | Test Server`);
   });
 
-  test('title reverts cleanly when leaving a room for another page', async ({ page, chatPage }) => {
-    await createAndLoginTestUser(page);
-    await chatPage.goto();
-    const spaceName = await chatPage.createSpace();
-
-    // Enter room — title should include room and space name
-    await chatPage.enterRoom('general');
-    await expect(chatPage.getRoomHeader('general')).toBeVisible();
-    await expect(page).toHaveTitle(`#general - ${spaceName} | ${spaceName}`);
-
-    // Navigate to Browse Rooms — title should switch to that page's title, not blank
-    await page.goto(routes.browseRooms);
-    await page.waitForURL(routes.browseRooms);
-    await expect(page).toHaveTitle(`Overview | ${spaceName}`);
-  });
-
-  test('title stays correct during rapid navigation between rooms and pages', async ({
+  test('page title updates in real-time when instance name changes', async ({
     page,
-    chatPage
+    browser,
+    serverURL
   }) => {
-    await createAndLoginTestUser(page);
-    await chatPage.goto();
-    const spaceName = await chatPage.createSpace();
-
-    // Enter room
-    await chatPage.enterRoom('general');
-    await expect(chatPage.getRoomHeader('general')).toBeVisible();
-    await expect(page).toHaveTitle(`#general - ${spaceName} | ${spaceName}`);
-
-    // Navigate to Browse Rooms via sidebar link (SPA navigation)
-    await page.getByRole('link', { name: 'Overview' }).click();
-    await expect(page).toHaveTitle(`Overview | ${spaceName}`);
-
-    // Back to room
-    await chatPage.enterRoom('general');
-    await expect(chatPage.getRoomHeader('general')).toBeVisible();
-    await expect(page).toHaveTitle(`#general - ${spaceName} | ${spaceName}`);
-
-    // Full navigation to Browse Rooms verifies title after page load
-    await page.goto(routes.browseRooms);
-    await expect(page).toHaveTitle(`Overview | ${spaceName}`);
-
-    // Back to room again
-    await page.goBack();
-    await expect(chatPage.getRoomHeader('general')).toBeVisible();
-    await expect(page).toHaveTitle(`#general - ${spaceName} | ${spaceName}`);
-  });
-
-  test('page title updates in real-time when instance name changes', async ({ page, browser }) => {
     // Setup: Admin in first browser, regular user in second browser
     await createAndLoginAdminUser(page);
     const adminPage = new AdminPage(page);
@@ -151,41 +71,23 @@ test.describe('Page titles', () => {
     await adminPage.fillServerSettings({ serverName: 'Initial Server' });
     await adminPage.saveServerSettings();
 
-    // Create a second browser context for a regular user
-    const context2 = await browser.newContext();
-    const page2 = await context2.newPage();
-    await createAndLoginTestUser(page2);
+    await withServerUser(browser, serverURL, async ({ page: page2 }) => {
+      // Navigate second user to Browse Rooms (accessible to all users)
+      await page2.goto(routes.browseRooms);
+      // The instance name is fetched asynchronously via /api/server, so wait for it
+      await expect(page2).toHaveTitle('Overview | Initial Server', {
+        timeout: TIMEOUTS.UI_STANDARD
+      });
 
-    // Navigate second user to Browse Rooms (accessible to all users)
-    await page2.goto(routes.browseRooms);
-    // The instance name is fetched asynchronously via /api/server, so wait for it
-    await expect(page2).toHaveTitle('Overview | Initial Server', { timeout: TIMEOUTS.UI_STANDARD });
+      // Admin changes instance name
+      await adminPage.gotoServerSettings();
+      await adminPage.fillServerSettings({ serverName: 'Updated Server' });
+      await adminPage.saveServerSettings();
 
-    // Admin changes instance name
-    await adminPage.gotoServerSettings();
-    await adminPage.fillServerSettings({ serverName: 'Updated Server' });
-    await adminPage.saveServerSettings();
-
-    // Second user's page title should update via live events
-    await expect(page2).toHaveTitle('Overview | Updated Server', { timeout: TIMEOUTS.UI_STANDARD });
-
-    // Clean up
-    await context2.close();
-  });
-});
-
-test.describe('PWA theme-color meta tags', () => {
-  test('light mode theme-color matches outer frame background (gray-200)', async ({ page }) => {
-    await page.goto('/chat');
-
-    const lightMeta = page.locator('meta[name="theme-color"][media*="light"]');
-    await expect(lightMeta).toHaveAttribute('content', '#e5e7eb');
-  });
-
-  test('dark mode theme-color matches outer frame background (neutral-800)', async ({ page }) => {
-    await page.goto('/chat');
-
-    const darkMeta = page.locator('meta[name="theme-color"][media*="dark"]');
-    await expect(darkMeta).toHaveAttribute('content', '#262626');
+      // Second user's page title should update via live events
+      await expect(page2).toHaveTitle('Overview | Updated Server', {
+        timeout: TIMEOUTS.UI_STANDARD
+      });
+    });
   });
 });

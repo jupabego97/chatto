@@ -33,7 +33,7 @@ func (r *roomResolver) Type(ctx context.Context, obj *corev1.Room) (model.RoomTy
 }
 
 // Members is the resolver for the members field.
-func (r *roomResolver) Members(ctx context.Context, obj *corev1.Room, limit *int32, offset *int32) (*model.RoomMembersConnection, error) {
+func (r *roomResolver) Members(ctx context.Context, obj *corev1.Room, search *string, limit *int32, offset *int32) (*model.RoomMembersConnection, error) {
 	user, err := requireAuth(ctx)
 	if err != nil {
 		return nil, err
@@ -59,14 +59,33 @@ func (r *roomResolver) Members(ctx context.Context, obj *corev1.Room, limit *int
 	}
 	users := make([]*corev1.User, 0, len(memberships))
 	for _, m := range memberships {
-		u, err := r.core.GetUser(ctx, m.UserId)
+		u, err := r.core.GetUserReference(ctx, m.UserId)
 		if err != nil {
+			if errors.Is(err, core.ErrNotFound) {
+				users = append(users, core.DeletedUserReference(m.UserId))
+				continue
+			}
 			return nil, err
 		}
 		if u != nil {
 			users = append(users, u)
 		}
 	}
+	query := ""
+	if search != nil {
+		query = strings.TrimSpace(strings.ToLower(*search))
+	}
+	if query != "" {
+		filtered := users[:0]
+		for _, user := range users {
+			if strings.Contains(strings.ToLower(user.Login), query) ||
+				strings.Contains(strings.ToLower(user.DisplayName), query) {
+				filtered = append(filtered, user)
+			}
+		}
+		users = filtered
+	}
+
 	sort.Slice(users, func(i, j int) bool {
 		left := strings.ToLower(users[i].DisplayName)
 		right := strings.ToLower(users[j].DisplayName)
@@ -83,6 +102,52 @@ func (r *roomResolver) Members(ctx context.Context, obj *corev1.Room, limit *int
 		Users:      page,
 		TotalCount: int32(totalCount),
 		HasMore:    hasMore,
+	}, nil
+}
+
+// Attachments is the resolver for the attachments field.
+func (r *roomResolver) Attachments(ctx context.Context, obj *corev1.Room, limit *int32, offset *int32) (*model.RoomAttachmentsConnection, error) {
+	user, err := requireAuth(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	kind := core.KindOfRoom(obj)
+	isMember, err := r.core.RoomMembershipExists(ctx, kind, user.Id, obj.Id)
+	if err != nil {
+		return nil, err
+	}
+	if !isMember {
+		return nil, core.ErrNotRoomMember
+	}
+
+	limitVal, offsetVal := paginationArgs(limit, offset, 50, 100)
+	result, err := r.core.GetRoomAttachments(ctx, kind, obj.Id, limitVal, offsetVal)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]*model.RoomAttachmentItem, 0, len(result.Items))
+	for _, item := range result.Items {
+		if item == nil {
+			continue
+		}
+		var threadRootEventID *string
+		if item.ThreadRootEventID != "" {
+			threadRootEventID = &item.ThreadRootEventID
+		}
+		items = append(items, &model.RoomAttachmentItem{
+			Attachment:        item.Attachment,
+			MessageEventID:    item.MessageEventID,
+			ThreadRootEventID: threadRootEventID,
+			CreatedAt:         item.CreatedAt,
+		})
+	}
+
+	return &model.RoomAttachmentsConnection{
+		Items:      items,
+		TotalCount: int32(result.TotalCount),
+		HasMore:    result.HasMore,
 	}, nil
 }
 
@@ -105,6 +170,26 @@ func (r *roomResolver) HasUnread(ctx context.Context, obj *corev1.Room) (bool, e
 	return r.core.HasUnread(ctx, core.KindOfRoom(obj), user.Id, obj.Id)
 }
 
+// ViewerNotifications is the resolver for the viewerNotifications field.
+func (r *roomResolver) ViewerNotifications(ctx context.Context, obj *corev1.Room, limit *int32, offset *int32) (*model.NotificationsConnection, error) {
+	user := auth.ForContext(ctx)
+	if user == nil {
+		return emptyNotificationsConnection(), nil
+	}
+
+	isMember, err := r.core.RoomMembershipExists(ctx, core.KindOfRoom(obj), user.Id, obj.Id)
+	if err != nil {
+		return emptyNotificationsConnection(), nil
+	}
+	if !isMember {
+		return emptyNotificationsConnection(), nil
+	}
+
+	return r.resolveNotificationsConnection(ctx, user.Id, limit, offset, func(notif *corev1.Notification) bool {
+		return notificationTargetRoomID(notif) == obj.Id
+	})
+}
+
 // ViewerCanPostMessage is the resolver for the viewerCanPostMessage field.
 func (r *roomResolver) ViewerCanPostMessage(ctx context.Context, obj *corev1.Room) (bool, error) {
 	user := auth.ForContext(ctx)
@@ -123,6 +208,15 @@ func (r *roomResolver) ViewerCanPostInThread(ctx context.Context, obj *corev1.Ro
 	return r.core.CanPostInThread(ctx, user.Id, core.KindOfRoom(obj), obj.Id)
 }
 
+// ViewerCanAttach is the resolver for the viewerCanAttach field.
+func (r *roomResolver) ViewerCanAttach(ctx context.Context, obj *corev1.Room) (bool, error) {
+	user := auth.ForContext(ctx)
+	if user == nil {
+		return false, nil
+	}
+	return r.core.CanAttachFiles(ctx, user.Id, core.KindOfRoom(obj), obj.Id)
+}
+
 // ViewerCanReact is the resolver for the viewerCanReact field.
 func (r *roomResolver) ViewerCanReact(ctx context.Context, obj *corev1.Room) (bool, error) {
 	user := auth.ForContext(ctx)
@@ -130,6 +224,15 @@ func (r *roomResolver) ViewerCanReact(ctx context.Context, obj *corev1.Room) (bo
 		return false, nil
 	}
 	return r.core.CanReactToMessage(ctx, user.Id, core.KindOfRoom(obj), obj.Id)
+}
+
+// ViewerIsMember is the resolver for the viewerIsMember field.
+func (r *roomResolver) ViewerIsMember(ctx context.Context, obj *corev1.Room) (bool, error) {
+	user := auth.ForContext(ctx)
+	if user == nil {
+		return false, nil
+	}
+	return r.core.RoomMembershipExists(ctx, core.KindOfRoom(obj), user.Id, obj.Id)
 }
 
 // ViewerCanManageOthersMessage is the resolver for the viewerCanManageOthersMessage field.
@@ -328,6 +431,10 @@ func (r *roomResolver) VoiceCallToken(ctx context.Context, obj *corev1.Room) (*c
 
 	avatarSize := 96
 	avatarURL, _ := r.core.GetUserAvatarURL(ctx, user.Id, &avatarSize, &avatarSize, "cover")
+	activeCall, ok := r.core.CallState.ActiveCall(obj.Id)
+	if !ok {
+		return nil, fmt.Errorf("no active voice call for room %s", obj.Id)
+	}
 	e2eeKey, err := r.core.GetVoiceCallE2EEKey(ctx, obj.Id)
 	if err != nil {
 		return nil, err
@@ -347,6 +454,7 @@ func (r *roomResolver) VoiceCallToken(ctx context.Context, obj *corev1.Room) (*c
 	if err != nil {
 		return nil, err
 	}
+	token.CallID = activeCall.CallID
 
 	return token, nil
 }
@@ -380,6 +488,7 @@ func (r *roomResolver) CallParticipants(ctx context.Context, obj *corev1.Room) (
 		result = append(result, &model.CallParticipant{
 			User:     user,
 			JoinedAt: timestamppb.New(time.Unix(p.JoinedAt, 0)),
+			CallID:   p.CallID,
 		})
 	}
 	return result, nil

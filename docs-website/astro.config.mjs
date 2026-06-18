@@ -12,7 +12,7 @@ export default defineConfig({
         {
           icon: "github",
           label: "GitHub",
-          href: "https://github.com/hmans/chatto",
+          href: "https://github.com/chattocorp/chatto",
         },
       ],
       sidebar: [
@@ -32,6 +32,7 @@ export default defineConfig({
             "guides/s3-storage",
             "guides/video-processing",
             "guides/voice-calls",
+            "guides/external-login-providers",
             "guides/backup-restore",
             "guides/security",
             "guides/permissions",
@@ -39,7 +40,7 @@ export default defineConfig({
         },
         {
           label: "Reference",
-          autogenerate: { directory: "reference" },
+          items: [{ autogenerate: { directory: "reference" } }],
         },
       ],
     }),

@@ -18,7 +18,7 @@ Names for visible surfaces and component groupings. When a name here disagrees w
 
 **Room View** — The main central area showing the current room: message list plus the composer at the bottom. Not "the chat area" — *Room View* is the canonical name.
 
-**Room Sidebar** — Right-hand pane scoped to the current room. Currently shows the member list; will grow to host other room-scoped surfaces (pinned messages, files, etc.). Implemented in `frontend/src/routes/chat/[serverId]/(chrome)/[roomId]/RoomSidebar.svelte`.
+**Room Sidebar** — Right-hand pane scoped to the current room. Hosts room-specific extras such as the member list today and future surfaces like files or calls. Implemented in `frontend/src/routes/chat/[serverId]/[roomId]/RoomSidebar.svelte`.
 
 **Composer** — The message input at the bottom of the Room View. Includes text input, attachment picker, emoji picker, mentions autocomplete.
 
@@ -54,6 +54,8 @@ User-facing concepts. If a user might say the word, it goes here.
 
 **Room Group** — Named collection of rooms within a server, with its own per-group permission overrides. See [ADR-031](adr/ADR-031-room-group-centric-acl.md) and [FDR-017](fdr/FDR-017-room-groups-and-sidebar-layout.md).
 
+**Sidebar Link** — Operator-managed external link shown in the Server Sidebar inside a Room Group, ordered alongside rooms and stored as a durable group aggregate fact. See [FDR-017](fdr/FDR-017-room-groups-and-sidebar-layout.md).
+
 **DM (Direct Message)** — Private conversation between users, modelled as a room with `kind: dm`. See [FDR-007](fdr/FDR-007-direct-messages.md).
 
 **Message** — A user-posted entry in a room. Root messages live at the top level; thread replies hang off a root.
@@ -84,21 +86,19 @@ User-facing concepts. If a user might say the word, it goes here.
 
 Chatto's RBAC model. Read top-to-bottom — terms build on each other.
 
-**RBAC (Role-Based Access Control)** — The model: roles bundle permissions, users hold roles. See [ADR-005](adr/ADR-005-hierarchy-wins-rbac.md).
+**RBAC (Role-Based Access Control)** — The model: roles bundle permissions, users hold roles, and direct user overrides can grant or deny exceptions. See [ADR-040](adr/ADR-040-permission-only-rbac-with-owner-override.md).
 
 **Role** — Named bundle of permissions, assignable to users. System roles are seeded; custom roles can be created. Role names share the message-mention namespace with user logins, and each role can be marked pingable to allow `@role` pings.
 
 **Permission** — Named capability gate, e.g. `message.post`, `role.assign`. Strings use hyphens, never underscores. The full list lives in `cli/internal/core/permissions.go`.
 
-**Position** — Numeric rank of a role. Higher = more power. `everyone` = 0, `moderator` = 100, `admin` = 900, `owner` = 1000. Custom roles slot in the gaps.
+**Position** — Numeric display/order value for a role. `everyone` = 0, `moderator` = 100, `admin` = 900, `owner` = 1000. Custom roles slot in the gaps. Position is not an authorization rank.
 
-**Rank** — Comparison between two users' highest role positions. Answers a hierarchy question ("does A outrank B?"), not a capability question.
+**Effective owner** — A user who either has the durable `owner` role or has a verified email listed in `owners.emails`. Effective owners receive every known RBAC permission except where the DM privacy boundary applies.
 
-**Outranking** — Hierarchy check: actor's highest role position must be strictly greater than the target's. Required *alongside* the relevant permission for any mutation targeting another user. See `.claude/rules/authorization.md`.
+**Owner** — Top system role (position 1000). Conferred through role assignment or through verified `owners.emails` configuration.
 
-**Owner** — Top system role (position 1000). Conferred via `owners.emails` in `chatto.toml` or by another owner.
-
-**Admin** — System role (position 900). Full administrative reach except over `owner`-rank users.
+**Admin** — System role (position 900). Broad administrative defaults, still subject to explicit RBAC decisions unless the user is also an effective owner.
 
 **Moderator** — System role (position 100). Moderation permissions, no administrative reach.
 
@@ -131,6 +131,8 @@ Infrastructure jargon. If only contributors say the word, it goes here.
 **Projection** — In-memory read model rebuilt from `EVT` and owned independently by each Chatto process. Projections serve current-state and timeline reads while `EVT` remains the source of truth. See [ADR-033](adr/ADR-033-event-sourced-state-with-projections.md).
 
 **Auth generation** — Per-user authentication epoch derived from durable user events. Cookie sessions, bearer tokens, and OAuth authorization codes are valid only when their stored generation matches the user's current generation. See [FDR-023](fdr/FDR-023-authentication-and-sessions.md).
+
+**External identity** — Provider-issued account identity linked to a Chatto user, keyed by verified issuer/provider namespace plus provider subject rather than email. See [FDR-023](fdr/FDR-023-authentication-and-sessions.md).
 
 **Live Event** — Transient `corev1.LiveEvent` published on `live.sync.>` (typing, notification sync, voice-call presence). Durable EVT facts reach live subscribers through the internal `live.evt.>` republish path after server-side projection readiness and authorization checks.
 

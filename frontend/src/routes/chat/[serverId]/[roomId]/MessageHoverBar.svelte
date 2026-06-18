@@ -69,6 +69,7 @@ Desktop only (pointer-fine); mobile uses the long-press action sheet instead.
   const actions = useMessageActions();
 
   const params: MessageActionParams = $derived({
+    serverId,
     roomId,
     messageEventId,
     eventId,
@@ -116,7 +117,10 @@ Desktop only (pointer-fine); mobile uses the long-press action sheet instead.
   role="toolbar"
   tabindex="-1"
   aria-label="Message actions"
-  onmousedown={(e) => e.stopPropagation()}
+  onmousedown={(e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }}
 >
   {#if canReact}
     <div class="flex items-center menu-section-sm">

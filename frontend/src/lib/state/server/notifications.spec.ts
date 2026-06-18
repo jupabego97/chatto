@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Client } from '@urql/svelte';
-import { NotificationStore, type NotificationItem } from './notifications.svelte';
+import {
+  NotificationStore,
+  notificationTarget,
+  type NotificationItem
+} from './notifications.svelte';
 
 /**
  * Build a minimal mock urql Client whose `query` resolves with a controllable
@@ -43,6 +47,18 @@ function notificationsResult(items: NotificationItem[]) {
   return {
     viewer: {
       notifications: {
+        totalCount: items.length,
+        items
+      }
+    }
+  };
+}
+
+function roomNotificationsResult(items: NotificationItem[], totalCount = items.length) {
+  return {
+    room: {
+      viewerNotifications: {
+        totalCount,
         items
       }
     }
@@ -65,6 +81,130 @@ describe('NotificationStore', () => {
     expect(store.error).toBeNull();
   });
 
+  it('fetchRoomNotification returns the newest room-scoped notification and caches it', async () => {
+    const roomMention = mention('room-mention');
+    const store = new NotificationStore(
+      makeClient({ data: roomNotificationsResult([roomMention], 4) })
+    );
+
+    const result = await store.fetchRoomNotification('r1');
+
+    expect(result).toEqual({
+      ok: true,
+      totalCount: 4,
+      notification: roomMention
+    });
+    expect(store.notifications.map((n) => n.id)).toEqual(['room-mention']);
+  });
+
+  it('fetchRoomNotification reports an empty room-scoped notification result', async () => {
+    const store = new NotificationStore(makeClient({ data: roomNotificationsResult([], 0) }));
+
+    const result = await store.fetchRoomNotification('r1');
+
+    expect(result).toEqual({
+      ok: true,
+      totalCount: 0,
+      notification: null
+    });
+    expect(store.notifications).toHaveLength(0);
+  });
+
+  it('resolveRoomNotification uses the cached room notification before querying', async () => {
+    const cached = mention('cached');
+    const client = makeClient({ data: roomNotificationsResult([mention('remote')], 1) });
+    const store = new NotificationStore(client);
+    store.notifications = [cached];
+
+    const result = await store.resolveRoomNotification('r1');
+
+    expect(result).toEqual({
+      ok: true,
+      totalCount: null,
+      notification: cached
+    });
+    expect(client.query).not.toHaveBeenCalled();
+  });
+
+  it('routes notification targets to the same room/thread/event used by push payloads', () => {
+    const store = new NotificationStore(makeClient({}));
+    const threadMention = {
+      __typename: 'MentionNotificationItem',
+      id: 'thread-mention',
+      createdAt: new Date().toISOString(),
+      actor: {
+        id: 'a',
+        login: 't',
+        displayName: 't',
+        avatarUrl: null,
+        presenceStatus: 'OFFLINE'
+      },
+      summary: 'mentioned you',
+      mentionRoom: { id: 'room-2', name: 'general' },
+      mentionEventId: 'mention-event',
+      mentionInThread: 'thread-root'
+    } as unknown as NotificationItem;
+    const threadReply = {
+      __typename: 'ReplyNotificationItem',
+      id: 'thread-reply',
+      createdAt: new Date().toISOString(),
+      actor: {
+        id: 'a',
+        login: 't',
+        displayName: 't',
+        avatarUrl: null,
+        presenceStatus: 'OFFLINE'
+      },
+      summary: 'replied to you',
+      replyRoom: { id: 'room-2', name: 'general' },
+      replyEventId: 'reply-event',
+      inReplyToId: 'mid-thread-msg',
+      replyInThread: 'thread-root'
+    } as unknown as NotificationItem;
+    const roomMessage = {
+      __typename: 'RoomMessageNotificationItem',
+      id: 'room-message',
+      createdAt: new Date().toISOString(),
+      actor: {
+        id: 'a',
+        login: 't',
+        displayName: 't',
+        avatarUrl: null,
+        presenceStatus: 'OFFLINE'
+      },
+      summary: 'posted a message',
+      roomMsgRoom: { id: 'room-news', name: 'news' },
+      roomMsgEventId: 'room-event'
+    } as unknown as NotificationItem;
+
+    expect(notificationTarget(threadMention)).toMatchObject({
+      roomId: 'room-2',
+      eventId: 'mention-event',
+      threadRootId: 'thread-root'
+    });
+    expect(store.getNavigationPath('origin', threadMention)).toBe(
+      '/chat/-/room-2/thread-root?highlight=mention-event'
+    );
+
+    expect(notificationTarget(threadReply)).toMatchObject({
+      roomId: 'room-2',
+      eventId: 'reply-event',
+      threadRootId: 'thread-root'
+    });
+    expect(store.getNavigationPath('origin', threadReply)).toBe(
+      '/chat/-/room-2/thread-root?highlight=reply-event'
+    );
+
+    expect(notificationTarget(roomMessage)).toMatchObject({
+      roomId: 'room-news',
+      eventId: 'room-event',
+      threadRootId: null
+    });
+    expect(store.getNavigationPath('origin', roomMessage)).toBe(
+      '/chat/-/room-news?highlight=room-event'
+    );
+  });
+
   // The motivating bug: a remote instance running an older backend rejects
   // the entire query when the frontend asks for a field it doesn't have.
   // Before the resilience contract this caused fetch() to throw and the
@@ -73,7 +213,9 @@ describe('NotificationStore', () => {
   // records the error message, but does NOT replace existing notifications.
   it('retains existing notifications when the server returns a GraphQL error', async () => {
     const errClient = makeClient({
-      error: { message: 'Cannot query field "threadRootEventId" on type "MentionNotificationItem".' }
+      error: {
+        message: 'Cannot query field "threadRootEventId" on type "MentionNotificationItem".'
+      }
     });
     const store = new NotificationStore(errClient);
     // Pre-populate as if a previous fetch had succeeded.
@@ -88,9 +230,7 @@ describe('NotificationStore', () => {
   });
 
   it('does not throw on GraphQL error', async () => {
-    const store = new NotificationStore(
-      makeClient({ error: { message: 'something broke' } })
-    );
+    const store = new NotificationStore(makeClient({ error: { message: 'something broke' } }));
     await expect(store.fetch()).resolves.toBeUndefined();
     expect(store.error).toBe('something broke');
   });
@@ -170,6 +310,46 @@ describe('NotificationStore', () => {
     expect(store.notifications.map((n) => n.id)).toEqual(['thread-mention']);
   });
 
+  it('dismissMentionNotifications reports dismissed counts by room', async () => {
+    const roomMentionA = {
+      __typename: 'MentionNotificationItem',
+      id: 'room-mention-a',
+      createdAt: new Date().toISOString(),
+      actor: {
+        id: 'a',
+        login: 't',
+        displayName: 't',
+        avatarUrl: null,
+        presenceStatus: 'OFFLINE'
+      },
+      summary: 'mentioned you',
+      mentionRoom: { id: 'r1', name: 'r' },
+      mentionEventId: 'e1',
+      mentionInThread: null
+    } as unknown as NotificationItem;
+    const roomMentionB = {
+      ...roomMentionA,
+      id: 'room-mention-b',
+      mentionEventId: 'e2'
+    } as unknown as NotificationItem;
+
+    const client = {
+      query: vi.fn(),
+      mutation: vi.fn().mockReturnValue({
+        toPromise: vi.fn().mockResolvedValue({ data: { dismissNotification: true }, error: null })
+      }),
+      subscription: vi.fn()
+    } as unknown as Client;
+    const store = new NotificationStore(client);
+    store.notifications = [roomMentionA, roomMentionB];
+    store.setUnreadNotificationCount(2);
+
+    const counts = await store.dismissMentionNotifications('r1');
+
+    expect(counts).toEqual({ total: 2, byRoom: { r1: 2 } });
+    expect(store.unreadNotificationCount).toBe(0);
+  });
+
   // Opening the thread clears both thread-replies AND thread-mentions in one
   // pass (the code path called from ThreadPane).
   it('dismissThreadNotifications clears thread-scoped mentions too', async () => {
@@ -209,6 +389,23 @@ describe('NotificationStore', () => {
 
     expect(dismissedIds).toEqual(['thread-mention']);
     expect(store.notifications).toHaveLength(0);
+  });
+
+  it('suppresses live echo refreshes for locally dismissed notifications', async () => {
+    const client = {
+      query: vi.fn(),
+      mutation: vi.fn().mockReturnValue({
+        toPromise: vi.fn().mockResolvedValue({ data: { dismissNotification: true }, error: null })
+      }),
+      subscription: vi.fn()
+    } as unknown as Client;
+    const store = new NotificationStore(client);
+    store.notifications = [mention('local')];
+
+    await store.dismiss('local');
+
+    expect(store.consumeLocalDismissal('local')).toBe(true);
+    expect(store.consumeLocalDismissal('local')).toBe(false);
   });
 
   // The DM list dot uses hasDMRoomNotification per conversation. It must

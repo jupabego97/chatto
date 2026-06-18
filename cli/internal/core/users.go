@@ -27,6 +27,16 @@ import (
 // User Operations
 // ============================================================================
 
+const DeletedUserDisplayName = "Deleted User"
+
+func DeletedUserReference(userID string) *corev1.User {
+	return &corev1.User{
+		Id:          userID,
+		DisplayName: DeletedUserDisplayName,
+		Deleted:     true,
+	}
+}
+
 // CreateUser creates a new user.
 // Uses the mentionables projection plus stream-wide OCC to prevent user/role
 // handle collisions across replicas.
@@ -243,8 +253,8 @@ func (c *ChattoCore) cleanupCreatedUserEncryptionKey(ctx context.Context, keyRef
 // in a single best-effort transaction. If verification fails after the user record is
 // written, the user record is rolled back so signup paths don't produce orphan accounts.
 //
-// Used by signup-completion (post email-link click) and OIDC callbacks, where the email
-// has already been proven (via clicking the link or via an OIDC `email_verified` claim).
+// Used by signup-completion (post email-link click) and trusted account-link
+// flows where the email has already been proven.
 func (c *ChattoCore) CreateVerifiedUser(ctx context.Context, actorID, login, displayName, password, email string) (*corev1.User, error) {
 	user, err := c.CreateUser(ctx, actorID, login, displayName, password)
 	if err != nil {
@@ -269,6 +279,15 @@ func (c *ChattoCore) rollbackUserCreation(ctx context.Context, user *corev1.User
 // GetUser retrieves a user from the user projection.
 func (c *ChattoCore) GetUser(ctx context.Context, userID string) (*corev1.User, error) {
 	if user, ok := c.Users.Get(userID); ok {
+		return user, nil
+	}
+	return nil, ErrNotFound
+}
+
+// GetUserReference retrieves a public user reference. Deleted or crypto-shredded
+// users are returned as tombstones; unknown users still return ErrNotFound.
+func (c *ChattoCore) GetUserReference(ctx context.Context, userID string) (*corev1.User, error) {
+	if user, ok := c.Users.GetReference(userID); ok {
 		return user, nil
 	}
 	return nil, ErrNotFound
@@ -991,16 +1010,6 @@ func (c *ChattoCore) DeleteUser(ctx context.Context, actorID, userID string) err
 	// Post-ADR-030 there are two implicit scopes — channel and DM — and
 	// cleanup iterates each kind.
 	allKinds := []RoomKind{KindChannel, KindDM}
-
-	// Delete all message bodies authored by this user
-	for _, kind := range allKinds {
-		deleted, err := c.deleteUserMessageBodiesInSpace(ctx, userID, kind)
-		if err != nil {
-			c.logger.Warn("Failed to delete message bodies", "user_id", userID, "kind", kind, "error", err)
-		} else if deleted > 0 {
-			c.logger.Info("Deleted message bodies during user deletion", "user_id", userID, "kind", kind, "count", deleted)
-		}
-	}
 
 	// Delete encryption key (crypto-shreds any remaining encrypted data) and
 	// record the durable shred signal projections use to tombstone messages

@@ -1,7 +1,7 @@
 # FDR-018: Account Lifecycle
 
 **Status:** Active
-**Last reviewed:** 2026-06-07
+**Last reviewed:** 2026-06-15
 
 ## Overview
 
@@ -13,7 +13,7 @@ This FDR covers the user account from registration through deletion: signup, ema
 
 - A user signs up with a login, email, and password. The login must pass uniqueness, format, and blocked-username checks; email uniqueness is enforced when the address is verified.
 - After signup, an email is sent to the address with a six-digit verification code.
-- Registration and verification codes are backed by `RUNTIME_STATE` HMAC-derived records with 15-minute per-key TTLs. Raw code values are never written to `EVT` or backup archives.
+- Registration and verification codes are backed by `RUNTIME_STATE` HMAC-derived records with configurable per-key TTLs (default 15 minutes). Raw code values are never written to `EVT` or backup archives. If email delivery fails, the pending OTP is cancelled so the failed send does not consume resend throttle capacity.
 - Until the email is verified, the account has limited capabilities (configurable per server) — typically read-only or some restricted set defined by what the `verified` role grants.
 - Entering the verification code marks the email as verified. The user gains the `verified` implicit role and the full set of permissions that role grants.
 - If the verified email matches an entry in `owners.emails` in the server config, the user is auto-assigned the `owner` role on verification.
@@ -97,7 +97,7 @@ This FDR covers the user account from registration through deletion: signup, ema
 ## Permissions
 
 - Self: anyone authenticated can update their own profile (FDR-022), add or remove their own emails, and delete their own account.
-- `user.delete-any` — admin permission to delete other users' accounts. Subject to outranking the target via `requireUserAdminTarget`.
+- `user.delete-any` — admin permission to delete other users' accounts.
 - `user.delete-self` — gates own-account deletion. Granted to `everyone` by default; operators can revoke to lock down self-deletion.
 
 ## Related

@@ -13,6 +13,7 @@ Chatto messages can link to one another via reply attribution, and they can live
 - A reply renders with a byline above the message body: the referenced author's small avatar, name, and a single-line excerpt of the referenced message.
 - Clicking the byline transports the user to the referenced message and briefly highlights it.
 - Clicking the avatar or name in the byline opens the user's context menu.
+- If the user selects text inside a message body before choosing Reply or Reply in thread, the target composer inserts that selected plain text as a Markdown blockquote while preserving any existing draft text.
 - A thread is a sequence of messages starting from a root message and continuing inside a dedicated thread pane. Threads can contain plain messages or reply-attributed messages; both are valid.
 - A user can post a plain message into a room, a reply into the room timeline, a plain message into a thread, or a reply inside a thread — each gated by separate permissions, so a room can be configured for many threading styles.
 
@@ -41,6 +42,12 @@ Chatto messages can link to one another via reply attribution, and they can live
 **Decision:** `MessagePostedEvent.threadReplies(limit, before, after)` returns a `RoomEventsConnection` page of replies, in chronological order, excluding the root event. Cursors use the same opaque sequence shape as `Room.events`.
 **Why:** Threads are append-only timelines and can grow large. A connection keeps the release API from baking in an unbounded reply list while matching the room timeline pagination model clients already understand.
 **Tradeoff:** Thread panes now load reply pages rather than a bare array. The current UI still asks for the default page, and can add older/newer reply paging without another schema change.
+
+### 5. Anchored thread reads preserve the visible window
+
+**Decision:** `MessagePostedEvent.threadRepliesAround(eventId, limit)` returns a reply page centered around a reply event ID, or around the top of the thread when the root event ID is supplied. The root event itself is still resolved separately and is not included in the reply connection.
+**Why:** Reconnect and wake refreshes need to reload the current thread window without jumping the reader to the newest replies. Anchoring by event ID lets the UI preserve scroll position in the same way room timelines use `eventsAround`.
+**Tradeoff:** This adds a second thread read shape, but keeps the existing forward/backward pagination API simple and avoids teaching cursor pagination how to express "refresh around this visible row."
 
 ## Permissions
 

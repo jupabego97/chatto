@@ -4,23 +4,28 @@ import type { RoomMember } from '$lib/state/room';
 import type { TipTapEditorApi } from './TipTapEditor.svelte';
 import { AutocompleteState } from './autocomplete.svelte';
 
-function member(login: string, displayName = login): RoomMember {
+function member(login: string, displayName = login, deleted = false): RoomMember {
   return {
     id: `user_${login}`,
     login,
     displayName,
+    deleted,
     avatarUrl: null,
     presenceStatus: PresenceStatus.Offline
   };
 }
 
-function editor(initialText: string): {
+function editor(
+  initialText: string,
+  initialCursor = initialText.length
+): {
   api: TipTapEditorApi;
   getText: () => string;
   setText: (text: string) => void;
+  setCursor: (position: number) => void;
 } {
   let text = initialText;
-  let cursor = text.length;
+  let cursor = initialCursor;
   return {
     api: {
       getText: () => text,
@@ -30,15 +35,21 @@ function editor(initialText: string): {
       },
       focus: () => {},
       getTextBeforeCursor: () => text.slice(0, cursor),
+      isInCodeBlock: () => false,
       replaceTextBeforeCursor: (charCount, replacement) => {
         text = text.slice(0, cursor - charCount) + replacement + text.slice(cursor);
         cursor = cursor - charCount + replacement.length;
-      }
+      },
+      insertBlockBreak: () => {},
+      insertQuote: () => {}
     },
     getText: () => text,
     setText: (next) => {
       text = next;
       cursor = text.length;
+    },
+    setCursor: (position) => {
+      cursor = position;
     }
   };
 }
@@ -48,6 +59,48 @@ function tabEvent(): KeyboardEvent {
 }
 
 describe('AutocompleteState', () => {
+  it('shows mention autocomplete when an @ partial has characters, even before members load', () => {
+    const fakeEditor = editor('@');
+    const state = new AutocompleteState(
+      () => fakeEditor.api,
+      () => []
+    );
+
+    state.update();
+    expect(state.mention).toBeNull();
+
+    fakeEditor.setText('@a');
+    state.update();
+    expect(state.mention?.query).toBe('a');
+
+    fakeEditor.setText('@');
+    state.update();
+    expect(state.mention).toBeNull();
+  });
+
+  it('shows emoji autocomplete only after the two-character shortcode threshold', () => {
+    const fakeEditor = editor(':');
+    const state = new AutocompleteState(
+      () => fakeEditor.api,
+      () => []
+    );
+
+    state.update();
+    expect(state.emoji).toBeNull();
+
+    fakeEditor.setText(':h');
+    state.update();
+    expect(state.emoji).toBeNull();
+
+    fakeEditor.setText(':he');
+    state.update();
+    expect(state.emoji?.query).toBe('he');
+
+    fakeEditor.setText(':h');
+    state.update();
+    expect(state.emoji).toBeNull();
+  });
+
   it('gives emoji autocomplete priority over mention autocomplete', () => {
     const fakeEditor = editor('@al');
     const state = new AutocompleteState(
@@ -87,6 +140,44 @@ describe('AutocompleteState', () => {
     expect(fakeEditor.getText()).toBe('@alicia ');
   });
 
+  it('excludes deleted members from mention Tab completion', () => {
+    const fakeEditor = editor('@deleted');
+    const state = new AutocompleteState(
+      () => fakeEditor.api,
+      () => [member('', 'Deleted User', true), member('deleted-alice', 'Deleted Alice', true)]
+    );
+    const ev = tabEvent();
+
+    expect(state.handleTabCompletion(ev)).toBe(true);
+    expect(fakeEditor.getText()).toBe('@deleted');
+  });
+
+  it('does not handle Tab when there is no mention partial at the cursor', () => {
+    const fakeEditor = editor('hello world');
+    const state = new AutocompleteState(
+      () => fakeEditor.api,
+      () => [member('alice')]
+    );
+    const ev = tabEvent();
+
+    expect(state.handleTabCompletion(ev)).toBe(false);
+    expect(ev.defaultPrevented).toBe(false);
+    expect(fakeEditor.getText()).toBe('hello world');
+  });
+
+  it('does not handle Tab when the cursor is after a bare @', () => {
+    const fakeEditor = editor('@');
+    const state = new AutocompleteState(
+      () => fakeEditor.api,
+      () => [member('alice')]
+    );
+    const ev = tabEvent();
+
+    expect(state.handleTabCompletion(ev)).toBe(false);
+    expect(ev.defaultPrevented).toBe(false);
+    expect(fakeEditor.getText()).toBe('@');
+  });
+
   it('selects a mention from the popup and seeds Tab cycling only for Tab selection', () => {
     const fakeEditor = editor('@ali');
     const state = new AutocompleteState(
@@ -106,6 +197,18 @@ describe('AutocompleteState', () => {
     state.selectMention('alice', true);
 
     expect(state.tabCompletion?.candidates).toEqual(['alice', 'alicia']);
+  });
+
+  it('completes a mention after leading text', () => {
+    const fakeEditor = editor('Hey @ali');
+    const state = new AutocompleteState(
+      () => fakeEditor.api,
+      () => [member('alice')]
+    );
+
+    const ev = tabEvent();
+    expect(state.handleTabCompletion(ev)).toBe(true);
+    expect(fakeEditor.getText()).toBe('Hey @alice ');
   });
 
   it('completes virtual and role mention handles', () => {
