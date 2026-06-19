@@ -12,14 +12,17 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
 - `onUpdate` - Called with markdown content on each change
 - `onKeyDown` - Keyboard event handler; return true to prevent TipTap default
 - `onPaste` - Paste event handler; return true to prevent TipTap default
+- `onNextEnterWillSendChange` - Called when selection enters/leaves a trailing empty paragraph
+- `onRichStructureChange` - Called when the document gains/loses structural Markdown blocks
 - `onReady` - Called with editor API when editor is initialized
 -->
 <script lang="ts">
   import { tick, untrack } from 'svelte';
-  import { Editor, Extension, InputRule, mergeAttributes } from '@tiptap/core';
+  import { Editor, Extension, InputRule, mergeAttributes, type JSONContent } from '@tiptap/core';
   import type { Node as ProseMirrorNode, Schema } from '@tiptap/pm/model';
   import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
   import StarterKit from '@tiptap/starter-kit';
+  import Link from '@tiptap/extension-link';
   import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
   import { Markdown } from '@tiptap/markdown';
   import Placeholder from '@tiptap/extension-placeholder';
@@ -28,6 +31,7 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
     ensureCodeLanguagesLoaded,
     lowlight
   } from '$lib/codeHighlighting';
+  import type { QuoteInsertionContent, SelectedQuoteBlock } from '$lib/state/room';
 
   const markdownLinkInputRegex = /(^|\s)\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)$/;
   const codeFenceLineRegex = /^```([\w-]+)?$/;
@@ -53,6 +57,8 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
       ];
     }
   });
+
+  const ComposerLink = Link.extend({ inclusive: false });
 
   function paragraphTextWithLineBreaks(node: ProseMirrorNode) {
     return node.textBetween(0, node.content.size, '\n', '\n');
@@ -187,70 +193,6 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
           }
         })
       ];
-    }
-  });
-
-  const MarkdownCodeFenceShortcut = Extension.create({
-    name: 'markdownCodeFenceShortcut',
-    priority: 1000,
-
-    addKeyboardShortcuts() {
-      return {
-        'Shift-Enter': () => {
-          const { editor } = this;
-          if (editor.isActive('codeBlock')) {
-            return editor.commands.exitCode();
-          }
-
-          const { selection } = editor.state;
-          const { empty } = selection;
-          const fromPos = selection.$from;
-          if (!empty || fromPos.parent.type.name !== 'paragraph') return false;
-          if (fromPos.depth !== 1) return false;
-
-          const textBeforeCursor = fromPos.parent.textBetween(0, fromPos.parentOffset, '\n', '\n');
-          const textAfterCursor = fromPos.parent.textBetween(
-            fromPos.parentOffset,
-            fromPos.parent.content.size,
-            '\n',
-            '\n'
-          );
-          const currentLine = textBeforeCursor.split('\n').at(-1) ?? '';
-          if (textAfterCursor && !textAfterCursor.startsWith('\n')) return false;
-
-          const match = currentLine.match(codeFenceLineRegex);
-          if (!match) return false;
-
-          const paragraphPos = fromPos.before(1);
-          const currentLineIndex = textBeforeCursor.split('\n').length - 1;
-          const appendTrailingParagraph =
-            paragraphPos + fromPos.parent.nodeSize === editor.state.doc.content.size;
-          const replacement = buildCodeFenceReplacement({
-            schema: editor.state.schema,
-            paragraph: fromPos.parent,
-            openLineIndex: currentLineIndex,
-            closeLineIndex: null,
-            appendTrailingParagraph
-          });
-          if (!replacement) return false;
-
-          const codePosition = paragraphPos + replacement.beforeNodeSize;
-          const tr = editor.state.tr.replaceWith(
-            paragraphPos,
-            paragraphPos + fromPos.parent.nodeSize,
-            replacement.nodes
-          );
-          tr.setSelection(TextSelection.create(tr.doc, codePosition + 1));
-          editor.view.dispatch(tr.scrollIntoView());
-          return true;
-        },
-
-        Enter: () => {
-          const { editor } = this;
-          if (!editor.isActive('codeBlock')) return false;
-          return editor.commands.newlineInCode();
-        }
-      };
     }
   });
 
@@ -497,10 +439,15 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
     return result;
   }
 
+  type MarkdownTransformOptions = {
+    skipLinkDestinations?: boolean;
+    preserveInlineCode?: boolean;
+  };
+
   function transformMarkdownTextSegment(
     text: string,
     transformText: (text: string) => string,
-    { skipLinkDestinations = false }: { skipLinkDestinations?: boolean } = {}
+    { skipLinkDestinations = false }: MarkdownTransformOptions = {}
   ): string {
     return skipLinkDestinations
       ? transformOutsideMarkdownLinkDestinations(text, transformText)
@@ -510,7 +457,7 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
   function transformOutsideInlineCode(
     line: string,
     transformText: (text: string) => string,
-    options: { skipLinkDestinations?: boolean } = {}
+    options: MarkdownTransformOptions = {}
   ): string {
     let result = '';
     let index = 0;
@@ -544,7 +491,7 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
   function transformMarkdownOutsideCode(
     markdown: string,
     transformText: (text: string) => string,
-    options: { skipLinkDestinations?: boolean } = {}
+    options: MarkdownTransformOptions = {}
   ): string {
     const lines = markdown.match(/[^\n]*(?:\n|$)/g) ?? [];
     if (lines[lines.length - 1] === '') {
@@ -560,7 +507,10 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
 
     const flushPendingText = () => {
       if (!pendingText) return;
-      result += transformOutsideInlineCode(pendingText, transformText, options);
+      result +=
+        options.preserveInlineCode === false
+          ? transformMarkdownTextSegment(pendingText, transformText, options)
+          : transformOutsideInlineCode(pendingText, transformText, options);
       pendingText = '';
     };
 
@@ -646,10 +596,113 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
     return markdown.replace(/ {2,}(\n\s*\n\s*(?:[-+*]|\d{1,9}[.)])\s)/g, '$1');
   }
 
+  function encodeSerializedHeadingClosingHashes(markdown: string): string {
+    return transformMarkdownOutsideCode(
+      markdown,
+      (text) =>
+        text.replace(
+          /(^|\n)((?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}#{1,6}[ \t]+[^\n]*?)([ \t]+)(#{1,})([ \t]*)(?=\n|$)/g,
+          (_match, lineStart, headingStart, separator, hashes, trailingWhitespace) =>
+            `${lineStart}${headingStart}${separator}${hashes.replace(/#/g, '&#35;')}${trailingWhitespace}`
+        ),
+      { preserveInlineCode: false }
+    );
+  }
+
   function getSerializedMarkdown(e: Editor): string {
     return normalizeSerializedHardBreaksBeforeLists(
-      trimSerializedTrailingEmptyParagraph(decodeSerializedMarkdownText(e.getMarkdown()), e)
+      encodeSerializedHeadingClosingHashes(
+        trimSerializedTrailingEmptyParagraph(decodeSerializedMarkdownText(e.getMarkdown()), e)
+      )
     );
+  }
+
+  function hasDefaultEmptyDocument(e: Editor): boolean {
+    if (e.state.doc.childCount !== 1) return false;
+    const firstChild = e.state.doc.firstChild;
+    return firstChild?.type.name === 'paragraph' && firstChild.content.size === 0;
+  }
+
+  function isSelectionInTrailingEmptyParagraph(e: Editor): boolean {
+    const { doc, selection } = e.state;
+    if (!selection.empty || doc.childCount <= 1) return false;
+
+    const selectionFrom = selection.$from;
+    if (selectionFrom.depth !== 1 || selectionFrom.parent.type.name !== 'paragraph') return false;
+    if (selectionFrom.parent.content.size !== 0 || selectionFrom.parentOffset !== 0) return false;
+    if (selectionFrom.after(1) !== doc.content.size) return false;
+
+    const previousNode = doc.child(doc.childCount - 2);
+    return previousNode.type.name !== 'paragraph' || previousNode.content.size > 0;
+  }
+
+  function isSelectionInPlainParagraph(e: Editor): boolean {
+    const { selection } = e.state;
+    if (!selection.empty) return false;
+
+    const selectionFrom = selection.$from;
+    return selectionFrom.depth === 1 && selectionFrom.parent.type.name === 'paragraph';
+  }
+
+  function hasRichStructure(e: Editor): boolean {
+    let found = false;
+    e.state.doc.descendants((node) => {
+      if (
+        ['heading', 'bulletList', 'orderedList', 'blockquote', 'codeBlock'].includes(node.type.name)
+      ) {
+        found = true;
+        return false;
+      }
+      return true;
+    });
+    return found;
+  }
+
+  function quoteParagraphsForText(text: string): JSONContent[] {
+    return text
+      .replace(/\r\n?/g, '\n')
+      .split('\n')
+      .map((line) => ({
+        type: 'paragraph',
+        content: line ? [{ type: 'text', text: line }] : undefined
+      }));
+  }
+
+  function normalizeQuoteInsertionContent(text: QuoteInsertionContent): SelectedQuoteBlock[] {
+    if (typeof text !== 'string') {
+      return text
+        .map((block) => ({
+          quoteDepth: Math.max(0, Math.floor(block.quoteDepth)),
+          text: block.text.replace(/\r\n?/g, '\n').trim()
+        }))
+        .filter((block) => block.text.length > 0);
+    }
+
+    const normalized = text.replace(/\r\n?/g, '\n').trim();
+    if (!normalized) return [];
+    return normalized.split('\n').map((line) => ({ quoteDepth: 0, text: line }));
+  }
+
+  function buildQuoteContent(blocks: SelectedQuoteBlock[]): JSONContent[] {
+    const content: JSONContent[] = [];
+
+    for (const block of blocks) {
+      let target = content;
+
+      for (let depth = 0; depth < block.quoteDepth; depth++) {
+        let current = target.at(-1);
+        if (current?.type !== 'blockquote') {
+          current = { type: 'blockquote', content: [] };
+          target.push(current);
+        }
+        current.content ??= [];
+        target = current.content;
+      }
+
+      target.push(...quoteParagraphsForText(block.text));
+    }
+
+    return content;
   }
 
   export type TipTapEditorApi = {
@@ -671,6 +724,10 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
      * length relative to the cursor.
      */
     replaceTextBeforeCursor: (charCount: number, replacement: string) => void;
+    /** Insert selected reply text as a blockquote at the current cursor. */
+    insertQuote: (text: QuoteInsertionContent) => void;
+    /** Insert the same block break the editor would create for a plain Enter key. */
+    insertBlockBreak: () => void;
   };
 
   let {
@@ -681,6 +738,8 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
     onUpdate,
     onKeyDown,
     onPaste,
+    onNextEnterWillSendChange,
+    onRichStructureChange,
     onReady
   }: {
     placeholder?: string;
@@ -690,6 +749,8 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
     onUpdate?: (text: string) => void;
     onKeyDown?: (event: KeyboardEvent) => boolean;
     onPaste?: (event: ClipboardEvent) => boolean;
+    onNextEnterWillSendChange?: (value: boolean) => void;
+    onRichStructureChange?: (value: boolean) => void;
     onReady?: (api: TipTapEditorApi) => void;
   } = $props();
 
@@ -703,6 +764,8 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
   let linkHrefDraft = $state('');
   let linkDraftInitializedFor = $state<string | null>(null);
   let codeLanguageLoadToken = 0;
+  let lastNextEnterWillSend = false;
+  let lastRichStructure = false;
 
   let hasLinkControls = $derived(activeLinkHref !== null);
   let activeCodeBlockLanguageLabel = $derived(
@@ -776,6 +839,20 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
       right: frameRect.right - preRect.right,
       bottom: frameRect.bottom - preRect.bottom
     };
+  }
+
+  function updateNextEnterWillSend(e: Editor) {
+    const value = !e.isDestroyed && isSelectionInTrailingEmptyParagraph(e);
+    if (value === lastNextEnterWillSend) return;
+    lastNextEnterWillSend = value;
+    onNextEnterWillSendChange?.(value);
+  }
+
+  function updateRichStructure(e: Editor) {
+    const value = !e.isDestroyed && hasRichStructure(e);
+    if (value === lastRichStructure) return;
+    lastRichStructure = value;
+    onRichStructureChange?.(value);
   }
 
   function updateActiveControls(e: Editor) {
@@ -922,6 +999,8 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
     const syncControls = () => {
       if (e.isDestroyed) return;
       updateActiveControls(e);
+      updateNextEnterWillSend(e);
+      updateRichStructure(e);
     };
 
     return {
@@ -933,6 +1012,7 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
           contentType: 'markdown',
           emitUpdate: false
         });
+        updateRichStructure(e);
         ensureEditorCodeLanguages(e);
         tick().then(syncControls);
       },
@@ -950,11 +1030,8 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
       },
 
       isInCodeBlock: () => !e.isDestroyed && e.isActive('codeBlock'),
-      isInPlainParagraph: () => {
-        if (e.isDestroyed) return false;
-        const selectionFrom = e.state.selection.$from;
-        return selectionFrom.depth === 1 && selectionFrom.parent.type.name === 'paragraph';
-      },
+
+      isInPlainParagraph: () => !e.isDestroyed && isSelectionInPlainParagraph(e),
 
       replaceTextBeforeCursor: (charCount: number, replacement: string) => {
         if (e.isDestroyed) return;
@@ -964,6 +1041,31 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
           .deleteRange({ from: from - charCount, to: from })
           .insertContent(replacement)
           .run();
+        tick().then(syncControls);
+      },
+
+      insertQuote: (text: QuoteInsertionContent) => {
+        if (e.isDestroyed) return;
+        const quoteBlocks = normalizeQuoteInsertionContent(text);
+        if (quoteBlocks.length === 0) return;
+        const quoteContent = buildQuoteContent(quoteBlocks);
+
+        e.chain()
+          .focus()
+          .insertContent([
+            {
+              type: 'blockquote',
+              content: quoteContent
+            },
+            { type: 'paragraph' }
+          ])
+          .run();
+        tick().then(syncControls);
+      },
+
+      insertBlockBreak: () => {
+        if (e.isDestroyed) return;
+        e.chain().focus().splitBlock().run();
         tick().then(syncControls);
       }
     };
@@ -987,10 +1089,14 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
               strike: false,
               underline: false,
               horizontalRule: false,
-              link: {
-                openOnClick: false,
-                enableClickSelection: true
-              }
+              trailingNode: false,
+              link: false
+            }),
+            ComposerLink.configure({
+              autolink: true,
+              linkOnPaste: true,
+              openOnClick: false,
+              enableClickSelection: true
             }),
             Markdown.configure({
               markedOptions: {
@@ -999,7 +1105,6 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
             }),
             ComposerCodeBlockLowlight.configure({ lowlight }),
             MarkdownLinkInputRule,
-            MarkdownCodeFenceShortcut,
             CompletedMarkdownCodeFence,
             MarkdownListMarkerAfterHardBreak,
             TrailingParagraphAfterCodeBlock,
@@ -1020,11 +1125,15 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
           },
           onUpdate: ({ editor: ed }) => {
             updateActiveControls(ed);
+            updateNextEnterWillSend(ed);
+            updateRichStructure(ed);
             ensureEditorCodeLanguages(ed);
-            onUpdate?.(ed.isEmpty ? '' : getSerializedMarkdown(ed));
+            onUpdate?.(hasDefaultEmptyDocument(ed) ? '' : getSerializedMarkdown(ed));
           },
           onSelectionUpdate: ({ editor: ed }) => {
             updateActiveControls(ed);
+            updateNextEnterWillSend(ed);
+            updateRichStructure(ed);
           }
         })
     );
@@ -1034,10 +1143,16 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
     // Notify parent that editor is ready with API
     tick().then(() => {
       if (e.isDestroyed || editor !== e) return;
+      updateNextEnterWillSend(e);
+      updateRichStructure(e);
       onReady?.(buildApi(e));
     });
 
     return () => {
+      lastNextEnterWillSend = false;
+      onNextEnterWillSendChange?.(false);
+      lastRichStructure = false;
+      onRichStructureChange?.(false);
       editor?.destroy();
       editor = null;
     };
@@ -1164,8 +1279,29 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
     margin: 0;
   }
 
-  :global(.tiptap-editor .ProseMirror > * + *) {
-    margin-top: 0.5em;
+  :global(.tiptap-editor .ProseMirror > p),
+  :global(.tiptap-editor .ProseMirror > blockquote),
+  :global(.tiptap-editor .ProseMirror > ul),
+  :global(.tiptap-editor .ProseMirror > ol),
+  :global(.tiptap-editor .ProseMirror > h1),
+  :global(.tiptap-editor .ProseMirror > h2),
+  :global(.tiptap-editor .ProseMirror > h3),
+  :global(.tiptap-editor .ProseMirror > h4),
+  :global(.tiptap-editor .ProseMirror > h5),
+  :global(.tiptap-editor .ProseMirror > h6) {
+    margin-block: 0.5em;
+  }
+
+  :global(.tiptap-editor .ProseMirror > :first-child) {
+    margin-top: 0;
+  }
+
+  :global(.tiptap-editor .ProseMirror > :last-child) {
+    margin-bottom: 0;
+  }
+
+  :global(.tiptap-editor .ProseMirror li > p) {
+    margin: 0;
   }
 
   :global(.tiptap-editor .ProseMirror strong) {
@@ -1193,10 +1329,21 @@ and exposes a typed API for text manipulation (mentions, emoji, drafts).
   }
 
   :global(.tiptap-editor .ProseMirror blockquote) {
-    border-left: 3px solid var(--color-border);
-    padding-left: 1em;
-    color: var(--color-muted);
+    --composer-quote-border: color-mix(in srgb, var(--color-muted), var(--color-accent) 42%);
+    --composer-quote-text: color-mix(in srgb, var(--color-text), var(--color-muted) 48%);
+
+    border-left: 3px solid var(--composer-quote-border);
+    padding: 0.35em 0 0.35em 0.9em;
+    color: var(--composer-quote-text);
     font-style: italic;
+  }
+
+  :global(.tiptap-editor .ProseMirror blockquote > *) {
+    margin-block: 0;
+  }
+
+  :global(.tiptap-editor .ProseMirror blockquote > * + *) {
+    margin-top: 0.45em;
   }
 
   :global(.tiptap-editor .ProseMirror code:not(pre code)) {

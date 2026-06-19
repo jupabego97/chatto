@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -487,6 +488,158 @@ func TestProjector_AppliesEventsInOrder(t *testing.T) {
 	}
 	if got := projector.LastSeq(); got != msg.Sequence {
 		t.Errorf("LastSeq=%d, want %d", got, msg.Sequence)
+	}
+}
+
+func TestRunProjectors_SharedConsumerAppliesEventsToAllProjectors(t *testing.T) {
+	js, stream := setupTestStream(t)
+	pub := NewPublisher(js, stream, testLogger())
+
+	ctx := testContext(t)
+	for i := 0; i < 3; i++ {
+		if _, err := pub.Append(ctx, RoomAggregate("R1").Subject(EventUserJoinedRoom), makeEvent("R1", "U"+itoa(i))); err != nil {
+			t.Fatalf("seed Append: %v", err)
+		}
+	}
+
+	projA := newTrackingProjection(RoomSubjectFilter())
+	projB := newTrackingProjection(RoomSubjectFilter())
+	projectorA := NewProjector(js, stream, projA, testLogger())
+	projectorB := NewProjector(js, stream, projB, testLogger())
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go func() { _ = RunProjectors(runCtx, projectorA, projectorB) }()
+
+	waitFor(t, 2*time.Second, func() bool {
+		return projA.Count() == 3 && projB.Count() == 3
+	})
+
+	statusA := projectorA.Status()
+	statusB := projectorB.Status()
+	if !statusA.StartupComplete || !statusB.StartupComplete {
+		t.Fatalf("startup complete = %v/%v, want both true", statusA.StartupComplete, statusB.StartupComplete)
+	}
+	if statusA.StartupMessages != 3 || statusB.StartupMessages != 3 {
+		t.Fatalf("startup messages = %d/%d, want 3/3", statusA.StartupMessages, statusB.StartupMessages)
+	}
+	if statusA.LastSeq != statusB.LastSeq {
+		t.Fatalf("last seq mismatch = %d/%d", statusA.LastSeq, statusB.LastSeq)
+	}
+}
+
+func TestRunProjectors_RejectsMismatchedSubjects(t *testing.T) {
+	js, stream := setupTestStream(t)
+
+	projectorA := NewProjector(js, stream, newTrackingProjection(RoomSubjectFilter()), testLogger())
+	projectorB := NewProjector(js, stream, newTrackingProjection(UserSubjectFilter()), testLogger())
+
+	err := RunProjectors(testContext(t), projectorA, projectorB)
+	if err == nil || !strings.Contains(err.Error(), "identical subjects") {
+		t.Fatalf("RunProjectors error = %v, want identical subjects error", err)
+	}
+}
+
+func TestRunProjectors_ContinuesFanoutAfterProjectionFailure(t *testing.T) {
+	js, stream := setupTestStream(t)
+	pub := NewPublisher(js, stream, testLogger())
+	ctx := testContext(t)
+
+	subject := RoomAggregate("R1").Subject(EventUserJoinedRoom)
+	seq, err := pub.Append(ctx, subject, makeEvent("R1", "U1"))
+	if err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	applyErr := errors.New("apply failed")
+	failing := &failingProjection{
+		trackingProjection: newTrackingProjection(RoomSubjectFilter()),
+		err:                applyErr,
+	}
+	healthy := newTrackingProjection(RoomSubjectFilter())
+	failingProjector := NewProjector(js, stream, failing, testLogger())
+	healthyProjector := NewProjector(js, stream, healthy, testLogger())
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	t.Cleanup(cancelRun)
+	errCh := make(chan error, 1)
+	go func() { errCh <- RunProjectors(runCtx, failingProjector, healthyProjector) }()
+
+	select {
+	case err := <-errCh:
+		if !errors.Is(err, ErrProjectionFailed) {
+			t.Fatalf("RunProjectors error = %v, want ErrProjectionFailed", err)
+		}
+		if !errors.Is(err, applyErr) {
+			t.Fatalf("RunProjectors error = %v, want wrapped apply error", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("RunProjectors did not return after projection failure")
+	}
+
+	if got := healthy.Count(); got != 1 {
+		t.Fatalf("healthy projection Apply count = %d, want 1", got)
+	}
+	if got := healthyProjector.LastSeq(); got != seq {
+		t.Fatalf("healthy projector LastSeq = %d, want %d", got, seq)
+	}
+	if err := healthyProjector.WaitFor(ctx, SubjectPosition(subject, seq)); err != nil {
+		t.Fatalf("healthy projector WaitFor failed after shared failure: %v", err)
+	}
+}
+
+func TestProjector_StatusReportsStartupDuration(t *testing.T) {
+	js, stream := setupTestStream(t)
+	pub := NewPublisher(js, stream, testLogger())
+	ctx := testContext(t)
+
+	subject := RoomAggregate("R1").Subject(EventUserJoinedRoom)
+	seq, err := pub.Append(ctx, subject, makeEvent("R1", "U1"))
+	if err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	proj := newBlockingProjection(RoomSubjectFilter())
+	releaseProjection := func() {
+		select {
+		case <-proj.release:
+		default:
+			close(proj.release)
+		}
+	}
+	t.Cleanup(releaseProjection)
+
+	projector := NewProjector(js, stream, proj, testLogger())
+	runCtx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go func() { _ = projector.Run(runCtx) }()
+
+	select {
+	case <-proj.entered:
+	case <-ctx.Done():
+		t.Fatal("projection Apply did not start")
+	}
+	time.Sleep(20 * time.Millisecond)
+	inProgress := projector.Status()
+	if inProgress.StartupComplete {
+		t.Fatal("StartupComplete = true before initial replay finished")
+	}
+	if inProgress.StartupDuration <= 0 {
+		t.Fatalf("StartupDuration while in progress = %s, want positive elapsed duration", inProgress.StartupDuration)
+	}
+
+	releaseProjection()
+
+	waitFor(t, 2*time.Second, func() bool {
+		return projector.Status().StartupComplete
+	})
+
+	status := projector.Status()
+	if status.StartupTargetSeq != seq {
+		t.Fatalf("StartupTargetSeq = %d, want %d", status.StartupTargetSeq, seq)
+	}
+	if status.StartupDuration < 10*time.Millisecond {
+		t.Fatalf("StartupDuration = %s, want at least 10ms", status.StartupDuration)
 	}
 }
 

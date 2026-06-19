@@ -4,11 +4,12 @@ import type { RoomMember } from '$lib/state/room';
 import type { TipTapEditorApi } from './TipTapEditor.svelte';
 import { AutocompleteState } from './autocomplete.svelte';
 
-function member(login: string, displayName = login): RoomMember {
+function member(login: string, displayName = login, deleted = false): RoomMember {
   return {
     id: `user_${login}`,
     login,
     displayName,
+    deleted,
     avatarUrl: null,
     presenceStatus: PresenceStatus.Offline
   };
@@ -39,7 +40,9 @@ function editor(
       replaceTextBeforeCursor: (charCount, replacement) => {
         text = text.slice(0, cursor - charCount) + replacement + text.slice(cursor);
         cursor = cursor - charCount + replacement.length;
-      }
+      },
+      insertBlockBreak: () => {},
+      insertQuote: () => {}
     },
     getText: () => text,
     setText: (next) => {
@@ -57,11 +60,11 @@ function tabEvent(): KeyboardEvent {
 }
 
 describe('AutocompleteState', () => {
-  it('shows mention autocomplete only when an @ partial at the cursor has characters', () => {
+  it('shows mention autocomplete when an @ partial has characters, even before members load', () => {
     const fakeEditor = editor('@');
     const state = new AutocompleteState(
       () => fakeEditor.api,
-      () => [member('alice')]
+      () => []
     );
 
     state.update();
@@ -136,6 +139,18 @@ describe('AutocompleteState', () => {
     state.resetTabCompletion();
     expect(state.handleTabCompletion(tabEvent())).toBe(false);
     expect(fakeEditor.getText()).toBe('@alicia ');
+  });
+
+  it('excludes deleted members from mention Tab completion', () => {
+    const fakeEditor = editor('@deleted');
+    const state = new AutocompleteState(
+      () => fakeEditor.api,
+      () => [member('', 'Deleted User', true), member('deleted-alice', 'Deleted Alice', true)]
+    );
+    const ev = tabEvent();
+
+    expect(state.handleTabCompletion(ev)).toBe(true);
+    expect(fakeEditor.getText()).toBe('@deleted');
   });
 
   it('does not handle Tab when there is no mention partial at the cursor', () => {

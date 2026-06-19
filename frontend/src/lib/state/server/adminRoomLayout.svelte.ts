@@ -37,10 +37,29 @@ export type AdminRoomInfo = {
   archived: boolean;
 };
 
+export type AdminSidebarLinkInfo = {
+  id: string;
+  label: string;
+  url: string;
+};
+
+export type AdminSidebarItem =
+  | {
+      id: string;
+      kind: 'room';
+      room: AdminRoomInfo;
+    }
+  | {
+      id: string;
+      kind: 'link';
+      link: AdminSidebarLinkInfo;
+    };
+
 export type AdminRoomGroup = {
   id: string;
   name: string;
   rooms: AdminRoomInfo[];
+  items?: AdminSidebarItem[];
 };
 
 export type MoveRoomMutationInput = {
@@ -148,10 +167,19 @@ export function planGroupReorder(
 }
 
 function normalizeGroups(groups: AdminRoomGroup[]): AdminRoomGroup[] {
-  return groups.map((group) => ({
-    ...group,
-    rooms: group.rooms ?? []
-  }));
+  return groups.map((group) => {
+    if (group.items) {
+      return {
+        ...group,
+        rooms: group.items.filter((item) => item.kind === 'room').map((item) => item.room),
+        items: group.items
+      };
+    }
+    return {
+      ...group,
+      rooms: group.rooms ?? []
+    };
+  });
 }
 
 function roomFromWire(room: AdminRoomInfoView): AdminRoomInfo {
@@ -164,11 +192,19 @@ function roomFromWire(room: AdminRoomInfoView): AdminRoomInfo {
 }
 
 function groupFromWire(group: AdminRoomGroupView): AdminRoomGroup {
+  const rooms = (group.rooms ?? []).map(roomFromWire);
   return {
     id: group.id,
     name: group.name,
-    rooms: (group.rooms ?? []).map(roomFromWire)
+    rooms
   };
+}
+
+function toSidebarItems(items: Array<AdminSidebarItem | AdminRoomInfo>): AdminSidebarItem[] {
+  return items.map((item) => {
+    if ('kind' in item) return item;
+    return { id: `room:${item.id}`, kind: 'room', room: item };
+  });
 }
 
 export class AdminRoomLayoutStore {
@@ -266,6 +302,26 @@ export class AdminRoomLayoutStore {
     return { ok: true };
   }
 
+  async createSidebarLink(
+    _groupId: string,
+    _label: string,
+    _url: string
+  ): Promise<StoreResult<{ link: AdminSidebarLinkInfo }>> {
+    return { ok: false, error: 'Sidebar links are not available on the wire API yet' };
+  }
+
+  async updateSidebarLink(
+    _linkId: string,
+    _label: string,
+    _url: string
+  ): Promise<StoreResult<{ link: AdminSidebarLinkInfo }>> {
+    return { ok: false, error: 'Sidebar links are not available on the wire API yet' };
+  }
+
+  async deleteSidebarLink(_linkId: string): Promise<StoreResult> {
+    return { ok: false, error: 'Sidebar links are not available on the wire API yet' };
+  }
+
   async deleteGroup(groupId: string): Promise<StoreResult> {
     try {
       await this.client().deleteAdminRoomGroup(new DeleteAdminRoomGroupRequest({ groupId }));
@@ -308,17 +364,17 @@ export class AdminRoomLayoutStore {
     void this.refresh();
   }
 
-  handleRoomDragConsider(groupId: string, items: AdminRoomInfo[]): void {
+  handleRoomDragConsider(groupId: string, items: Array<AdminSidebarItem | AdminRoomInfo>): void {
     this.isDragging = true;
     this.captureRoomDragSnapshotIfNeeded();
-    this.setGroupRooms(groupId, items);
+    this.setGroupItems(groupId, toSidebarItems(items));
   }
 
   async handleRoomDragFinalize(
     groupId: string,
-    items: AdminRoomInfo[]
+    items: Array<AdminSidebarItem | AdminRoomInfo>
   ): Promise<RoomMoveFlushResult | null> {
-    this.setGroupRooms(groupId, items);
+    this.setGroupItems(groupId, toSidebarItems(items));
     this.isDragging = false;
 
     if (this.#pendingMoveDiff) return null;
@@ -466,10 +522,10 @@ export class AdminRoomLayoutStore {
     }
   }
 
-  private setGroupRooms(groupId: string, items: AdminRoomInfo[]): void {
+  private setGroupItems(groupId: string, items: AdminSidebarItem[]): void {
     const idx = this.groups.findIndex((group) => group.id === groupId);
     if (idx !== -1) {
-      this.groups[idx] = { ...this.groups[idx], rooms: items };
+      this.groups[idx] = normalizeGroups([{ ...this.groups[idx], items }])[0];
     }
   }
 

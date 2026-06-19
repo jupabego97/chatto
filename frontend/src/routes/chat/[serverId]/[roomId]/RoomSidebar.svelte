@@ -7,7 +7,7 @@ calls, and similar room-specific panels can plug into the same shell. See the
 "UI" section of `docs/GLOSSARY.md`.
 -->
 <script module lang="ts">
-  export type RoomSidebarPanel = 'members' | 'files';
+  export type RoomSidebarPanel = 'members' | 'files' | 'call';
 </script>
 
 <script lang="ts">
@@ -57,7 +57,9 @@ calls, and similar room-specific panels can plug into the same shell. See the
   const membersState = $derived(getRoomMembersState());
   const members = $derived(membersState.members);
   const memberCount = $derived(membersState.totalCount);
-  const title = $derived(activePanel === 'members' ? `Members (${memberCount})` : 'Files');
+  const title = $derived(
+    activePanel === 'members' ? `Members (${memberCount})` : activePanel === 'files' ? 'Files' : 'Call'
+  );
 
   // Check if user can start DMs (from centralized server permissions)
   const serverPerms = getServerPermissions();
@@ -265,6 +267,10 @@ calls, and similar room-specific panels can plug into the same shell. See the
   {:else if activePanel === 'files'}
     <div class="flex min-h-0 flex-1 items-center justify-center p-4 text-sm text-muted">
       Files coming soon.
+    </div>
+  {:else if activePanel === 'call'}
+    <div class="flex min-h-0 flex-1 items-center justify-center p-4 text-sm text-muted">
+      Call controls are shown in the room.
     </div>
   {/if}
 

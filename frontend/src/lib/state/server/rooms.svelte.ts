@@ -17,6 +17,9 @@ export type RoomsListItem = {
   name: string;
   type: RoomType;
   hasUnread: boolean;
+  viewerIsMember: boolean;
+  viewerCanJoinRoom: boolean;
+  viewerNotificationCount: number;
   // Populated for DM rooms only — used to derive the display name in the sidebar.
   members: UserAvatarUserFragment[];
 };
@@ -135,6 +138,30 @@ export class RoomsStore {
     this.patchRoom(roomId, { hasUnread: true });
   }
 
+  incrementUnreadNotification(roomId: string): void {
+    const room = this.rooms.find((r) => r.id === roomId);
+    if (!room) return;
+    this.patchRoom(roomId, { viewerNotificationCount: room.viewerNotificationCount + 1 });
+  }
+
+  decrementUnreadNotification(roomId: string, amount = 1): void {
+    const room = this.rooms.find((r) => r.id === roomId);
+    if (!room) return;
+    this.patchRoom(roomId, {
+      viewerNotificationCount: Math.max(0, room.viewerNotificationCount - amount)
+    });
+  }
+
+  clearUnreadNotifications(roomId: string): void {
+    this.patchRoom(roomId, { viewerNotificationCount: 0 });
+  }
+
+  clearAllUnreadNotifications(): void {
+    untrack(() => {
+      this.rooms = this.rooms.map((room) => ({ ...room, viewerNotificationCount: 0 }));
+    });
+  }
+
   /**
    * Move a room to the front of the rooms array. RoomList renders DMs in
    * their store-array order, so this is what makes a freshly-active DM jump
@@ -218,6 +245,9 @@ function roomListItemFromWire(view: RoomListItemView): RoomsListItem | null {
     name: room.name,
     type: roomTypeFromWire(room.kind),
     hasUnread: view.hasUnread,
+    viewerIsMember: true,
+    viewerCanJoinRoom: false,
+    viewerNotificationCount: 0,
     members: view.members.map(userToAvatarFragment)
   };
 }

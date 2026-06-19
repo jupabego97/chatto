@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import '../../app.css';
 import MessageContent, { renderMarkdown, rendererReady } from './MessageContent.svelte';
 import { q } from '$lib/test-utils';
 import type { RoomMember } from '$lib/mentions';
@@ -17,6 +18,24 @@ function member(login: string): RoomMember {
     avatarUrl: null,
     presenceStatus: PresenceStatus.Offline
   };
+}
+
+function computedColorFor(property: string): string {
+  const element = document.createElement('div');
+  element.style.color = `var(${property})`;
+  document.body.appendChild(element);
+  const color = window.getComputedStyle(element).color;
+  element.remove();
+  return color;
+}
+
+function computedBorderColorFor(property: string): string {
+  const element = document.createElement('div');
+  element.style.borderLeft = `1px solid var(${property})`;
+  document.body.appendChild(element);
+  const color = window.getComputedStyle(element).borderLeftColor;
+  element.remove();
+  return color;
 }
 
 describe('renderMarkdown', () => {
@@ -164,6 +183,11 @@ describe('renderMarkdown', () => {
       }
     });
 
+    it('renders encoded trailing hashes as literal heading text', async () => {
+      const html = await renderMarkdown('# test &#35;');
+      expect(html).toContain('<h1>test #</h1>');
+    });
+
     it('does not render setext (underline-style) headings', async () => {
       const html = await renderMarkdown('Heading\n===');
       expect(html).not.toContain('<h1');
@@ -271,6 +295,18 @@ describe('MessageContent component', () => {
     await expect.element(wrapper).toBeInTheDocument();
   });
 
+  it('styles blockquotes as distinct quote blocks', async () => {
+    const { container } = renderMessage('> quoted text\n>\n> second line');
+
+    await expect.poll(() => q(container, 'blockquote')).toBeTruthy();
+
+    const blockquote = q(container, 'blockquote')!;
+    const styles = window.getComputedStyle(blockquote);
+    expect(styles.borderLeftColor).not.toBe(computedBorderColorFor('--color-border'));
+    expect(styles.backgroundImage).toBe('none');
+    expect(styles.color).not.toBe(computedColorFor('--color-muted'));
+  });
+
   it('renders links with security attributes', async () => {
     const { container } = renderMessage('[link](https://example.com)');
 
@@ -291,6 +327,21 @@ describe('MessageContent component', () => {
     expect(pre.getAttribute('data-language')).toBe('javascript');
     expect(code.textContent).toContain('const x = 1;');
     expect(container.textContent).not.toContain('```javascript');
+  });
+
+  it('keeps long fenced code blocks scrollable inside the code element', async () => {
+    const longLine = `const result = ${'veryLongVariableName + '.repeat(20)}"end"`;
+    const { container } = renderMessage(`\`\`\`javascript\n${longLine}\n\`\`\``);
+
+    await expect.poll(() => q(container, 'pre.hljs code.language-javascript')).toBeTruthy();
+
+    const pre = q(container, 'pre.hljs')!;
+    const code = q(container, 'pre.hljs code.language-javascript')!;
+    expect(pre.getAttribute('data-language')).toBe('javascript');
+    expect(code.textContent).toContain(longLine);
+    expect(container.textContent).not.toContain('```javascript');
+    expect(window.getComputedStyle(pre).overflowX).toBe('hidden');
+    expect(window.getComputedStyle(code).overflowX).toBe('auto');
   });
 
   it('renders a highlighted code block after leading text', async () => {

@@ -1,19 +1,15 @@
-import { expect, type Page } from '@playwright/test';
-import { createAndLoginTestUser, joinSpace } from './fixtures/testUser';
+import { expect, type Locator, type Page } from '@playwright/test';
+import { createAndLoginTestUser } from './fixtures/testUser';
+import { withServerUser } from './fixtures/serverUser';
 import { waitForRoomReady } from './fixtures/realtimeSync';
 import { test } from './setup';
 import { TIMEOUTS } from './constants';
-import { ChatPage, RoomPage } from './pages';
 import * as routes from './routes';
 
 /**
  * Post a message and return its event ID.
  */
-async function postMessageAndGetId(
-  page: Page,
-  roomId: string,
-  body: string
-): Promise<string> {
+async function postMessageAndGetId(page: Page, roomId: string, body: string): Promise<string> {
   const response = await page.request.post('/api/graphql', {
     headers: { 'Content-Type': 'application/json', 'X-REQUEST-TYPE': 'GraphQL' },
     data: {
@@ -45,6 +41,31 @@ async function postReplyViaAPI(
   return json.data.postMessage.id;
 }
 
+async function selectTextInside(locator: Locator, selectedText: string): Promise<void> {
+  await locator.evaluate((root, text) => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let node: Node | null = walker.nextNode();
+
+    while (node) {
+      const value = node.textContent ?? '';
+      const index = value.indexOf(text);
+      if (index !== -1) {
+        const range = document.createRange();
+        range.setStart(node, index);
+        range.setEnd(node, index + text.length);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        return;
+      }
+
+      node = walker.nextNode();
+    }
+
+    throw new Error(`Could not find text to select: ${text}`);
+  }, selectedText);
+}
+
 async function getIdsFromUrl(page: Page): Promise<{ spaceId: string; roomId: string }> {
   const match = page.url().match(/\/chat\/-\/([^/]+)/);
   if (!match) throw new Error(`Could not extract roomId from URL: ${page.url()}`);
@@ -55,11 +76,7 @@ async function getIdsFromUrl(page: Page): Promise<{ spaceId: string; roomId: str
  * Post messages via GraphQL API (much faster than UI-based posting).
  * Use this for test setup when you need many messages quickly.
  */
-async function postMessagesViaAPI(
-  page: Page,
-  roomId: string,
-  messages: string[]
-): Promise<void> {
+async function postMessagesViaAPI(page: Page, roomId: string, messages: string[]): Promise<void> {
   for (const body of messages) {
     await page.request.post('/api/graphql', {
       headers: { 'Content-Type': 'application/json', 'X-REQUEST-TYPE': 'GraphQL' },
@@ -79,14 +96,11 @@ test.describe('Message Threading', () => {
     browser,
     serverURL
   }) => {
-    await test.step('User A creates space and posts root message', async () => {
+    await test.step('User A loads the server and posts root message', async () => {
       await createAndLoginTestUser(page);
       await chatPage.goto();
-      await chatPage.createSpace();
       await chatPage.enterRoom('general');
     });
-
-    const spaceId = await chatPage.getSpaceId();
 
     const rootMessage = `Root message ${Date.now()}`;
     let message1: Awaited<ReturnType<typeof roomPage.sendMessage>>;
@@ -94,50 +108,36 @@ test.describe('Message Threading', () => {
       message1 = await roomPage.sendMessage(rootMessage);
     });
 
-    // User B: Create a second context and login
-    const context2 = await browser!.newContext({ baseURL: serverURL });
-    const page2 = await context2.newPage();
+    await withServerUser(
+      browser!,
+      serverURL,
+      async ({ page: page2, chatPage: chatPage2, roomPage: roomPage2 }) => {
+        await test.step('User B enters the general room (auto-joined)', async () => {
+          await chatPage2.enterRoom('general');
+          await waitForRoomReady(page2, 'general');
+        });
 
-    try {
-      await test.step('User B creates account and logs in', async () => {
-        await createAndLoginTestUser(page2);
-      });
+        await test.step('User A opens thread pane', async () => {
+          await message1.openThread();
+          await roomPage.expectThreadPaneVisible();
+        });
 
-      await test.step('User B joins the space', async () => {
-        await joinSpace(page2);
-        await page2.goto(routes.space());
-      });
+        await test.step('User B opens thread pane', async () => {
+          const message2 = roomPage2.getMessage(rootMessage);
+          await message2.openThread();
+          await roomPage2.expectThreadPaneVisible();
+        });
 
-      const chatPage2 = new ChatPage(page2);
-      const roomPage2 = new RoomPage(page2);
+        const replyMessage = `Reply from User B ${Date.now()}`;
+        await test.step('User B posts reply', async () => {
+          await roomPage2.postThreadReply(replyMessage);
+        });
 
-      await test.step('User B enters the general room (auto-joined)', async () => {
-        await chatPage2.enterRoom('general');
-        await waitForRoomReady(page2, 'general');
-      });
-
-      await test.step('User A opens thread pane', async () => {
-        await message1.openThread();
-        await roomPage.expectThreadPaneVisible();
-      });
-
-      await test.step('User B opens thread pane', async () => {
-        const message2 = roomPage2.getMessage(rootMessage);
-        await message2.openThread();
-        await roomPage2.expectThreadPaneVisible();
-      });
-
-      const replyMessage = `Reply from User B ${Date.now()}`;
-      await test.step('User B posts reply', async () => {
-        await roomPage2.postThreadReply(replyMessage);
-      });
-
-      await test.step('User A receives reply in real-time', async () => {
-        await roomPage.expectTextInThreadPane(replyMessage);
-      });
-    } finally {
-      await context2.close();
-    }
+        await test.step('User A receives reply in real-time', async () => {
+          await roomPage.expectTextInThreadPane(replyMessage);
+        });
+      }
+    );
   });
 
   test('thread reply deletion propagates to other connected clients in real-time', async ({
@@ -153,9 +153,7 @@ test.describe('Message Threading', () => {
     // because ThreadMessagesStore inherits ingestSpaceEvent from MessageListStore.
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
-    const spaceId = await chatPage.getSpaceId();
 
     const rootMessage = `Thread root ${Date.now()}`;
     const message1 = await roomPage.sendMessage(rootMessage);
@@ -166,40 +164,33 @@ test.describe('Message Threading', () => {
     const replyText = `Reply to delete ${Date.now()}`;
     await roomPage.postThreadReply(replyText);
 
-    const context2 = await browser!.newContext({ baseURL: serverURL });
-    const page2 = await context2.newPage();
+    await withServerUser(
+      browser!,
+      serverURL,
+      async ({ page: page2, chatPage: chatPage2, roomPage: roomPage2 }) => {
+        await chatPage2.enterRoom('general');
+        await waitForRoomReady(page2, 'general');
 
-    try {
-      await createAndLoginTestUser(page2);
-      await joinSpace(page2);
-      await page2.goto(routes.space());
+        const rootForB = roomPage2.getMessage(rootMessage);
+        await rootForB.openThread();
+        await roomPage2.expectThreadPaneVisible();
 
-      const chatPage2 = new ChatPage(page2);
-      const roomPage2 = new RoomPage(page2);
-      await chatPage2.enterRoom('general');
-      await waitForRoomReady(page2, 'general');
+        // User B sees the reply that user A posted.
+        await roomPage2.expectTextInThreadPane(replyText);
 
-      const rootForB = roomPage2.getMessage(rootMessage);
-      await rootForB.openThread();
-      await roomPage2.expectThreadPaneVisible();
+        // User A deletes the reply.
+        const replyForA = roomPage.getThreadMessage(replyText);
+        await replyForA.delete();
 
-      // User B sees the reply that user A posted.
-      await roomPage2.expectTextInThreadPane(replyText);
-
-      // User A deletes the reply.
-      const replyForA = roomPage.getThreadMessage(replyText);
-      await replyForA.delete();
-
-      // User B should see the reply replaced by the tombstone — without refresh.
-      await expect(roomPage2.threadPane.getByText(replyText)).not.toBeVisible({
-        timeout: TIMEOUTS.REALTIME_EVENT
-      });
-      await expect(
-        roomPage2.threadPane.getByText('This message has been deleted').first()
-      ).toBeVisible({ timeout: TIMEOUTS.REALTIME_EVENT });
-    } finally {
-      await context2.close();
-    }
+        // User B should see the reply replaced by the tombstone — without refresh.
+        await expect(roomPage2.threadPane.getByText(replyText)).not.toBeVisible({
+          timeout: TIMEOUTS.REALTIME_EVENT
+        });
+        await expect(
+          roomPage2.threadPane.getByText('This message has been deleted').first()
+        ).toBeVisible({ timeout: TIMEOUTS.REALTIME_EVENT });
+      }
+    );
   });
 
   test('thread reply edit propagates to other connected clients in real-time', async ({
@@ -214,9 +205,7 @@ test.describe('Message Threading', () => {
     // refetchByMessageEventId branch surfaces here.
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
-    const spaceId = await chatPage.getSpaceId();
 
     const rootMessage = `Thread root for edit ${Date.now()}`;
     const message1 = await roomPage.sendMessage(rootMessage);
@@ -227,42 +216,35 @@ test.describe('Message Threading', () => {
     const originalReply = `Original reply ${Date.now()}`;
     await roomPage.postThreadReply(originalReply);
 
-    const context2 = await browser!.newContext({ baseURL: serverURL });
-    const page2 = await context2.newPage();
+    await withServerUser(
+      browser!,
+      serverURL,
+      async ({ page: page2, chatPage: chatPage2, roomPage: roomPage2 }) => {
+        await chatPage2.enterRoom('general');
+        await waitForRoomReady(page2, 'general');
 
-    try {
-      await createAndLoginTestUser(page2);
-      await joinSpace(page2);
-      await page2.goto(routes.space());
+        const rootForB = roomPage2.getMessage(rootMessage);
+        await rootForB.openThread();
+        await roomPage2.expectThreadPaneVisible();
+        await roomPage2.expectTextInThreadPane(originalReply);
 
-      const chatPage2 = new ChatPage(page2);
-      const roomPage2 = new RoomPage(page2);
-      await chatPage2.enterRoom('general');
-      await waitForRoomReady(page2, 'general');
+        // User A edits the reply.
+        const replyForA = roomPage.getThreadMessage(originalReply);
+        await replyForA.startEdit();
+        await roomPage.expectThreadEditModeActive();
+        const editedReply = `Edited reply ${Date.now()}`;
+        await roomPage.threadReplyInput.fill(editedReply);
+        await roomPage.threadReplyInput.press('Control+Enter');
 
-      const rootForB = roomPage2.getMessage(rootMessage);
-      await rootForB.openThread();
-      await roomPage2.expectThreadPaneVisible();
-      await roomPage2.expectTextInThreadPane(originalReply);
-
-      // User A edits the reply.
-      const replyForA = roomPage.getThreadMessage(originalReply);
-      await replyForA.startEdit();
-      await roomPage.expectThreadEditModeActive();
-      const editedReply = `Edited reply ${Date.now()}`;
-      await roomPage.threadReplyInput.fill(editedReply);
-      await roomPage.threadReplyInput.press('Enter');
-
-      // User B should see the new content and the (edited) marker.
-      await expect(roomPage2.threadPane.getByText(editedReply)).toBeVisible({
-        timeout: TIMEOUTS.REALTIME_EVENT
-      });
-      await expect(roomPage2.threadPane.getByText(originalReply)).not.toBeVisible();
-      const editedForB = roomPage2.getThreadMessage(editedReply);
-      await editedForB.expectEdited();
-    } finally {
-      await context2.close();
-    }
+        // User B should see the new content and the (edited) marker.
+        await expect(roomPage2.threadPane.getByText(editedReply)).toBeVisible({
+          timeout: TIMEOUTS.REALTIME_EVENT
+        });
+        await expect(roomPage2.threadPane.getByText(originalReply)).not.toBeVisible();
+        const editedForB = roomPage2.getThreadMessage(editedReply);
+        await editedForB.expectEdited();
+      }
+    );
   });
 
   test('thread indicator shows reply count and participant avatars', async ({
@@ -272,7 +254,6 @@ test.describe('Message Threading', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post a root message
@@ -296,10 +277,11 @@ test.describe('Message Threading', () => {
     // The message in the main view should show a thread indicator with "1 reply"
     await expect(page.getByText('1 reply')).toBeVisible({ timeout: TIMEOUTS.UI_STANDARD });
 
-    // The thread indicator button should contain at least one avatar
-    const threadButton = page.getByRole('button', { name: /1 reply/i });
-    await expect(threadButton).toBeVisible();
-    const avatarContainer = threadButton.locator('div.-space-x-1\\.5');
+    // The thread indicator link should contain at least one avatar.
+    const threadLink = page.getByRole('link', { name: /1 reply/i });
+    await expect(threadLink).toBeVisible();
+    await expect(threadLink).toHaveAttribute('href', /\/chat\/-\/[^/]+\/[^/]+$/);
+    const avatarContainer = threadLink.locator('div.-space-x-1\\.5');
     await expect(avatarContainer).toBeVisible({ timeout: TIMEOUTS.UI_STANDARD });
     const avatarElement = avatarContainer.locator('[aria-label]').first();
     await expect(avatarElement).toBeVisible();
@@ -312,7 +294,6 @@ test.describe('Message Threading', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Step 1: Post a root message
@@ -356,6 +337,71 @@ test.describe('Message Threading', () => {
     await expect(page.getByText('1 reply')).toBeVisible({ timeout: TIMEOUTS.UI_STANDARD });
   });
 
+  test('reply quotes selected message text in the room composer', async ({
+    page,
+    chatPage,
+    roomPage
+  }) => {
+    const user = await createAndLoginTestUser(page);
+    await chatPage.goto();
+    await chatPage.enterRoom('general');
+
+    const timestamp = Date.now();
+    const selectedText = `selected room quote ${timestamp}`;
+    const rootBody = `Before ${selectedText} after`;
+    const rootMsg = await roomPage.sendMessage(rootBody);
+
+    await selectTextInside(rootMsg.locator, selectedText);
+    await rootMsg.replyInRoom();
+
+    await expect(page.getByText('Replying to')).toBeVisible({ timeout: TIMEOUTS.UI_STANDARD });
+    await expect(roomPage.messageInput.locator('blockquote')).toContainText(selectedText, {
+      timeout: TIMEOUTS.UI_STANDARD
+    });
+
+    const replyBody = `Room quote reply ${timestamp}`;
+    await page.keyboard.type(replyBody);
+    await roomPage.messageInput.press('Control+Enter');
+
+    const reply = roomPage.getMessage(replyBody);
+    await expect(reply.locator).toBeVisible({ timeout: TIMEOUTS.UI_STANDARD });
+    await expect(reply.locator.locator('blockquote')).toContainText(selectedText);
+    await expect(reply.locator.getByTestId('reply-attribution-author')).toContainText(
+      user.displayName
+    );
+  });
+
+  test('reply in thread quotes selected message text in the thread composer', async ({
+    page,
+    chatPage,
+    roomPage
+  }) => {
+    await createAndLoginTestUser(page);
+    await chatPage.goto();
+    await chatPage.enterRoom('general');
+
+    const timestamp = Date.now();
+    const selectedText = `selected thread quote ${timestamp}`;
+    const rootBody = `Before ${selectedText} after`;
+    const rootMsg = await roomPage.sendMessage(rootBody);
+
+    await selectTextInside(rootMsg.locator, selectedText);
+    await rootMsg.openThread();
+    await roomPage.expectThreadPaneVisible();
+
+    await expect(roomPage.threadReplyInput.locator('blockquote')).toContainText(selectedText, {
+      timeout: TIMEOUTS.UI_STANDARD
+    });
+
+    const replyBody = `Thread quote reply ${timestamp}`;
+    await page.keyboard.type(replyBody);
+    await roomPage.threadReplyInput.press('Control+Enter');
+
+    const reply = roomPage.getThreadMessage(replyBody);
+    await expect(reply.locator).toBeVisible({ timeout: TIMEOUTS.UI_STANDARD });
+    await expect(reply.locator.locator('blockquote')).toContainText(selectedText);
+  });
+
   test('switching threads clears previous thread messages', async ({
     page,
     chatPage,
@@ -363,7 +409,6 @@ test.describe('Message Threading', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post first root message
@@ -402,7 +447,6 @@ test.describe('Message Threading', () => {
   test('thread replies are filtered from main room view', async ({ page, chatPage, roomPage }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post a root message
@@ -433,7 +477,6 @@ test.describe('Message Threading', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post a root message
@@ -455,7 +498,6 @@ test.describe('Message Threading', () => {
   test('re-opening a thread shows both root and replies', async ({ page, chatPage, roomPage }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post a root message
@@ -484,7 +526,6 @@ test.describe('Message Threading', () => {
   test('browser back button closes thread', async ({ page, chatPage, roomPage }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post a root message
@@ -511,7 +552,6 @@ test.describe('Message Threading', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post a root message and get its event ID
@@ -533,7 +573,7 @@ test.describe('Message Threading', () => {
     await roomPage.closeThread();
     await roomPage.expectThreadRouteClosed();
 
-    // Resolve roomId from URL and spaceId from the GraphQL primary-space
+    // Resolve roomId from URL and spaceId from the GraphQL primary-server
     // field — post ADR-027 the URL no longer carries spaceId.
     const { roomId } = await getIdsFromUrl(page);
 
@@ -553,10 +593,9 @@ test.describe('Message Threading', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
-    // Resolve roomId from URL and spaceId from the GraphQL primary-space
+    // Resolve roomId from URL and spaceId from the GraphQL primary-server
     // field — post ADR-027 the URL no longer carries spaceId.
     const { roomId } = await getIdsFromUrl(page);
 
@@ -582,7 +621,6 @@ test.describe('Message Threading', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post a root message
@@ -617,7 +655,6 @@ test.describe('Message Threading', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post a root message
@@ -651,7 +688,6 @@ test.describe('Message Threading', () => {
   test('opening thread auto-focuses the reply input', async ({ page, chatPage, roomPage }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post a root message
@@ -673,7 +709,6 @@ test.describe('Message Threading', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post a root message
@@ -701,7 +736,6 @@ test.describe('Message Threading', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post a root message
@@ -730,7 +764,6 @@ test.describe('Message Threading', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post a root message
@@ -759,7 +792,6 @@ test.describe('Message Threading', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post a root message and open thread
@@ -786,7 +818,6 @@ test.describe('Message Threading', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post a root message to create a thread target
@@ -816,7 +847,6 @@ test.describe('Message Threading', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post a root message
@@ -855,7 +885,6 @@ test.describe('Message Threading', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post a root message
@@ -881,68 +910,57 @@ test.describe('Message Threading', () => {
     browser,
     serverURL
   }) => {
-    // User A: Create space and post root message
+    // User A: Create account and post root message
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
-
-    const spaceId = await chatPage.getSpaceId();
 
     const rootMessage = `Unread separator test ${Date.now()}`;
     const message1 = await roomPage.sendMessage(rootMessage);
 
-    // User B: Create account, join space
-    const context2 = await browser!.newContext({ baseURL: serverURL });
-    const page2 = await context2.newPage();
+    // User B: Open the same thread.
+    await withServerUser(
+      browser!,
+      serverURL,
+      async ({ page: page2, chatPage: chatPage2, roomPage: roomPage2 }) => {
+        await chatPage2.enterRoom('general');
+        await waitForRoomReady(page2, 'general');
+        await roomPage2.expectMessageVisible(rootMessage);
 
-    try {
-      await createAndLoginTestUser(page2);
-      await joinSpace(page2);
-      await page2.goto(routes.space());
+        // User B: Open thread (this records the "last opened" timestamp)
+        const message2 = roomPage2.getMessage(rootMessage);
+        await message2.openThread();
+        await roomPage2.expectThreadPaneVisible();
+        await roomPage2.expectTextInThreadPane(rootMessage);
 
-      const chatPage2 = new ChatPage(page2);
-      const roomPage2 = new RoomPage(page2);
+        // Wait for markThreadAsRead mutation to complete and UI to stabilize
+        // Use toPass() to ensure the thread state is recorded before closing
+        await expect(async () => {
+          await roomPage2.expectNoUnreadSeparatorInThreadPane();
+        }).toPass({ timeout: TIMEOUTS.UI_STANDARD, intervals: [100, 250, 500, 1000] });
 
-      await chatPage2.enterRoom('general');
-      await waitForRoomReady(page2, 'general');
-      await roomPage2.expectMessageVisible(rootMessage);
+        // User B: Close thread
+        await roomPage2.closeThread();
+        await roomPage2.expectThreadRouteClosed();
 
-      // User B: Open thread (this records the "last opened" timestamp)
-      const message2 = roomPage2.getMessage(rootMessage);
-      await message2.openThread();
-      await roomPage2.expectThreadPaneVisible();
-      await roomPage2.expectTextInThreadPane(rootMessage);
+        // User A: Post a reply to the thread
+        await message1.openThread();
+        await roomPage.expectThreadPaneVisible();
 
-      // Wait for markThreadAsRead mutation to complete and UI to stabilize
-      // Use toPass() to ensure the thread state is recorded before closing
-      await expect(async () => {
-        await roomPage2.expectNoUnreadSeparatorInThreadPane();
-      }).toPass({ timeout: TIMEOUTS.UI_STANDARD, intervals: [100, 250, 500, 1000] });
+        const replyMessage = `New reply from User A ${Date.now()}`;
+        await roomPage.postThreadReply(replyMessage);
+        await roomPage.expectTextInThreadPane(replyMessage);
 
-      // User B: Close thread
-      await roomPage2.closeThread();
-      await roomPage2.expectThreadRouteClosed();
+        // User B: Re-open the thread (no arbitrary wait needed - subsequent
+        // expectUnreadSeparatorInThreadPane has built-in polling timeout)
+        await message2.openThread();
+        await roomPage2.expectThreadPaneVisible();
 
-      // User A: Post a reply to the thread
-      await message1.openThread();
-      await roomPage.expectThreadPaneVisible();
-
-      const replyMessage = `New reply from User A ${Date.now()}`;
-      await roomPage.postThreadReply(replyMessage);
-      await roomPage.expectTextInThreadPane(replyMessage);
-
-      // User B: Re-open the thread (no arbitrary wait needed - subsequent
-      // expectUnreadSeparatorInThreadPane has built-in polling timeout)
-      await message2.openThread();
-      await roomPage2.expectThreadPaneVisible();
-
-      // User B should see the "New messages" separator before User A's reply
-      await roomPage2.expectUnreadSeparatorInThreadPane();
-      await roomPage2.expectTextInThreadPane(replyMessage);
-    } finally {
-      await context2.close();
-    }
+        // User B should see the "New messages" separator before User A's reply
+        await roomPage2.expectUnreadSeparatorInThreadPane();
+        await roomPage2.expectTextInThreadPane(replyMessage);
+      }
+    );
   });
 
   test('thread unread separator appears in real time while the tab is hidden', async ({
@@ -952,10 +970,9 @@ test.describe('Message Threading', () => {
     browser,
     serverURL
   }) => {
-    // User A: Create space, post a root message.
+    // User A: Create account, post a root message.
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     const rootMessage = `Hidden-tab thread root ${Date.now()}`;
@@ -963,56 +980,48 @@ test.describe('Message Threading', () => {
     await message1.openThread();
     await roomPage.expectThreadPaneVisible();
 
-    // User B: Create account, join space, open the same thread — present and
-    // caught up, staying in the thread the whole time.
-    const context2 = await browser!.newContext({ baseURL: serverURL });
-    const page2 = await context2.newPage();
+    // User B: Open the same thread — present and caught up, staying in the
+    // thread the whole time.
+    await withServerUser(
+      browser!,
+      serverURL,
+      async ({ page: page2, chatPage: chatPage2, roomPage: roomPage2 }) => {
+        await chatPage2.enterRoom('general');
+        await waitForRoomReady(page2, 'general');
+        await roomPage2.expectMessageVisible(rootMessage);
 
-    try {
-      await createAndLoginTestUser(page2);
-      await joinSpace(page2);
-      await page2.goto(routes.space());
+        const message2 = roomPage2.getMessage(rootMessage);
+        await message2.openThread();
+        await roomPage2.expectThreadPaneVisible();
+        await roomPage2.expectTextInThreadPane(rootMessage);
 
-      const chatPage2 = new ChatPage(page2);
-      const roomPage2 = new RoomPage(page2);
+        // Wait for markThreadAsRead to settle — no separator yet.
+        await expect(async () => {
+          await roomPage2.expectNoUnreadSeparatorInThreadPane();
+        }).toPass({ timeout: TIMEOUTS.UI_STANDARD, intervals: [100, 250, 500, 1000] });
 
-      await chatPage2.enterRoom('general');
-      await waitForRoomReady(page2, 'general');
-      await roomPage2.expectMessageVisible(rootMessage);
-
-      const message2 = roomPage2.getMessage(rootMessage);
-      await message2.openThread();
-      await roomPage2.expectThreadPaneVisible();
-      await roomPage2.expectTextInThreadPane(rootMessage);
-
-      // Wait for markThreadAsRead to settle — no separator yet.
-      await expect(async () => {
-        await roomPage2.expectNoUnreadSeparatorInThreadPane();
-      }).toPass({ timeout: TIMEOUTS.UI_STANDARD, intervals: [100, 250, 500, 1000] });
-
-      // User B's tab goes to the background. They stay in the thread; presence
-      // just drops, which anchors the unread separator at "now".
-      await page2.evaluate(() => {
-        Object.defineProperty(document, 'visibilityState', {
-          value: 'hidden',
-          writable: true,
-          configurable: true
+        // User B's tab goes to the background. They stay in the thread; presence
+        // just drops, which anchors the unread separator at "now".
+        await page2.evaluate(() => {
+          Object.defineProperty(document, 'visibilityState', {
+            value: 'hidden',
+            writable: true,
+            configurable: true
+          });
+          document.dispatchEvent(new Event('visibilitychange'));
         });
-        document.dispatchEvent(new Event('visibilitychange'));
-      });
 
-      // User A posts a reply while User B's tab is still hidden.
-      const replyMessage = `Reply while hidden ${Date.now()}`;
-      await roomPage.postThreadReply(replyMessage);
+        // User A posts a reply while User B's tab is still hidden.
+        const replyMessage = `Reply while hidden ${Date.now()}`;
+        await roomPage.postThreadReply(replyMessage);
 
-      // The reply streams in over the live subscription, and because the
-      // separator was anchored the moment presence dropped, it shows up
-      // immediately — without User B re-opening the thread.
-      await roomPage2.expectTextInThreadPane(replyMessage);
-      await roomPage2.expectUnreadSeparatorInThreadPane();
-    } finally {
-      await context2.close();
-    }
+        // The reply streams in over the live subscription, and because the
+        // separator was anchored the moment presence dropped, it shows up
+        // immediately — without User B re-opening the thread.
+        await roomPage2.expectTextInThreadPane(replyMessage);
+        await roomPage2.expectUnreadSeparatorInThreadPane();
+      }
+    );
   });
 
   test('no unread separator after posting a message and reloading', async ({
@@ -1022,7 +1031,6 @@ test.describe('Message Threading', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post a root message
@@ -1060,7 +1068,6 @@ test.describe('Message Threading', () => {
   test('different threads have separate draft storage', async ({ page, chatPage, roomPage }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post two root messages for two threads
@@ -1108,7 +1115,6 @@ test.describe('Message Threading', () => {
   test('Escape closes thread when reply input is focused', async ({ page, chatPage, roomPage }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post a root message and open its thread
@@ -1132,7 +1138,6 @@ test.describe('Message Threading', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post a root message and open its thread
@@ -1156,7 +1161,6 @@ test.describe('Message Threading', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post a message with an image attachment and open its thread
@@ -1192,7 +1196,6 @@ test.describe('Message Threading', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     // Post a root message and open thread
@@ -1217,10 +1220,7 @@ test.describe('Message Threading', () => {
 
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
-
-    const spaceId = await chatPage.getSpaceId();
 
     // Extract roomId from URL
     const url = page.url();
@@ -1237,7 +1237,9 @@ test.describe('Message Threading', () => {
     await page.reload();
 
     // Wait for messages to appear and scroll to stabilize at bottom
-    await expect(page.getByText(`Scroll test 20 - ${timestamp}`)).toBeVisible({ timeout: TIMEOUTS.REALTIME_EVENT });
+    await expect(page.getByText(`Scroll test 20 - ${timestamp}`)).toBeVisible({
+      timeout: TIMEOUTS.REALTIME_EVENT
+    });
 
     const messagesContainer = page.getByTestId('messages-container').first();
 
@@ -1249,7 +1251,10 @@ test.describe('Message Threading', () => {
       }));
       const distanceFromBottom = info.scrollHeight - info.scrollTop - info.clientHeight;
       expect(distanceFromBottom).toBeLessThan(50);
-    }).toPass({ timeout: TIMEOUTS.REALTIME_EVENT, intervals: [TIMEOUTS.SCROLL_SETTLE, 300, 750, 1500] });
+    }).toPass({
+      timeout: TIMEOUTS.REALTIME_EVENT,
+      intervals: [TIMEOUTS.SCROLL_SETTLE, 300, 750, 1500]
+    });
 
     // Scroll the main chat to the top using native mouse wheel events.
     // Programmatic scrollTop assignment doesn't work reliably with virtua.
@@ -1294,13 +1299,15 @@ test.describe('Message Threading', () => {
       }));
       const distanceFromBottom = info.scrollHeight - info.scrollTop - info.clientHeight;
       expect(distanceFromBottom).toBeGreaterThan(100);
-    }).toPass({ timeout: TIMEOUTS.REALTIME_EVENT, intervals: [TIMEOUTS.SCROLL_SETTLE, 300, 750, 1500] });
+    }).toPass({
+      timeout: TIMEOUTS.REALTIME_EVENT,
+      intervals: [TIMEOUTS.SCROLL_SETTLE, 300, 750, 1500]
+    });
   });
 
   test('reply attribution shows avatar for the replied-to author', async ({ page, chatPage }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     const { roomId } = await getIdsFromUrl(page);
@@ -1332,7 +1339,6 @@ test.describe('Message Threading', () => {
   test('clicking reply attribution author opens user context menu', async ({ page, chatPage }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     const { roomId } = await getIdsFromUrl(page);
@@ -1369,7 +1375,6 @@ test.describe('Message Threading', () => {
     test.setTimeout(60_000);
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     const { roomId } = await getIdsFromUrl(page);
@@ -1413,10 +1418,9 @@ test.describe('Message Threading', () => {
     browser,
     serverURL
   }) => {
-    // User A creates space and posts a message
+    // User A loads the server and posts a message
     const userA = await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     const { roomId } = await getIdsFromUrl(page);
@@ -1425,16 +1429,8 @@ test.describe('Message Threading', () => {
     const targetBody = `User A says hello ${timestamp}`;
     const targetEventId = await postMessageAndGetId(page, roomId, targetBody);
 
-    // User B: join space, reply to User A's message
-    const context2 = await browser!.newContext({ baseURL: serverURL });
-    const page2 = await context2.newPage();
-
-    try {
-      await createAndLoginTestUser(page2);
-      await joinSpace(page2);
-      await page2.goto(routes.space());
-
-      const chatPage2 = new ChatPage(page2);
+    // User B: open the server, reply to User A's message
+    await withServerUser(browser!, serverURL, async ({ page: page2, chatPage: chatPage2 }) => {
       await chatPage2.enterRoom('general');
 
       // User B posts a reply to User A's message via API
@@ -1462,9 +1458,7 @@ test.describe('Message Threading', () => {
       await expect(attribution1.getByTestId('reply-attribution-author')).toContainText(
         userA.displayName
       );
-    } finally {
-      await context2.close();
-    }
+    });
   });
 
   test('reply-in-room via hover bar sets attribution on sent message', async ({
@@ -1474,7 +1468,6 @@ test.describe('Message Threading', () => {
   }) => {
     const user = await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     const timestamp = Date.now();

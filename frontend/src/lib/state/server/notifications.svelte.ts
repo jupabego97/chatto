@@ -126,8 +126,10 @@ export class NotificationStore {
    * by getLocationString() for non-DM notifications.
    */
   serverName = $state<string | null>(null);
+  unreadNotificationCount = $state(0);
   loading = $state(false);
   error = $state<string | null>(null);
+  #locallyDismissedNotificationIds = new SvelteSet<string>();
 
   constructor(
     private readonly serverId: string,
@@ -142,6 +144,10 @@ export class NotificationStore {
 
   get count() {
     return this.notifications.length;
+  }
+
+  setUnreadNotificationCount(count: number): void {
+    this.unreadNotificationCount = Math.max(0, count);
   }
 
   /**
@@ -332,6 +338,7 @@ export class NotificationStore {
 
       const response = await client.listNotifications(new ListNotificationsRequest({ limit: 50 }));
       this.notifications = response.items.map(notificationItemFromWire).filter(isNotificationItem);
+      this.unreadNotificationCount = response.totalCount;
       this.serverName = response.serverName || null;
     } catch (e) {
       this.error = e instanceof Error ? e.message : 'Failed to fetch notifications';
@@ -365,11 +372,15 @@ export class NotificationStore {
     if (!removed) return false;
 
     this.notifications = this.notifications.filter((n) => n.id !== notificationId);
+    this.unreadNotificationCount = Math.max(0, this.unreadNotificationCount - 1);
+    this.#markLocalDismissal(notificationId);
 
     try {
       const client = this.getWireClient();
       if (!client) {
+        this.#locallyDismissedNotificationIds.delete(notificationId);
         this.#restoreNotification(removed);
+        this.unreadNotificationCount += 1;
         return false;
       }
 
@@ -377,13 +388,17 @@ export class NotificationStore {
         new DismissNotificationRequest({ notificationId })
       );
       if (!result.dismissed) {
+        this.#locallyDismissedNotificationIds.delete(notificationId);
         this.#restoreNotification(removed);
+        this.unreadNotificationCount += 1;
         return false;
       }
       return true;
     } catch (e) {
       console.error('Failed to dismiss notification:', e);
+      this.#locallyDismissedNotificationIds.delete(notificationId);
       this.#restoreNotification(removed);
+      this.unreadNotificationCount += 1;
       return false;
     }
   }
@@ -394,14 +409,23 @@ export class NotificationStore {
    */
   async dismissAll(): Promise<number> {
     const original = this.notifications;
+    const originalCount = this.unreadNotificationCount;
     if (original.length === 0) return 0;
 
     this.notifications = [];
+    this.unreadNotificationCount = 0;
+    for (const notification of original) {
+      this.#markLocalDismissal(notification.id);
+    }
 
     try {
       const client = this.getWireClient();
       if (!client) {
+        for (const notification of original) {
+          this.#locallyDismissedNotificationIds.delete(notification.id);
+        }
         this.notifications = original;
+        this.unreadNotificationCount = originalCount;
         return 0;
       }
 
@@ -409,7 +433,11 @@ export class NotificationStore {
       return result.dismissedCount;
     } catch (e) {
       console.error('Failed to dismiss all notifications:', e);
+      for (const notification of original) {
+        this.#locallyDismissedNotificationIds.delete(notification.id);
+      }
       this.notifications = original;
+      this.unreadNotificationCount = originalCount;
       return 0;
     }
   }
@@ -424,6 +452,17 @@ export class NotificationStore {
     );
   }
 
+  #markLocalDismissal(notificationId: string): void {
+    this.#locallyDismissedNotificationIds.add(notificationId);
+    const timeout = setTimeout(
+      () => this.#locallyDismissedNotificationIds.delete(notificationId),
+      30_000
+    );
+    if (typeof timeout === 'object' && timeout !== null && 'unref' in timeout) {
+      (timeout as { unref: () => void }).unref();
+    }
+  }
+
   /**
    * Add a notification (for real-time updates from instance events).
    * Triggers a refetch to get full notification data.
@@ -436,7 +475,18 @@ export class NotificationStore {
    * Remove a notification by ID (for cross-device sync).
    */
   removeNotification(notificationId: string) {
+    const removed = this.notifications.find((n) => n.id === notificationId);
     this.notifications = this.notifications.filter((n) => n.id !== notificationId);
+    if (removed) {
+      this.unreadNotificationCount = Math.max(0, this.unreadNotificationCount - 1);
+    }
+    return removed ? notificationTarget(removed).roomId : null;
+  }
+
+  consumeLocalDismissal(notificationId: string): boolean {
+    const local = this.#locallyDismissedNotificationIds.has(notificationId);
+    this.#locallyDismissedNotificationIds.delete(notificationId);
+    return local;
   }
 
   /**

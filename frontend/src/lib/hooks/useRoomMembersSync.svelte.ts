@@ -144,6 +144,7 @@ function wireUserToRoomMember(user: User | undefined): RoomMember | null {
     id: user.id,
     login: user.login,
     displayName: user.displayName,
+    deleted: false,
     avatarUrl: null,
     presenceStatus: PresenceStatus.Offline
   };

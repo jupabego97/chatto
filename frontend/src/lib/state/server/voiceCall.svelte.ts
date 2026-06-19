@@ -36,6 +36,8 @@ export type CallParticipantInfo = {
   connectionQuality: 'excellent' | 'good' | 'poor' | 'lost' | 'unknown';
   isCameraEnabled: boolean;
   videoTrack: Track | null;
+  isScreenShareEnabled: boolean;
+  screenShareTrack: Track | null;
 };
 
 /** Non-reactive audio level snapshot, read imperatively by the UI at ~60ms. */
@@ -44,11 +46,30 @@ export type AudioLevelInfo = {
   audioLevel: number;
 };
 
+export type CallTransitionSoundDecision = 'play' | 'defer' | 'skip';
+
 /** Metadata embedded in the LiveKit token by the backend. */
 type ParticipantMetadata = {
   login?: string;
   avatarUrl?: string;
 };
+
+const genericJoinFailureMessage = 'Failed to join voice call';
+const unsupportedEncryptedCallMessage =
+  'This browser does not support encrypted voice calls yet. Try the latest Firefox, Chrome, or Edge.';
+const signalingFailureMessage =
+  'Could not reach the voice server. Check your network and try again.';
+
+export function getVoiceCallJoinErrorMessage(err: unknown): string {
+  const message = errorMessage(err);
+  if (/signal connection|serverunreachable|websocket|web socket|abort handler/i.test(message)) {
+    return signalingFailureMessage;
+  }
+  if (/e2ee|cryptor|encoded transform|insertable stream/i.test(message)) {
+    return unsupportedEncryptedCallMessage;
+  }
+  return genericJoinFailureMessage;
+}
 
 export class VoiceCallState {
   #serverId: string;
@@ -66,6 +87,7 @@ export class VoiceCallState {
 
   // Video state — camera is always disabled by default
   isCameraEnabled = $state(false);
+  isScreenShareEnabled = $state(false);
 
   // Participants (including local)
   participants = $state<CallParticipantInfo[]>([]);
@@ -117,6 +139,25 @@ export class VoiceCallState {
    */
   isInCall(roomId: string): boolean {
     return this.connected && this.roomId === roomId;
+  }
+
+  matchesActiveCall(roomId: string, callId: string | null): boolean {
+    return (
+      this.connected &&
+      this.roomId === roomId &&
+      callId !== null &&
+      this.activeCallId === callId
+    );
+  }
+
+  callTransitionSoundDecision(
+    _kind: 'join' | 'leave',
+    roomId: string,
+    callId: string | null,
+    _actorIsCurrentUser: boolean
+  ): CallTransitionSoundDecision {
+    if (!callId) return 'skip';
+    return this.matchesActiveCall(roomId, callId) ? 'play' : 'skip';
   }
 
   /**
@@ -329,6 +370,22 @@ export class VoiceCallState {
   }
 
   /**
+   * Toggle video-only screen/window/tab sharing.
+   */
+  async toggleScreenShare(): Promise<void> {
+    if (!this.room) return;
+
+    const newEnabled = !this.isScreenShareEnabled;
+    try {
+      await this.room.localParticipant.setScreenShareEnabled(newEnabled);
+      this.isScreenShareEnabled = newEnabled;
+    } catch {
+      this.isScreenShareEnabled = newEnabled ? false : this.isScreenShareEnabled;
+    }
+    this.updateParticipants();
+  }
+
+  /**
    * Refresh available audio and video devices.
    */
   async refreshDevices(): Promise<void> {
@@ -466,6 +523,14 @@ export class VoiceCallState {
       this.updateParticipants();
     });
 
+    this.room.on(RoomEvent.LocalTrackPublished, () => {
+      this.updateParticipants();
+    });
+
+    this.room.on(RoomEvent.LocalTrackUnpublished, () => {
+      this.updateParticipants();
+    });
+
     // Poll audio levels at ~60ms for smooth visual feedback.
     // ActiveSpeakersChanged fires at ~100ms which is slightly too coarse
     // for buttery equalizer animation.
@@ -484,6 +549,8 @@ export class VoiceCallState {
       this.room.localParticipant,
       ...Array.from(this.room.remoteParticipants.values())
     ];
+    this.isCameraEnabled = isParticipantCameraEnabled(this.room.localParticipant);
+    this.isScreenShareEnabled = isParticipantScreenShareEnabled(this.room.localParticipant);
 
     this.participants = allParticipants.map((p) => {
       const md = parseParticipantMetadata(p.metadata);
@@ -496,7 +563,9 @@ export class VoiceCallState {
         isLocal: p === this.room!.localParticipant,
         connectionQuality: p.connectionQuality as CallParticipantInfo['connectionQuality'],
         isCameraEnabled: isParticipantCameraEnabled(p),
-        videoTrack: getParticipantVideoTrack(p)
+        videoTrack: getParticipantVideoTrack(p),
+        isScreenShareEnabled: isParticipantScreenShareEnabled(p),
+        screenShareTrack: getParticipantScreenShareTrack(p)
       };
     });
   }
@@ -609,6 +678,7 @@ export class VoiceCallState {
     this.roomId = null;
     this.isMuted = false;
     this.isCameraEnabled = false;
+    this.isScreenShareEnabled = false;
     this.participants = [];
     this.audioDevices = [];
     this.selectedDeviceId = null;
@@ -656,4 +726,27 @@ function getParticipantVideoTrack(participant: Participant): Track | null {
     }
   }
   return null;
+}
+
+function isParticipantScreenShareEnabled(participant: Participant): boolean {
+  for (const pub of participant.getTrackPublications()) {
+    if (pub.track?.source === Track.Source.ScreenShare) {
+      return !pub.isMuted;
+    }
+  }
+  return false;
+}
+
+function getParticipantScreenShareTrack(participant: Participant): Track | null {
+  for (const pub of participant.getTrackPublications()) {
+    if (pub.track?.source === Track.Source.ScreenShare && !pub.isMuted) {
+      return pub.track;
+    }
+  }
+  return null;
+}
+
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
 }

@@ -15,7 +15,6 @@ test.describe('Message duplication bug', () => {
 
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     const timestamp = Date.now();
@@ -26,7 +25,9 @@ test.describe('Message duplication bug', () => {
     await roomPage.messageInput.press('Enter');
 
     // Wait for message to appear (use first() to avoid strict mode with duplicates)
-    await expect(page.getByText(testMessage).first()).toBeVisible({ timeout: TIMEOUTS.UI_STANDARD });
+    await expect(page.getByText(testMessage).first()).toBeVisible({
+      timeout: TIMEOUTS.UI_STANDARD
+    });
 
     // Poll for message count stability - verify exactly 1 message with this text
     // This replaces an arbitrary timeout with deterministic polling
@@ -39,9 +40,7 @@ test.describe('Message duplication bug', () => {
     const count = await messagesWithText.count();
 
     // Print relevant console logs for debugging BEFORE the assertion
-    const relevantLogs = consoleLogs.filter(
-      (log) => log.includes('SpaceEventBus')
-    );
+    const relevantLogs = consoleLogs.filter((log) => log.includes('SpaceEventBus'));
     console.log('\n=== Console logs ===');
     for (const log of relevantLogs) {
       console.log(log);
@@ -85,7 +84,6 @@ test.describe('Message duplication bug', () => {
   }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
-    await chatPage.createSpace();
     await chatPage.enterRoom('general');
 
     const timestamp = Date.now();

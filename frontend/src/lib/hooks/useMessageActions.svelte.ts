@@ -3,6 +3,8 @@ import { pushState } from '$app/navigation';
 import { getComposerContext } from '$lib/state/room';
 import { emojiToName } from '$lib/emoji';
 import { tryWireAddReaction, tryWireRemoveReaction } from '$lib/wire';
+import { getActiveServer } from '$lib/state/activeServer.svelte';
+import { copyMessageLinkToClipboard } from '$lib/messageLinks';
 
 export type MessageActionParams = {
 	roomId: string;
@@ -88,5 +90,16 @@ export function useMessageActions() {
 		});
 	}
 
-	return { addReaction, removeReaction, toggleReaction, startEdit, openDeleteConfirmation };
+	async function copyMessageLink(params: MessageActionParams) {
+		await copyMessageLinkToClipboard(getActiveServer(), params.roomId, params.eventId);
+	}
+
+	return {
+		addReaction,
+		removeReaction,
+		toggleReaction,
+		startEdit,
+		openDeleteConfirmation,
+		copyMessageLink
+	};
 }

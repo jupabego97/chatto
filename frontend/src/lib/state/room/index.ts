@@ -12,7 +12,10 @@ export {
 export type {
   ComposerContextOptions,
   EditableMessage,
-  FindLastEditableMessage
+  FindLastEditableMessage,
+  QuoteInsertionContent,
+  SelectedQuoteBlock,
+  QuoteInsertionRequest
 } from './composerContext.svelte';
 export {
   createRoomMembers,
@@ -31,3 +34,5 @@ export {
 export type { RoomPermissions } from './permissions.svelte';
 export { MessagesStore, isRootRoomEvent, isThreadEvent } from './messages.svelte';
 export type { RefreshCurrentWindowResult } from './messages.svelte';
+export { RoomFilesStore, ROOM_FILES_PAGE_SIZE } from './files.svelte';
+export type { RoomFileItem } from './files.svelte';

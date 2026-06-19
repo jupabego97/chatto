@@ -21,6 +21,13 @@ export function isSupported(): boolean {
   );
 }
 
+export function getPermission(): NotificationPermission | null {
+  if (typeof window === 'undefined' || !('Notification' in window)) {
+    return null;
+  }
+  return Notification.permission;
+}
+
 /**
  * Get the current service worker registration.
  */
@@ -58,6 +65,28 @@ export async function getSubscription(): Promise<PushSubscription | null> {
 export async function isSubscribed(): Promise<boolean> {
   const subscription = await getSubscription();
   return subscription !== null;
+}
+
+async function saveSubscription(serverId: string, subscription: PushSubscription): Promise<boolean> {
+  const json = subscription.toJSON();
+  if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
+    console.error('Invalid push subscription');
+    return false;
+  }
+
+  const client = wireEventBusManager.getClient(serverId);
+  if (!client) throw new Error('wire client is not connected');
+
+  const result = await client.subscribeToPush(
+    new SubscribeToPushRequest({
+      endpoint: json.endpoint,
+      p256dh: json.keys.p256dh,
+      auth: json.keys.auth,
+      userAgent: navigator.userAgent
+    })
+  );
+
+  return result.subscribed;
 }
 
 /**
@@ -114,37 +143,75 @@ export async function subscribe(serverId: string, vapidPublicKey: string): Promi
       applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
     });
 
-    // Extract subscription details
-    const json = subscription.toJSON();
-    if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
-      console.error('Invalid push subscription');
-      return false;
-    }
-
     try {
-      const client = wireEventBusManager.getClient(serverId);
-      if (!client) throw new Error('wire client is not connected');
-
-      const result = await client.subscribeToPush(
-        new SubscribeToPushRequest({
-          endpoint: json.endpoint,
-          p256dh: json.keys.p256dh,
-          auth: json.keys.auth,
-          userAgent: navigator.userAgent
-        })
-      );
-
-      if (!result.subscribed) {
+      const subscribed = await saveSubscription(serverId, subscription);
+      if (!subscribed) {
         await subscription.unsubscribe();
       }
 
-      return result.subscribed;
+      return subscribed;
     } catch (error) {
       await subscription.unsubscribe();
       throw error;
     }
   } catch (error) {
     console.error('Failed to subscribe to push:', error);
+    return false;
+  }
+}
+
+export async function ensureRegistered(
+  serverId: string,
+  vapidPublicKey: string,
+  options: { prompt?: boolean } = {}
+): Promise<boolean> {
+  if (!isSupported()) {
+    return false;
+  }
+
+  if (Notification.permission === 'denied') {
+    return false;
+  }
+
+  if (Notification.permission === 'default') {
+    if (!options.prompt) {
+      return false;
+    }
+
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      return false;
+    }
+  }
+
+  const registration = await getServiceWorkerRegistration();
+  if (!registration) {
+    return false;
+  }
+
+  try {
+    const existingSubscription = await registration.pushManager.getSubscription();
+    if (existingSubscription) {
+      return await saveSubscription(serverId, existingSubscription);
+    }
+
+    const subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
+    });
+
+    try {
+      const subscribed = await saveSubscription(serverId, subscription);
+      if (!subscribed) {
+        await subscription.unsubscribe();
+      }
+      return subscribed;
+    } catch (error) {
+      await subscription.unsubscribe();
+      throw error;
+    }
+  } catch (error) {
+    console.error('Failed to register for push:', error);
     return false;
   }
 }

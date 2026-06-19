@@ -32,7 +32,7 @@ func testContext(t *testing.T) context.Context {
 func setupTestCore(t *testing.T) (*ChattoCore, *nats.Conn) {
 	t.Helper()
 
-	_, nc := testutil.StartNATS(t)
+	_, nc := testutil.StartSharedNATS(t)
 
 	ctx := testContext(t)
 
@@ -99,6 +99,51 @@ func eventStreamMsgCount(t *testing.T, core *ChattoCore) uint64 {
 		t.Fatalf("event stream info: %v", err)
 	}
 	return info.State.Msgs
+}
+
+func TestCreateJetStreamResourceWithRetryRetriesStoreCreateFailure(t *testing.T) {
+	ctx := testContext(t)
+	attempts := 0
+
+	got, err := createJetStreamResourceWithRetry(ctx, func(context.Context) (string, error) {
+		attempts++
+		if attempts < 3 {
+			return "", &jetstream.APIError{
+				Code:        500,
+				ErrorCode:   10049,
+				Description: "error creating store for stream",
+			}
+		}
+		return "created", nil
+	})
+
+	if err != nil {
+		t.Fatalf("createJetStreamResourceWithRetry error = %v", err)
+	}
+	if got != "created" {
+		t.Fatalf("resource = %q, want created", got)
+	}
+	if attempts != 3 {
+		t.Fatalf("attempts = %d, want 3", attempts)
+	}
+}
+
+func TestCreateJetStreamResourceWithRetryDoesNotRetryOtherErrors(t *testing.T) {
+	ctx := testContext(t)
+	attempts := 0
+	wantErr := errors.New("not retriable")
+
+	_, err := createJetStreamResourceWithRetry(ctx, func(context.Context) (string, error) {
+		attempts++
+		return "", wantErr
+	})
+
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("error = %v, want %v", err, wantErr)
+	}
+	if attempts != 1 {
+		t.Fatalf("attempts = %d, want 1", attempts)
+	}
 }
 
 func TestNewChattoCore_DoesNotProvisionLegacyImportResourcesOnFreshBoot(t *testing.T) {

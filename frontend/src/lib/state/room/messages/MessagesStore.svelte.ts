@@ -208,12 +208,21 @@ export class MessagesStore {
    * handling to the current scope.
    */
   ingestServerEvent(serverEvent: EventEnvelope): void {
-    const eventData = serverEvent.event;
-    if (!eventData) return;
     // Subscription and historical-query payloads share the same Event
     // envelope. Cast once at the room boundary so downstream code can keep
     // using the RoomEventViewFragment shape it renders with.
     const spaceEvent = serverEvent as unknown as RoomEventViewFragment;
+    this.ingestEvent(spaceEvent);
+  }
+
+  /**
+   * Route an already-renderable event into the store. Used for read-your-writes
+   * after mutations that return the posted event; live subscription delivery
+   * still follows {@link ingestServerEvent} and is deduped by event ID.
+   */
+  ingestEvent(spaceEvent: RoomEventViewFragment): void {
+    const eventData = spaceEvent.event;
+    if (!eventData) return;
 
     if (eventData.__typename === 'ServerMemberDeletedEvent') {
       this.refetchAll();
@@ -272,9 +281,7 @@ export class MessagesStore {
       eventData.__typename === 'UserLeftRoomEvent' ||
       eventData.__typename === 'RoomUpdatedEvent' ||
       eventData.__typename === 'RoomArchivedEvent' ||
-      eventData.__typename === 'RoomUnarchivedEvent' ||
-      eventData.__typename === 'CallStartedEvent' ||
-      eventData.__typename === 'CallEndedEvent'
+      eventData.__typename === 'RoomUnarchivedEvent'
     ) {
       this.onSystemEvent(spaceEvent);
     }

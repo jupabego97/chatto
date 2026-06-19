@@ -5,6 +5,7 @@
 
 import type { BinaryReadOptions, FieldList, JsonReadOptions, JsonValue, PartialMessage, PlainMessage } from "@bufbuild/protobuf";
 import { Message, proto3 } from "@bufbuild/protobuf";
+import { SidebarGroupEntry } from "./models_pb.js";
 
 /**
  * @generated from message chatto.core.v1.RoomGroupCreatedEvent
@@ -286,6 +287,205 @@ export class RoomsInGroupReorderedEvent extends Message<RoomsInGroupReorderedEve
 
   static equals(a: RoomsInGroupReorderedEvent | PlainMessage<RoomsInGroupReorderedEvent> | undefined, b: RoomsInGroupReorderedEvent | PlainMessage<RoomsInGroupReorderedEvent> | undefined): boolean {
     return proto3.util.equals(RoomsInGroupReorderedEvent, a, b);
+  }
+}
+
+/**
+ * @generated from message chatto.core.v1.SidebarLinkAddedToGroupEvent
+ */
+export class SidebarLinkAddedToGroupEvent extends Message<SidebarLinkAddedToGroupEvent> {
+  /**
+   * @generated from field: string group_id = 1;
+   */
+  groupId = "";
+
+  /**
+   * @generated from field: string link_id = 2;
+   */
+  linkId = "";
+
+  /**
+   * @generated from field: string label = 3;
+   */
+  label = "";
+
+  /**
+   * @generated from field: string url = 4;
+   */
+  url = "";
+
+  constructor(data?: PartialMessage<SidebarLinkAddedToGroupEvent>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "chatto.core.v1.SidebarLinkAddedToGroupEvent";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "group_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "link_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "label", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "url", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SidebarLinkAddedToGroupEvent {
+    return new SidebarLinkAddedToGroupEvent().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SidebarLinkAddedToGroupEvent {
+    return new SidebarLinkAddedToGroupEvent().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SidebarLinkAddedToGroupEvent {
+    return new SidebarLinkAddedToGroupEvent().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SidebarLinkAddedToGroupEvent | PlainMessage<SidebarLinkAddedToGroupEvent> | undefined, b: SidebarLinkAddedToGroupEvent | PlainMessage<SidebarLinkAddedToGroupEvent> | undefined): boolean {
+    return proto3.util.equals(SidebarLinkAddedToGroupEvent, a, b);
+  }
+}
+
+/**
+ * @generated from message chatto.core.v1.SidebarLinkUpdatedEvent
+ */
+export class SidebarLinkUpdatedEvent extends Message<SidebarLinkUpdatedEvent> {
+  /**
+   * @generated from field: string group_id = 1;
+   */
+  groupId = "";
+
+  /**
+   * @generated from field: string link_id = 2;
+   */
+  linkId = "";
+
+  /**
+   * @generated from field: string label = 3;
+   */
+  label = "";
+
+  /**
+   * @generated from field: string url = 4;
+   */
+  url = "";
+
+  constructor(data?: PartialMessage<SidebarLinkUpdatedEvent>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "chatto.core.v1.SidebarLinkUpdatedEvent";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "group_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "link_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "label", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "url", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SidebarLinkUpdatedEvent {
+    return new SidebarLinkUpdatedEvent().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SidebarLinkUpdatedEvent {
+    return new SidebarLinkUpdatedEvent().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SidebarLinkUpdatedEvent {
+    return new SidebarLinkUpdatedEvent().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SidebarLinkUpdatedEvent | PlainMessage<SidebarLinkUpdatedEvent> | undefined, b: SidebarLinkUpdatedEvent | PlainMessage<SidebarLinkUpdatedEvent> | undefined): boolean {
+    return proto3.util.equals(SidebarLinkUpdatedEvent, a, b);
+  }
+}
+
+/**
+ * @generated from message chatto.core.v1.SidebarLinkRemovedFromGroupEvent
+ */
+export class SidebarLinkRemovedFromGroupEvent extends Message<SidebarLinkRemovedFromGroupEvent> {
+  /**
+   * @generated from field: string group_id = 1;
+   */
+  groupId = "";
+
+  /**
+   * @generated from field: string link_id = 2;
+   */
+  linkId = "";
+
+  constructor(data?: PartialMessage<SidebarLinkRemovedFromGroupEvent>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "chatto.core.v1.SidebarLinkRemovedFromGroupEvent";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "group_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "link_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SidebarLinkRemovedFromGroupEvent {
+    return new SidebarLinkRemovedFromGroupEvent().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SidebarLinkRemovedFromGroupEvent {
+    return new SidebarLinkRemovedFromGroupEvent().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SidebarLinkRemovedFromGroupEvent {
+    return new SidebarLinkRemovedFromGroupEvent().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SidebarLinkRemovedFromGroupEvent | PlainMessage<SidebarLinkRemovedFromGroupEvent> | undefined, b: SidebarLinkRemovedFromGroupEvent | PlainMessage<SidebarLinkRemovedFromGroupEvent> | undefined): boolean {
+    return proto3.util.equals(SidebarLinkRemovedFromGroupEvent, a, b);
+  }
+}
+
+/**
+ * Drag-reorder within a single group across both rooms and sidebar links.
+ * Carries the full mixed ordering rather than a delta.
+ *
+ * @generated from message chatto.core.v1.SidebarGroupEntriesReorderedEvent
+ */
+export class SidebarGroupEntriesReorderedEvent extends Message<SidebarGroupEntriesReorderedEvent> {
+  /**
+   * @generated from field: string group_id = 1;
+   */
+  groupId = "";
+
+  /**
+   * @generated from field: repeated chatto.core.v1.SidebarGroupEntry entries = 2;
+   */
+  entries: SidebarGroupEntry[] = [];
+
+  constructor(data?: PartialMessage<SidebarGroupEntriesReorderedEvent>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "chatto.core.v1.SidebarGroupEntriesReorderedEvent";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "group_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "entries", kind: "message", T: SidebarGroupEntry, repeated: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SidebarGroupEntriesReorderedEvent {
+    return new SidebarGroupEntriesReorderedEvent().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SidebarGroupEntriesReorderedEvent {
+    return new SidebarGroupEntriesReorderedEvent().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SidebarGroupEntriesReorderedEvent {
+    return new SidebarGroupEntriesReorderedEvent().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SidebarGroupEntriesReorderedEvent | PlainMessage<SidebarGroupEntriesReorderedEvent> | undefined, b: SidebarGroupEntriesReorderedEvent | PlainMessage<SidebarGroupEntriesReorderedEvent> | undefined): boolean {
+    return proto3.util.equals(SidebarGroupEntriesReorderedEvent, a, b);
   }
 }
 

@@ -108,6 +108,13 @@ type Projector struct {
 	// ChattoCore.Run gets a chance to start the consumer (see the
 	// WaitFor doc for why).
 	started bool
+
+	startupStartedAt time.Time
+	startupTargetSeq uint64
+	startupEndedAt   time.Time
+	startupCompleted bool
+	startupMessages  uint64
+	startupLogged    bool
 }
 
 // ProjectorStatus is a concurrency-safe snapshot of a projector's
@@ -116,6 +123,11 @@ type Projector struct {
 type ProjectorStatus struct {
 	Started bool
 	LastSeq uint64
+
+	StartupTargetSeq uint64
+	StartupComplete  bool
+	StartupDuration  time.Duration
+	StartupMessages  uint64
 
 	Failed    bool
 	FailedSeq uint64
@@ -147,8 +159,18 @@ func (p *Projector) Status() ProjectorStatus {
 	defer p.mu.Unlock()
 
 	status := ProjectorStatus{
-		Started: p.started,
-		LastSeq: p.lastSeq,
+		Started:          p.started,
+		LastSeq:          p.lastSeq,
+		StartupTargetSeq: p.startupTargetSeq,
+		StartupComplete:  p.startupCompleted,
+		StartupMessages:  p.startupMessages,
+	}
+	if !p.startupStartedAt.IsZero() {
+		startupEndsAt := p.startupEndedAt
+		if startupEndsAt.IsZero() {
+			startupEndsAt = time.Now()
+		}
+		status.StartupDuration = startupEndsAt.Sub(p.startupStartedAt)
 	}
 	if p.failedErr != nil {
 		status.Failed = true
@@ -421,6 +443,9 @@ func (p *Projector) fail(seq uint64, err error) {
 	if p.failedErr == nil {
 		p.failedSeq = seq
 		p.failedErr = fmt.Errorf("%w at seq %d: %w", ErrProjectionFailed, seq, err)
+		if p.started && p.startupEndedAt.IsZero() {
+			p.startupEndedAt = time.Now()
+		}
 		close(p.failedCh)
 	}
 	for _, w := range p.waiters {
@@ -435,13 +460,25 @@ func (p *Projector) fail(seq uint64, err error) {
 // Snapshot orchestration is deferred (ADR-033). For now, Restore is always
 // called with nil and the loop replays from the beginning of the stream.
 func (p *Projector) Run(ctx context.Context) error {
+	startedAt := time.Now()
 	p.mu.Lock()
 	p.started = true
+	if p.startupStartedAt.IsZero() {
+		p.startupStartedAt = startedAt
+	}
 	p.mu.Unlock()
 
 	if err := p.proj.Restore(nil); err != nil {
 		return fmt.Errorf("restore projection: %w", err)
 	}
+
+	target, err := p.currentTarget(ctx)
+	if err != nil {
+		return fmt.Errorf("read projection startup target: %w", err)
+	}
+	p.mu.Lock()
+	p.startupTargetSeq = target.seq
+	p.mu.Unlock()
 
 	cons, err := p.stream.OrderedConsumer(ctx, jetstream.OrderedConsumerConfig{
 		FilterSubjects:    p.proj.Subjects(),
@@ -467,6 +504,7 @@ func (p *Projector) Run(ctx context.Context) error {
 		return fmt.Errorf("start consume: %w", err)
 	}
 	defer cc.Stop()
+	p.maybeCompleteStartup(time.Now())
 
 	select {
 	case <-ctx.Done():
@@ -522,7 +560,52 @@ func (p *Projector) handleMessage(msg jetstream.Msg) {
 		return
 	}
 
+	p.countStartupMessage()
 	p.advance(meta.Sequence.Stream)
+	p.maybeCompleteStartup(time.Now())
+}
+
+func (p *Projector) countStartupMessage() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.started && p.startupEndedAt.IsZero() {
+		p.startupMessages++
+	}
+}
+
+func (p *Projector) maybeCompleteStartup(now time.Time) {
+	p.mu.Lock()
+	shouldLog := false
+	var duration time.Duration
+	var targetSeq, lastSeq, messages uint64
+	if p.started && p.startupEndedAt.IsZero() && p.lastSeq >= p.startupTargetSeq {
+		p.startupEndedAt = now
+		p.startupCompleted = true
+	}
+	if p.started && p.startupCompleted && !p.startupLogged {
+		p.startupLogged = true
+		shouldLog = true
+		duration = p.startupEndedAt.Sub(p.startupStartedAt)
+		targetSeq = p.startupTargetSeq
+		lastSeq = p.lastSeq
+		messages = p.startupMessages
+	}
+	p.mu.Unlock()
+
+	if shouldLog {
+		var rate float64
+		if seconds := duration.Seconds(); seconds > 0 {
+			rate = float64(messages) / seconds
+		}
+		p.logger.Info("Projection startup complete",
+			"duration", duration,
+			"messages", messages,
+			"messages_per_second", rate,
+			"last_seq", lastSeq,
+			"target_seq", targetSeq,
+			"subjects", p.proj.Subjects(),
+		)
+	}
 }
 
 // handleConsumeErr is invoked by the SDK when the OrderedConsumer's
@@ -531,4 +614,169 @@ func (p *Projector) handleMessage(msg jetstream.Msg) {
 // and stay running.
 func (p *Projector) handleConsumeErr(_ jetstream.ConsumeContext, err error) {
 	p.logger.Warn("Projection consumer error (auto-recovering)", "error", err)
+}
+
+// RunProjectors starts one consumer for projectors with identical subject
+// filters and fans each decoded event out to every projection. Each projector
+// still owns its own lifecycle state, waiters, and failure status.
+func RunProjectors(ctx context.Context, projectors ...*Projector) error {
+	if len(projectors) == 0 {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	for i, projector := range projectors {
+		if projector == nil {
+			return fmt.Errorf("shared projection %d is nil", i)
+		}
+	}
+	if len(projectors) == 1 {
+		return projectors[0].Run(ctx)
+	}
+
+	subjects := projectors[0].proj.Subjects()
+	for _, projector := range projectors {
+		if !sameSubjects(subjects, projector.proj.Subjects()) {
+			return fmt.Errorf("shared projectors must use identical subjects: %v != %v", subjects, projector.proj.Subjects())
+		}
+	}
+
+	startedAt := time.Now()
+	for _, projector := range projectors {
+		projector.markStarted(startedAt)
+	}
+
+	for _, projector := range projectors {
+		if err := projector.proj.Restore(nil); err != nil {
+			return fmt.Errorf("restore projection: %w", err)
+		}
+	}
+
+	target, err := projectors[0].currentTarget(ctx)
+	if err != nil {
+		return fmt.Errorf("read projection startup target: %w", err)
+	}
+	for _, projector := range projectors {
+		projector.setStartupTarget(target.seq)
+	}
+
+	cons, err := projectors[0].stream.OrderedConsumer(ctx, jetstream.OrderedConsumerConfig{
+		FilterSubjects:    subjects,
+		DeliverPolicy:     jetstream.DeliverAllPolicy,
+		InactiveThreshold: 30 * time.Second,
+	})
+	if err != nil {
+		return fmt.Errorf("create ordered consumer: %w", err)
+	}
+
+	failedCh := make(chan struct{}, 1)
+	cc, err := cons.Consume(func(msg jetstream.Msg) {
+		handleSharedProjectorMessage(msg, projectors, failedCh)
+	}, jetstream.ConsumeErrHandler(func(cc jetstream.ConsumeContext, err error) {
+		for _, projector := range projectors {
+			projector.handleConsumeErr(cc, err)
+		}
+	}))
+	if err != nil {
+		return fmt.Errorf("start consume: %w", err)
+	}
+	defer cc.Stop()
+	for _, projector := range projectors {
+		projector.maybeCompleteStartup(time.Now())
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-failedCh:
+		for _, projector := range projectors {
+			if err := projector.Err(); err != nil {
+				return err
+			}
+		}
+		return ErrProjectionFailed
+	}
+}
+
+func (p *Projector) markStarted(startedAt time.Time) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.started = true
+	if p.startupStartedAt.IsZero() {
+		p.startupStartedAt = startedAt
+	}
+}
+
+func (p *Projector) setStartupTarget(seq uint64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.startupTargetSeq = seq
+}
+
+func sameSubjects(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func handleSharedProjectorMessage(msg jetstream.Msg, projectors []*Projector, failedCh chan<- struct{}) {
+	meta, err := msg.Metadata()
+	if err != nil {
+		err := fmt.Errorf("message metadata for subject %q: %w", msg.Subject(), err)
+		for _, projector := range projectors {
+			projector.logger.Error("Projection message metadata failed", "subject", msg.Subject(), "error", err)
+			projector.fail(0, err)
+		}
+		notifySharedProjectorFailure(failedCh)
+		return
+	}
+
+	var event corev1.Event
+	if err := proto.Unmarshal(msg.Data(), &event); err != nil {
+		err = fmt.Errorf("unmarshal event on subject %q: %w", msg.Subject(), err)
+		for _, projector := range projectors {
+			projector.logger.Error("Projection decode failed",
+				"subject", msg.Subject(),
+				"seq", meta.Sequence.Stream,
+				"error", err)
+			projector.fail(meta.Sequence.Stream, err)
+		}
+		notifySharedProjectorFailure(failedCh)
+		return
+	}
+
+	now := time.Now()
+	var applyErr error
+	for _, projector := range projectors {
+		if err := projector.proj.Apply(&event, meta.Sequence.Stream); err != nil {
+			projector.logger.Error("Projection Apply failed",
+				"subject", msg.Subject(),
+				"seq", meta.Sequence.Stream,
+				"event_id", event.GetId(),
+				"error", err)
+			projector.fail(meta.Sequence.Stream, err)
+			if applyErr == nil {
+				applyErr = err
+			}
+			continue
+		}
+		projector.countStartupMessage()
+		projector.advance(meta.Sequence.Stream)
+		projector.maybeCompleteStartup(now)
+	}
+	if applyErr != nil {
+		notifySharedProjectorFailure(failedCh)
+	}
+}
+
+func notifySharedProjectorFailure(ch chan<- struct{}) {
+	select {
+	case ch <- struct{}{}:
+	default:
+	}
 }

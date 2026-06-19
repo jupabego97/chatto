@@ -273,7 +273,7 @@
 </script>
 
 {#if attachments.length > 0}
-  <div class="mt-2 flex flex-wrap gap-2 first:mt-0">
+  <div class="mt-2 flex flex-wrap gap-x-2 gap-y-3 first:mt-0">
     {#each attachments as attachment (attachment.id)}
       {#if attachment.contentType === 'image/gif' && attachment.videoProcessing}
         <div class="group/attachment relative min-w-0">
@@ -292,7 +292,7 @@
             <button
               type="button"
               onclick={(e) => openDeleteConfirmation(attachment, e)}
-              class="bg-surface-700/80 hover:bg-surface-800 absolute top-1 right-1 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-white shadow-sm transition-opacity md:opacity-0 md:group-hover/attachment:opacity-100"
+              class="embed-control-button md:group-hover/attachment:opacity-100"
               aria-label="Delete attachment"
               title="Delete attachment"
             >
@@ -336,7 +336,7 @@
               onkeydown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') openDeleteConfirmation(attachment, e);
               }}
-              class="bg-surface-700/80 hover:bg-surface-800 absolute top-1 right-1 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-white shadow-sm transition-opacity md:opacity-0 md:group-hover/attachment:opacity-100"
+              class="embed-control-button md:group-hover/attachment:opacity-100"
               aria-label="Delete attachment"
               title="Delete attachment"
             >
@@ -360,7 +360,7 @@
             <button
               type="button"
               onclick={(e) => openDeleteConfirmation(attachment, e)}
-              class="bg-surface-700/80 hover:bg-surface-800 absolute top-1 right-1 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-white shadow-sm transition-opacity md:opacity-0 md:group-hover/attachment:opacity-100"
+              class="embed-control-button z-10 md:group-hover/attachment:opacity-100"
               aria-label="Delete attachment"
               title="Delete attachment"
             >
@@ -375,12 +375,12 @@
           or processing has never been requested for this asset. Render the raw
           original so the user can at least play it.
         -->
-        <div class="overflow-hidden rounded-sm">
+        <div class="embed-frame">
           <video
             controls
             preload="metadata"
             src={attachment.url}
-            class="max-h-64 max-w-full rounded-sm"
+            class="max-h-64 max-w-full"
             onerror={() => refreshAfterAssetError(attachment, 'asset')}
           >
             <track kind="captions" />
@@ -388,7 +388,7 @@
         </div>
       {:else if attachment.contentType.startsWith('audio/')}
         <div class="group/attachment relative min-w-0">
-          <div class="flex items-center gap-3 rounded-lg bg-surface px-3 py-2">
+          <div class="flex items-center gap-3 px-3 py-2 embed-frame">
             <audio
               controls
               preload="metadata"
@@ -405,7 +405,7 @@
             <button
               type="button"
               onclick={(e) => openDeleteConfirmation(attachment, e)}
-              class="bg-surface-700/80 hover:bg-surface-800 absolute top-1 right-1 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-white shadow-sm transition-opacity md:opacity-0 md:group-hover/attachment:opacity-100"
+              class="embed-control-button md:group-hover/attachment:opacity-100"
               aria-label="Delete attachment"
               title="Delete attachment"
             >
@@ -414,16 +414,14 @@
           {/if}
         </div>
       {:else}
-        <div
-          class="group/attachment relative block overflow-hidden rounded-lg shadow-md transition-transform"
-        >
+        <div class="group/attachment relative block embed-frame">
           <button
             type="button"
             onclick={() => openDownload(attachment)}
             aria-label="Download {attachment.filename}"
             class="block w-full cursor-pointer text-left"
           >
-            <div class="flex h-16 items-center gap-2 rounded-lg bg-surface px-3">
+            <div class="flex h-16 items-center gap-2 px-3">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 class="h-6 w-6 text-muted"
@@ -445,7 +443,7 @@
             <button
               type="button"
               onclick={(e) => openDeleteConfirmation(attachment, e)}
-              class="bg-surface-700/80 hover:bg-surface-800 absolute top-1 right-1 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-white shadow-sm transition-opacity md:opacity-0 md:group-hover/attachment:opacity-100"
+              class="embed-control-button md:group-hover/attachment:opacity-100"
               aria-label="Delete attachment"
               title="Delete attachment"
             >

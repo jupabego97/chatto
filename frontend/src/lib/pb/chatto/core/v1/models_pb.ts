@@ -216,6 +216,13 @@ export class User extends Message<User> {
    */
   createdAt?: Timestamp;
 
+  /**
+   * True for public tombstones representing deleted/unresolvable users.
+   *
+   * @generated from field: bool deleted = 5;
+   */
+  deleted = false;
+
   constructor(data?: PartialMessage<User>) {
     super();
     proto3.util.initPartial(data, this);
@@ -228,6 +235,7 @@ export class User extends Message<User> {
     { no: 2, name: "login", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "display_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 4, name: "created_at", kind: "message", T: Timestamp },
+    { no: 5, name: "deleted", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): User {
@@ -1439,6 +1447,132 @@ export class RoomLayout extends Message<RoomLayout> {
  * its own ACL; individual rooms can override per (role, permission)
  * entries on top. Stored at `room_group.{id}`.
  *
+ * @generated from message chatto.core.v1.SidebarLink
+ */
+export class SidebarLink extends Message<SidebarLink> {
+  /**
+   * NanoID for stable identity across renames/moves
+   *
+   * @generated from field: string id = 1;
+   */
+  id = "";
+
+  /**
+   * Display label shown in the server sidebar
+   *
+   * @generated from field: string label = 2;
+   */
+  label = "";
+
+  /**
+   * Absolute http(s) URL opened outside Chatto
+   *
+   * @generated from field: string url = 3;
+   */
+  url = "";
+
+  constructor(data?: PartialMessage<SidebarLink>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "chatto.core.v1.SidebarLink";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "label", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "url", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SidebarLink {
+    return new SidebarLink().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SidebarLink {
+    return new SidebarLink().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SidebarLink {
+    return new SidebarLink().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SidebarLink | PlainMessage<SidebarLink> | undefined, b: SidebarLink | PlainMessage<SidebarLink> | undefined): boolean {
+    return proto3.util.equals(SidebarLink, a, b);
+  }
+}
+
+/**
+ * @generated from message chatto.core.v1.SidebarGroupEntry
+ */
+export class SidebarGroupEntry extends Message<SidebarGroupEntry> {
+  /**
+   * @generated from field: chatto.core.v1.SidebarGroupEntry.Kind kind = 1;
+   */
+  kind = SidebarGroupEntry_Kind.KIND_UNSPECIFIED;
+
+  /**
+   * Room ID for ROOM, SidebarLink ID for SIDEBAR_LINK
+   *
+   * @generated from field: string id = 2;
+   */
+  id = "";
+
+  constructor(data?: PartialMessage<SidebarGroupEntry>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "chatto.core.v1.SidebarGroupEntry";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "kind", kind: "enum", T: proto3.getEnumType(SidebarGroupEntry_Kind) },
+    { no: 2, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SidebarGroupEntry {
+    return new SidebarGroupEntry().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SidebarGroupEntry {
+    return new SidebarGroupEntry().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SidebarGroupEntry {
+    return new SidebarGroupEntry().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SidebarGroupEntry | PlainMessage<SidebarGroupEntry> | undefined, b: SidebarGroupEntry | PlainMessage<SidebarGroupEntry> | undefined): boolean {
+    return proto3.util.equals(SidebarGroupEntry, a, b);
+  }
+}
+
+/**
+ * @generated from enum chatto.core.v1.SidebarGroupEntry.Kind
+ */
+export enum SidebarGroupEntry_Kind {
+  /**
+   * @generated from enum value: KIND_UNSPECIFIED = 0;
+   */
+  KIND_UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: ROOM = 1;
+   */
+  ROOM = 1,
+
+  /**
+   * @generated from enum value: SIDEBAR_LINK = 2;
+   */
+  SIDEBAR_LINK = 2,
+}
+// Retrieve enum metadata with: proto3.getEnumType(SidebarGroupEntry_Kind)
+proto3.util.setEnumType(SidebarGroupEntry_Kind, "chatto.core.v1.SidebarGroupEntry.Kind", [
+  { no: 0, name: "KIND_UNSPECIFIED" },
+  { no: 1, name: "ROOM" },
+  { no: 2, name: "SIDEBAR_LINK" },
+]);
+
+/**
  * @generated from message chatto.core.v1.RoomGroup
  */
 export class RoomGroup extends Message<RoomGroup> {
@@ -1470,6 +1604,22 @@ export class RoomGroup extends Message<RoomGroup> {
    */
   description = "";
 
+  /**
+   * Ordered mixed sidebar entries. ROOM entries reference Room records by ID;
+   * SIDEBAR_LINK entries reference payloads in sidebar_links by ID.
+   *
+   * @generated from field: repeated chatto.core.v1.SidebarGroupEntry entries = 5;
+   */
+  entries: SidebarGroupEntry[] = [];
+
+  /**
+   * Link payloads owned by this group. Kept separate from entries so reorders
+   * can move stable IDs without duplicating mutable label/URL data.
+   *
+   * @generated from field: repeated chatto.core.v1.SidebarLink sidebar_links = 6;
+   */
+  sidebarLinks: SidebarLink[] = [];
+
   constructor(data?: PartialMessage<RoomGroup>) {
     super();
     proto3.util.initPartial(data, this);
@@ -1482,6 +1632,8 @@ export class RoomGroup extends Message<RoomGroup> {
     { no: 2, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "room_ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 4, name: "description", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "entries", kind: "message", T: SidebarGroupEntry, repeated: true },
+    { no: 6, name: "sidebar_links", kind: "message", T: SidebarLink, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): RoomGroup {

@@ -12,6 +12,7 @@ export type RoomData = {
   spaceName: string | null;
   canPostMessage: boolean;
   canPostInThread: boolean;
+  canAttach: boolean;
   canReact: boolean;
   canManageOthersMessage: boolean;
   canEchoMessage: boolean;
@@ -105,6 +106,7 @@ export function useRoomData(getProps: () => { roomId: string }) {
           spaceName: resp.serverName || null,
           canPostMessage: resp.viewerCanPostMessage,
           canPostInThread: resp.viewerCanPostInThread,
+          canAttach: resp.viewerCanPostMessage,
           canReact: resp.viewerCanReact,
           canManageOthersMessage: resp.viewerCanManageOthersMessage,
           canEchoMessage: resp.viewerCanEchoMessage,
@@ -174,6 +176,7 @@ function wireUserToRoomMember(user: User | undefined): RoomMember | null {
     id: user.id,
     login: user.login,
     displayName: user.displayName,
+    deleted: false,
     avatarUrl: null,
     presenceStatus: PresenceStatus.Offline
   };

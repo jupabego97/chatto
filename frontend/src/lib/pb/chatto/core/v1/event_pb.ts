@@ -10,7 +10,7 @@ import { MessageBodyEvent, MessageEditedEvent, MessagePostedEvent, MessageRetrac
 import { ThreadCreatedEvent } from "./thread_events_pb.js";
 import { AssetCreatedEvent, AssetDeletedEvent, AssetProcessingFailedEvent, AssetProcessingStartedEvent, AssetProcessingSucceededEvent } from "./asset_events_pb.js";
 import { ServerBannerClearedEvent, ServerBannerSetEvent, ServerBlockedUsernamesChangedEvent, ServerDescriptionChangedEvent, ServerLogoClearedEvent, ServerLogoSetEvent, ServerMotdChangedEvent, ServerNameChangedEvent, ServerWelcomeMessageChangedEvent, UserRoomNotificationLevelClearedEvent, UserRoomNotificationLevelSetEvent, UserServerNotificationLevelClearedEvent, UserServerNotificationLevelSetEvent, UserTimeFormatChangedEvent, UserTimeFormatClearedEvent, UserTimezoneChangedEvent, UserTimezoneClearedEvent } from "./config_events_pb.js";
-import { RoomAddedToGroupEvent, RoomGroupCreatedEvent, RoomGroupDeletedEvent, RoomGroupsReorderedEvent, RoomGroupUpdatedEvent, RoomRemovedFromGroupEvent, RoomsInGroupReorderedEvent } from "./room_group_events_pb.js";
+import { RoomAddedToGroupEvent, RoomGroupCreatedEvent, RoomGroupDeletedEvent, RoomGroupsReorderedEvent, RoomGroupUpdatedEvent, RoomRemovedFromGroupEvent, RoomsInGroupReorderedEvent, SidebarGroupEntriesReorderedEvent, SidebarLinkAddedToGroupEvent, SidebarLinkRemovedFromGroupEvent, SidebarLinkUpdatedEvent } from "./room_group_events_pb.js";
 import { UserAccountCreatedEvent, UserAccountDeletedEvent, UserAvatarClearedEvent, UserAvatarSetEvent, UserDEKGeneratedEvent, UserDisplayNameChangedEvent, UserExternalIdentityLinkedEvent, UserKeyShreddedEvent, UserLoginChangedEvent, UserLoginCooldownClearedEvent, UserLoginCooldownStartedEvent, UserOIDCSubjectLinkedEvent, UserPasswordHashChangedEvent, UserServerPreferencesChangedEvent, UserVerifiedEmailAddedEvent } from "./user_events_pb.js";
 import { RbacPermissionClearedEvent, RbacPermissionDeniedEvent, RbacPermissionGrantedEvent, RbacRoleAssignedEvent, RbacRoleCreatedEvent, RbacRoleDeletedEvent, RbacRoleDescriptionChangedEvent, RbacRoleDisplayNameChangedEvent, RbacRolePingableChangedEvent, RbacRoleRevokedEvent, RbacRolesReorderedEvent } from "./rbac_events_pb.js";
 import { RoomMemberBannedEvent, RoomMemberUnbannedEvent } from "./moderation_events_pb.js";
@@ -384,6 +384,30 @@ export class Event extends Message<Event> {
     case: "roomsInGroupReordered";
   } | {
     /**
+     * @generated from field: chatto.core.v1.SidebarLinkAddedToGroupEvent sidebar_link_added_to_group = 606;
+     */
+    value: SidebarLinkAddedToGroupEvent;
+    case: "sidebarLinkAddedToGroup";
+  } | {
+    /**
+     * @generated from field: chatto.core.v1.SidebarLinkUpdatedEvent sidebar_link_updated = 607;
+     */
+    value: SidebarLinkUpdatedEvent;
+    case: "sidebarLinkUpdated";
+  } | {
+    /**
+     * @generated from field: chatto.core.v1.SidebarLinkRemovedFromGroupEvent sidebar_link_removed_from_group = 608;
+     */
+    value: SidebarLinkRemovedFromGroupEvent;
+    case: "sidebarLinkRemovedFromGroup";
+  } | {
+    /**
+     * @generated from field: chatto.core.v1.SidebarGroupEntriesReorderedEvent sidebar_group_entries_reordered = 609;
+     */
+    value: SidebarGroupEntriesReorderedEvent;
+    case: "sidebarGroupEntriesReordered";
+  } | {
+    /**
      * ----- Room layout (650-659, durable, evt.layout.{singleton}) -----
      * The layout aggregate is a singleton; the singletonID is a stable
      * constant ("default"). It owns the operator-defined inter-group
@@ -740,6 +764,10 @@ export class Event extends Message<Event> {
     { no: 603, name: "room_added_to_group", kind: "message", T: RoomAddedToGroupEvent, oneof: "event" },
     { no: 604, name: "room_removed_from_group", kind: "message", T: RoomRemovedFromGroupEvent, oneof: "event" },
     { no: 605, name: "rooms_in_group_reordered", kind: "message", T: RoomsInGroupReorderedEvent, oneof: "event" },
+    { no: 606, name: "sidebar_link_added_to_group", kind: "message", T: SidebarLinkAddedToGroupEvent, oneof: "event" },
+    { no: 607, name: "sidebar_link_updated", kind: "message", T: SidebarLinkUpdatedEvent, oneof: "event" },
+    { no: 608, name: "sidebar_link_removed_from_group", kind: "message", T: SidebarLinkRemovedFromGroupEvent, oneof: "event" },
+    { no: 609, name: "sidebar_group_entries_reordered", kind: "message", T: SidebarGroupEntriesReorderedEvent, oneof: "event" },
     { no: 650, name: "room_groups_reordered", kind: "message", T: RoomGroupsReorderedEvent, oneof: "event" },
     { no: 700, name: "user_account_created", kind: "message", T: UserAccountCreatedEvent, oneof: "event" },
     { no: 701, name: "user_login_changed", kind: "message", T: UserLoginChangedEvent, oneof: "event" },

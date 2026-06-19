@@ -467,6 +467,15 @@ export type CreateRoomInput = {
   name: Scalars['String']['input'];
 };
 
+export type CreateSidebarLinkInput = {
+  /** The group that should contain the new sidebar link. */
+  groupId: Scalars['ID']['input'];
+  /** Display label for the link. */
+  label: Scalars['String']['input'];
+  /** Absolute http(s) URL. */
+  url: Scalars['String']['input'];
+};
+
 /**
  * Notification for new DM messages.
  * Created when someone sends a message in a DM conversation you're part of.
@@ -535,6 +544,11 @@ export type DeleteRoleInput = {
 export type DeleteRoomGroupInput = {
   /** The room group's ID. */
   id: Scalars['ID']['input'];
+};
+
+export type DeleteSidebarLinkInput = {
+  /** The sidebar link to delete. */
+  linkId: Scalars['ID']['input'];
 };
 
 /** Input for denying a permission for a role. */
@@ -915,7 +929,7 @@ export type MentionNotificationItem = {
 
 /**
  * Legacy event: the mention indicator for a room was cleared for the current user.
- * Retained for wire compatibility; new builds derive orange dots from pending
+ * Retained for wire compatibility; new builds derive notification indicators from pending
  * notifications and do not publish this event.
  */
 export type MentionStatusClearedEvent = {
@@ -1036,6 +1050,13 @@ export type MoveRoomToGroupInput = {
   roomId: Scalars['ID']['input'];
 };
 
+export type MoveSidebarLinkToGroupInput = {
+  /** The destination room group. */
+  groupId: Scalars['ID']['input'];
+  /** The sidebar link to move. */
+  linkId: Scalars['ID']['input'];
+};
+
 /** Root mutation type for modifying data. */
 export type Mutation = {
   __typename?: 'Mutation';
@@ -1100,6 +1121,8 @@ export type Mutation = {
   createRoom: Room;
   /** Create a new room group. Requires `role.manage`. */
   createRoomGroup: RoomGroup;
+  /** Create an external sidebar link inside a room group. Requires `room.manage` in that group. */
+  createSidebarLink: SidebarLink;
   /**
    * Delete an attachment from a message. Only the message author can delete their attachments.
    * Removes the attachment from the message.
@@ -1143,14 +1166,17 @@ export type Mutation = {
    */
   deleteRole: Scalars['Boolean']['output'];
   /**
-   * Delete a room group. Rejected if the room group still contains rooms —
-   * operators must move all rooms out first. Requires `role.manage`.
+   * Delete a room group. Rejected if the room group still contains rooms or
+   * sidebar links — operators must move or delete all items first. Requires
+   * `role.manage`.
    */
   deleteRoomGroup: Scalars['Boolean']['output'];
   /** Delete the server banner. Requires server.manage permission. */
   deleteServerBanner: Server;
   /** Delete the server logo. Requires server.manage permission. */
   deleteServerLogo: Server;
+  /** Delete an external sidebar link. Requires `room.manage` in the link's group. */
+  deleteSidebarLink: Scalars['Boolean']['output'];
   /** Deny a permission on a room group (role or user subject). Requires `role.manage`. */
   denyGroupPermission: Scalars['Boolean']['output'];
   /**
@@ -1243,6 +1269,8 @@ export type Mutation = {
    * overrides on the room itself are preserved.
    */
   moveRoomToGroup: Room;
+  /** Move an external sidebar link into another room group. Requires `room.manage` in both source and target groups. */
+  moveSidebarLinkToGroup: SidebarLink;
   /** Post a message to a room. Automatically marks the room as read since the user is viewing it. */
   postMessage: Event;
   /**
@@ -1269,6 +1297,12 @@ export type Mutation = {
    * every current room in that group exactly once. Requires `role.manage`.
    */
   reorderRoomsInGroup: RoomGroup;
+  /**
+   * Reorder the mixed room/link sidebar items inside a group. The provided list
+   * must contain every current room and sidebar link in that group exactly once.
+   * Requires `room.manage` in that group.
+   */
+  reorderSidebarItemsInGroup: RoomGroup;
   /**
    * Request account deletion by generating a confirmation token.
    * The token is valid for 15 minutes and must be passed to deleteMyAccount.
@@ -1373,6 +1407,8 @@ export type Mutation = {
    * caller holds `role.assign`. Returns the updated settings.
    */
   updateSettings: UserSettings;
+  /** Update an external sidebar link. Requires `room.manage` in the link's group. */
+  updateSidebarLink: SidebarLink;
   /**
    * Upload an avatar for a user. Image will be resized to 256x256 max
    * and converted to WebP. Authorization: caller is self, OR caller
@@ -1453,6 +1489,12 @@ export type MutationCreateRoomGroupArgs = {
 
 
 /** Root mutation type for modifying data. */
+export type MutationCreateSidebarLinkArgs = {
+  input: CreateSidebarLinkInput;
+};
+
+
+/** Root mutation type for modifying data. */
 export type MutationDeleteAttachmentArgs = {
   input: DeleteAttachmentInput;
 };
@@ -1491,6 +1533,12 @@ export type MutationDeleteRoleArgs = {
 /** Root mutation type for modifying data. */
 export type MutationDeleteRoomGroupArgs = {
   input: DeleteRoomGroupInput;
+};
+
+
+/** Root mutation type for modifying data. */
+export type MutationDeleteSidebarLinkArgs = {
+  input: DeleteSidebarLinkInput;
 };
 
 
@@ -1603,6 +1651,12 @@ export type MutationMoveRoomToGroupArgs = {
 
 
 /** Root mutation type for modifying data. */
+export type MutationMoveSidebarLinkToGroupArgs = {
+  input: MoveSidebarLinkToGroupInput;
+};
+
+
+/** Root mutation type for modifying data. */
 export type MutationPostMessageArgs = {
   input: PostMessageInput;
 };
@@ -1629,6 +1683,12 @@ export type MutationReorderRoomGroupsArgs = {
 /** Root mutation type for modifying data. */
 export type MutationReorderRoomsInGroupArgs = {
   input: ReorderRoomsInGroupInput;
+};
+
+
+/** Root mutation type for modifying data. */
+export type MutationReorderSidebarItemsInGroupArgs = {
+  input: ReorderSidebarItemsInGroupInput;
 };
 
 
@@ -1743,6 +1803,12 @@ export type MutationUpdateServerConfigArgs = {
 /** Root mutation type for modifying data. */
 export type MutationUpdateSettingsArgs = {
   input: UpdateSettingsInput;
+};
+
+
+/** Root mutation type for modifying data. */
+export type MutationUpdateSidebarLinkArgs = {
+  input: UpdateSidebarLinkInput;
 };
 
 
@@ -2158,6 +2224,8 @@ export type ProjectionState = {
   name: Scalars['String']['output'];
   /** Whether the projector run loop has started. */
   started: Scalars['Boolean']['output'];
+  /** Seconds from projector start until initial replay completed. Null while initial replay is still in progress. */
+  startupDurationSeconds?: Maybe<Scalars['Float']['output']>;
   /** Highest sequence in the event log, regardless of whether this projection consumes it. */
   streamLastSequence: Scalars['String']['output'];
   /** Diagnostic storage subject filters consumed by this projection. */
@@ -2390,6 +2458,13 @@ export type ReorderRoomsInGroupInput = {
   orderedRoomIds: Array<Scalars['ID']['input']>;
 };
 
+export type ReorderSidebarItemsInGroupInput = {
+  /** The group whose mixed sidebar item order is being rewritten. */
+  groupId: Scalars['ID']['input'];
+  /** Mixed room/link entries in the desired display order, first to last. */
+  items: Array<SidebarGroupEntryInput>;
+};
+
 /**
  * Notification for replies to your messages.
  * Created when someone replies to one of your messages.
@@ -2511,6 +2586,8 @@ export type Room = {
   __typename?: 'Room';
   /** Whether this room is archived. Archived rooms are hidden from sidebar and Browse Rooms. */
   archived: Scalars['Boolean']['output'];
+  /** List current file attachments posted in this room, including files on thread replies. */
+  attachments: RoomAttachmentsConnection;
   /** Permissions configurable at room scope. */
   availableRoomPermissions: Array<Scalars['String']['output']>;
   /** Participants currently in this room's voice call. Empty list if no call is active or LiveKit is not configured. */
@@ -2556,6 +2633,8 @@ export type Room = {
   roomPermissionOverrides: Array<RoleRoomPermissions>;
   /** Kind of room — distinguishes regular channels from direct-message conversations. */
   type: RoomType;
+  /** Whether the current user can attach files to messages in this room. */
+  viewerCanAttach: Scalars['Boolean']['output'];
   /** Whether the current user can ban members from this room. */
   viewerCanBanRoomMembers: Scalars['Boolean']['output'];
   /** Whether the current user can echo thread replies to the main channel. */
@@ -2584,13 +2663,27 @@ export type Room = {
   viewerCanPostMessage: Scalars['Boolean']['output'];
   /** Whether the current user can add/remove reactions in this room. */
   viewerCanReact: Scalars['Boolean']['output'];
+  /** Whether the current user is an explicit member of this room. */
+  viewerIsMember: Scalars['Boolean']['output'];
   /** The current user's notification preference for this room. */
   viewerNotificationPreference?: Maybe<ViewerNotificationPreference>;
+  /**
+   * Pending notifications for the current user in this room, newest first.
+   * Returns an empty connection if the user is unauthenticated or not a member.
+   */
+  viewerNotifications: NotificationsConnection;
   /**
    * Get a LiveKit join token for joining the voice call in this room.
    * Returns null if LiveKit is not configured on this server.
    */
   voiceCallToken?: Maybe<VoiceCallToken>;
+};
+
+
+/** A Room is a chat channel on the server where users can exchange messages. */
+export type RoomAttachmentsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -2619,6 +2712,14 @@ export type RoomEventsAroundArgs = {
 export type RoomMembersArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   offset?: InputMaybe<Scalars['Int']['input']>;
+  search?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+/** A Room is a chat channel on the server where users can exchange messages. */
+export type RoomViewerNotificationsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
 };
 
 /**
@@ -2629,6 +2730,30 @@ export type RoomArchivedEvent = {
   __typename?: 'RoomArchivedEvent';
   /** The ID of the archived room. */
   roomId: Scalars['ID']['output'];
+};
+
+/** A file attachment and the message where it was posted. */
+export type RoomAttachmentItem = {
+  __typename?: 'RoomAttachmentItem';
+  /** The file attachment. */
+  attachment: Attachment;
+  /** When the owning message was posted. */
+  createdAt: Scalars['Time']['output'];
+  /** The message event that owns the attachment. */
+  messageEventId: Scalars['ID']['output'];
+  /** The thread root when the attachment was posted in a thread reply. */
+  threadRootEventId?: Maybe<Scalars['ID']['output']>;
+};
+
+/** Paginated list of current room attachments. */
+export type RoomAttachmentsConnection = {
+  __typename?: 'RoomAttachmentsConnection';
+  /** Whether there are more attachments beyond this page. */
+  hasMore: Scalars['Boolean']['output'];
+  /** The attachment rows for this page. */
+  items: Array<RoomAttachmentItem>;
+  /** Total count of attachments before pagination. */
+  totalCount: Scalars['Int']['output'];
 };
 
 /** An active room ban shown in server-admin moderation tools. */
@@ -2725,11 +2850,30 @@ export type RoomGroup = {
   description: Scalars['String']['output'];
   /** Unique ID for this room group. */
   id: Scalars['ID']['output'];
+  /** Ordered mixed list of rooms and external links in this room group. */
+  items: Array<RoomGroupItem>;
   /** Display name for this room group (e.g., 'General', 'Projects'). */
   name: Scalars['String']['output'];
   /** Ordered list of channel rooms in this room group. */
   rooms: Array<Room>;
 };
+
+export type RoomGroupItem = {
+  __typename?: 'RoomGroupItem';
+  /** Room ID for ROOM, sidebar link ID for SIDEBAR_LINK. */
+  id: Scalars['ID']['output'];
+  /** Sidebar link payload when type is SIDEBAR_LINK. */
+  link?: Maybe<SidebarLink>;
+  /** Room payload when type is ROOM. */
+  room?: Maybe<Room>;
+  /** The item kind. */
+  type: RoomGroupItemType;
+};
+
+export enum RoomGroupItemType {
+  Room = 'ROOM',
+  SidebarLink = 'SIDEBAR_LINK'
+}
 
 /**
  * Per-room-group role permission inspector. Returns the explicit grants and
@@ -2951,9 +3095,9 @@ export type Server = {
    *
    * When `type` is null or `CHANNEL`, the result includes regular channels. When
    * `type` is null or `DM`, the caller's direct-message conversations are merged
-   * in through membership; the unified sidebar uses the null default to render
-   * channels and DMs together. Pass `type: CHANNEL` for channels-only consumers
-   * (e.g. the admin room-management UI); pass `type: DM` for DMs-only consumers.
+   * in through membership. Pass `type: CHANNEL` for channels-only consumers
+   * (e.g. room-group sidebars and the admin room-management UI); pass `type: DM`
+   * for DMs-only consumers.
    */
   rooms: Array<Room>;
   /**
@@ -2995,6 +3139,8 @@ export type Server = {
   viewerHasUnreadRooms: Scalars['Boolean']['output'];
   /** The current user's server-level notification preference. */
   viewerNotificationPreference?: Maybe<ViewerNotificationPreference>;
+  /** Pending notifications for the current user on this server, newest first. */
+  viewerNotifications: NotificationsConnection;
   /** Get the current user's permissions on this server. */
   viewerPermissions: Array<Scalars['String']['output']>;
 };
@@ -3071,6 +3217,16 @@ export type ServerUserEffectivePermissionsArgs = {
  */
 export type ServerViewerCanManageUserArgs = {
   userId: Scalars['ID']['input'];
+};
+
+
+/**
+ * Information about this Chatto server.
+ * Some fields don't require authentication and are available on the login page.
+ */
+export type ServerViewerNotificationsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
 };
 
 /**
@@ -3173,6 +3329,23 @@ export type SetRoomNotificationLevelInput = {
 export type SetServerNotificationLevelInput = {
   /** The notification level to set. */
   level: NotificationLevel;
+};
+
+export type SidebarGroupEntryInput = {
+  /** Room ID for ROOM, sidebar link ID for SIDEBAR_LINK. */
+  id: Scalars['ID']['input'];
+  /** The item kind. */
+  type: RoomGroupItemType;
+};
+
+export type SidebarLink = {
+  __typename?: 'SidebarLink';
+  /** Unique ID for this sidebar link. */
+  id: Scalars['ID']['output'];
+  /** Display label shown in the server sidebar. */
+  label: Scalars['String']['output'];
+  /** Absolute http(s) URL opened outside Chatto. */
+  url: Scalars['String']['output'];
 };
 
 /** Input for starting a DM conversation. */
@@ -3444,6 +3617,15 @@ export type UpdateSettingsInput = {
   userId: Scalars['ID']['input'];
 };
 
+export type UpdateSidebarLinkInput = {
+  /** Display label for the link. */
+  label: Scalars['String']['input'];
+  /** The sidebar link to update. */
+  linkId: Scalars['ID']['input'];
+  /** Absolute http(s) URL. */
+  url: Scalars['String']['input'];
+};
+
 /** Input for uploading a user avatar. */
 export type UploadAvatarInput = {
   /** The avatar image file to upload. */
@@ -3471,6 +3653,8 @@ export type User = {
   avatarUrl?: Maybe<Scalars['String']['output']>;
   /** When the user account was created. Null for users created before this field was added. */
   createdAt?: Maybe<Scalars['Time']['output']>;
+  /** Whether this user is a public tombstone for a deleted or unresolvable account. */
+  deleted: Scalars['Boolean']['output'];
   /** The user's display name. */
   displayName: Scalars['String']['output'];
   /** Whether this user has at least one verified email address. */

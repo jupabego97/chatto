@@ -40,10 +40,14 @@ export class AutocompleteState {
     private readonly getRoles: () => MentionRole[] = () => []
   ) {}
 
-  resetForRoom(): void {
+  reset(): void {
     this.emoji = null;
     this.mention = null;
     this.tabCompletion = null;
+  }
+
+  resetForRoom(): void {
+    this.reset();
   }
 
   update(): void {
@@ -157,7 +161,7 @@ export class AutocompleteState {
     }
 
     const partial = this.getMentionPartialAtCursor();
-    if (partial && this.findMatchingMentions(partial.partial).length > 0) {
+    if (partial) {
       this.mention = {
         query: partial.partial,
         triggerStart: partial.start
@@ -171,6 +175,8 @@ export class AutocompleteState {
     const scored: { handle: string; score: number; priority: number }[] = [];
 
     for (const m of this.getMembers()) {
+      if (m.deleted || !m.login) continue;
+
       const loginScore = fuzzyMatch(partial, m.login);
       const displayScore = fuzzyMatch(partial, m.displayName);
       const bestScore = Math.max(loginScore ?? -1, displayScore ?? -1);
