@@ -9119,9 +9119,9 @@ export class ReactionSummaryView extends Message<ReactionSummaryView> {
   hasReacted = false;
 
   /**
-   * @generated from field: repeated chatto.core.v1.User users = 4;
+   * @generated from field: repeated chatto.api.v1.UserAvatarView users = 4;
    */
-  users: User[] = [];
+  users: UserAvatarView[] = [];
 
   constructor(data?: PartialMessage<ReactionSummaryView>) {
     super();
@@ -9134,7 +9134,7 @@ export class ReactionSummaryView extends Message<ReactionSummaryView> {
     { no: 1, name: "emoji", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "count", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
     { no: 3, name: "has_reacted", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
-    { no: 4, name: "users", kind: "message", T: User, repeated: true },
+    { no: 4, name: "users", kind: "message", T: UserAvatarView, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ReactionSummaryView {
@@ -9221,9 +9221,9 @@ export class MessagePostedView extends Message<MessagePostedView> {
   lastReplyAt?: Timestamp;
 
   /**
-   * @generated from field: repeated chatto.core.v1.User thread_participants = 13;
+   * @generated from field: repeated chatto.api.v1.UserAvatarView thread_participants = 13;
    */
-  threadParticipants: User[] = [];
+  threadParticipants: UserAvatarView[] = [];
 
   /**
    * @generated from field: optional bool viewer_is_following_thread = 14;
@@ -9255,7 +9255,7 @@ export class MessagePostedView extends Message<MessagePostedView> {
     { no: 10, name: "channel_echo_event_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 11, name: "reply_count", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
     { no: 12, name: "last_reply_at", kind: "message", T: Timestamp, opt: true },
-    { no: 13, name: "thread_participants", kind: "message", T: User, repeated: true },
+    { no: 13, name: "thread_participants", kind: "message", T: UserAvatarView, repeated: true },
     { no: 14, name: "viewer_is_following_thread", kind: "scalar", T: 8 /* ScalarType.BOOL */, opt: true },
     { no: 15, name: "reactions", kind: "message", T: ReactionSummaryView, repeated: true },
   ]);
@@ -9979,9 +9979,9 @@ export class RoomEventView extends Message<RoomEventView> {
   actorId = "";
 
   /**
-   * @generated from field: chatto.core.v1.User actor = 4;
+   * @generated from field: chatto.api.v1.UserAvatarView actor = 4;
    */
-  actor?: User;
+  actor?: UserAvatarView;
 
   /**
    * @generated from field: uint64 sequence = 5;
@@ -10009,7 +10009,7 @@ export class RoomEventView extends Message<RoomEventView> {
     { no: 1, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "created_at", kind: "message", T: Timestamp },
     { no: 3, name: "actor_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 4, name: "actor", kind: "message", T: User },
+    { no: 4, name: "actor", kind: "message", T: UserAvatarView },
     { no: 5, name: "sequence", kind: "scalar", T: 4 /* ScalarType.UINT64 */ },
     { no: 6, name: "raw_event", kind: "message", T: Event },
     { no: 7, name: "event", kind: "message", T: RoomEventPayload },
@@ -10772,9 +10772,9 @@ export class FollowedThreadView extends Message<FollowedThreadView> {
   hasUnread = false;
 
   /**
-   * @generated from field: repeated chatto.core.v1.User thread_participants = 8;
+   * @generated from field: repeated chatto.api.v1.UserAvatarView thread_participants = 8;
    */
-  threadParticipants: User[] = [];
+  threadParticipants: UserAvatarView[] = [];
 
   constructor(data?: PartialMessage<FollowedThreadView>) {
     super();
@@ -10791,7 +10791,7 @@ export class FollowedThreadView extends Message<FollowedThreadView> {
     { no: 5, name: "reply_count", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
     { no: 6, name: "last_reply_at", kind: "message", T: Timestamp },
     { no: 7, name: "has_unread", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
-    { no: 8, name: "thread_participants", kind: "message", T: User, repeated: true },
+    { no: 8, name: "thread_participants", kind: "message", T: UserAvatarView, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): FollowedThreadView {

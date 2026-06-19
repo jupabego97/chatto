@@ -7,6 +7,7 @@ import { StreamEvent } from '$lib/pb/chatto/wire/v1/protocol_pb';
 import { Event as DurableEvent } from '$lib/pb/chatto/core/v1/event_pb';
 import {
   CallEventView,
+  CurrentUserPresenceStatus,
   GetRoomEventResponse,
   GetRoomTimelineAfterResponse,
   GetRoomTimelineAroundResponse,
@@ -20,7 +21,8 @@ import {
   RoomEventPayload,
   RoomEventsPage,
   RoomEventView,
-  RoomScopedEventView
+  RoomScopedEventView,
+  UserAvatarView
 } from '$lib/pb/chatto/api/v1/chat_pb';
 import { User } from '$lib/pb/chatto/core/v1/models_pb';
 import {
@@ -99,7 +101,9 @@ class FakeWireClient {
     );
     if (result.error) throw result.error;
     return new GetRoomTimelineAroundResponse({
-      page: roomEventsPageFromConnection(asRecord(asRecord(result.data)?.room)?.eventsAround ?? null)
+      page: roomEventsPageFromConnection(
+        asRecord(asRecord(result.data)?.room)?.eventsAround ?? null
+      )
     });
   }
 
@@ -157,7 +161,9 @@ class FakeWireClient {
       { requestPolicy: 'network-only' }
     );
     if (result.error) throw result.error;
-    const response = threadEventsResponseFromRoot(asRecord(asRecord(result.data)?.room)?.event ?? null);
+    const response = threadEventsResponseFromRoot(
+      asRecord(asRecord(result.data)?.room)?.event ?? null
+    );
     return new GetThreadEventsAroundResponse({
       rootEvent: response.rootEvent,
       replies: response.replies
@@ -279,7 +285,9 @@ function eventPayloadToWire(payload: Record<string, unknown>): RoomEventPayload[
           channelEchoEventId: optionalString(payload.channelEchoEventId),
           replyCount: numberValue(payload.replyCount),
           lastReplyAt: timestampFrom(payload.lastReplyAt),
-          threadParticipants: arrayValue(payload.threadParticipants).map(userFragmentToWire).filter(isUser),
+          threadParticipants: arrayValue(payload.threadParticipants)
+            .map(userFragmentToWire)
+            .filter(isUser),
           viewerIsFollowingThread: booleanOrUndefined(payload.viewerIsFollowingThread),
           reactions: arrayValue(payload.reactions).map(reactionToWire)
         })
@@ -314,13 +322,25 @@ function eventPayloadToWire(payload: Record<string, unknown>): RoomEventPayload[
     case 'CallEndedEvent':
       return { case: 'callEnded', value: callEventToWire(payload) };
     case 'RoomUpdatedEvent':
-      return { case: 'roomUpdated', value: new RoomScopedEventView({ roomId: stringValue(payload.roomId) }) };
+      return {
+        case: 'roomUpdated',
+        value: new RoomScopedEventView({ roomId: stringValue(payload.roomId) })
+      };
     case 'RoomDeletedEvent':
-      return { case: 'roomDeleted', value: new RoomScopedEventView({ roomId: stringValue(payload.roomId) }) };
+      return {
+        case: 'roomDeleted',
+        value: new RoomScopedEventView({ roomId: stringValue(payload.roomId) })
+      };
     case 'RoomArchivedEvent':
-      return { case: 'roomArchived', value: new RoomScopedEventView({ roomId: stringValue(payload.roomId) }) };
+      return {
+        case: 'roomArchived',
+        value: new RoomScopedEventView({ roomId: stringValue(payload.roomId) })
+      };
     case 'RoomUnarchivedEvent':
-      return { case: 'roomUnarchived', value: new RoomScopedEventView({ roomId: stringValue(payload.roomId) }) };
+      return {
+        case: 'roomUnarchived',
+        value: new RoomScopedEventView({ roomId: stringValue(payload.roomId) })
+      };
     default:
       return { case: undefined };
   }
@@ -343,13 +363,17 @@ function callEventToWire(value: Record<string, unknown>): CallEventView {
   });
 }
 
-function userFragmentToWire(value: unknown): User | undefined {
+function userFragmentToWire(value: unknown): UserAvatarView | undefined {
   const user = asRecord(value);
   if (!user) return undefined;
-  return new User({
-    id: stringValue(user.id),
-    login: stringValue(user.login),
-    displayName: stringValue(user.displayName)
+  return new UserAvatarView({
+    user: new User({
+      id: stringValue(user.id),
+      login: stringValue(user.login),
+      displayName: stringValue(user.displayName)
+    }),
+    avatarUrl: stringValue(user.avatarUrl),
+    presenceStatus: presenceStatusToWire(user.presenceStatus)
   });
 }
 
@@ -357,8 +381,22 @@ function isWireEvent(value: RoomEventView | undefined): value is RoomEventView {
   return value !== undefined;
 }
 
-function isUser(value: User | undefined): value is User {
+function isUser(value: UserAvatarView | undefined): value is UserAvatarView {
   return value !== undefined;
+}
+
+function presenceStatusToWire(value: unknown): CurrentUserPresenceStatus {
+  switch (value) {
+    case 'ONLINE':
+      return CurrentUserPresenceStatus.ONLINE;
+    case 'AWAY':
+      return CurrentUserPresenceStatus.AWAY;
+    case 'DO_NOT_DISTURB':
+      return CurrentUserPresenceStatus.DO_NOT_DISTURB;
+    case 'OFFLINE':
+    default:
+      return CurrentUserPresenceStatus.OFFLINE;
+  }
 }
 
 async function settle() {

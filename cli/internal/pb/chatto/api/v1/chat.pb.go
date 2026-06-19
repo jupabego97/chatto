@@ -11126,7 +11126,7 @@ type ReactionSummaryView struct {
 	Emoji         string                 `protobuf:"bytes,1,opt,name=emoji,proto3" json:"emoji,omitempty"`
 	Count         int32                  `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
 	HasReacted    bool                   `protobuf:"varint,3,opt,name=has_reacted,json=hasReacted,proto3" json:"has_reacted,omitempty"`
-	Users         []*v1.User             `protobuf:"bytes,4,rep,name=users,proto3" json:"users,omitempty"`
+	Users         []*UserAvatarView      `protobuf:"bytes,4,rep,name=users,proto3" json:"users,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -11182,7 +11182,7 @@ func (x *ReactionSummaryView) GetHasReacted() bool {
 	return false
 }
 
-func (x *ReactionSummaryView) GetUsers() []*v1.User {
+func (x *ReactionSummaryView) GetUsers() []*UserAvatarView {
 	if x != nil {
 		return x.Users
 	}
@@ -11204,7 +11204,7 @@ type MessagePostedView struct {
 	ChannelEchoEventId        *string                `protobuf:"bytes,10,opt,name=channel_echo_event_id,json=channelEchoEventId,proto3,oneof" json:"channel_echo_event_id,omitempty"`
 	ReplyCount                int32                  `protobuf:"varint,11,opt,name=reply_count,json=replyCount,proto3" json:"reply_count,omitempty"`
 	LastReplyAt               *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=last_reply_at,json=lastReplyAt,proto3,oneof" json:"last_reply_at,omitempty"`
-	ThreadParticipants        []*v1.User             `protobuf:"bytes,13,rep,name=thread_participants,json=threadParticipants,proto3" json:"thread_participants,omitempty"`
+	ThreadParticipants        []*UserAvatarView      `protobuf:"bytes,13,rep,name=thread_participants,json=threadParticipants,proto3" json:"thread_participants,omitempty"`
 	ViewerIsFollowingThread   *bool                  `protobuf:"varint,14,opt,name=viewer_is_following_thread,json=viewerIsFollowingThread,proto3,oneof" json:"viewer_is_following_thread,omitempty"`
 	Reactions                 []*ReactionSummaryView `protobuf:"bytes,15,rep,name=reactions,proto3" json:"reactions,omitempty"`
 	unknownFields             protoimpl.UnknownFields
@@ -11325,7 +11325,7 @@ func (x *MessagePostedView) GetLastReplyAt() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *MessagePostedView) GetThreadParticipants() []*v1.User {
+func (x *MessagePostedView) GetThreadParticipants() []*UserAvatarView {
 	if x != nil {
 		return x.ThreadParticipants
 	}
@@ -12364,7 +12364,7 @@ type RoomEventView struct {
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	ActorId       string                 `protobuf:"bytes,3,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
-	Actor         *v1.User               `protobuf:"bytes,4,opt,name=actor,proto3" json:"actor,omitempty"`
+	Actor         *UserAvatarView        `protobuf:"bytes,4,opt,name=actor,proto3" json:"actor,omitempty"`
 	Sequence      uint64                 `protobuf:"varint,5,opt,name=sequence,proto3" json:"sequence,omitempty"`
 	RawEvent      *v1.Event              `protobuf:"bytes,6,opt,name=raw_event,json=rawEvent,proto3" json:"raw_event,omitempty"`
 	Event         *RoomEventPayload      `protobuf:"bytes,7,opt,name=event,proto3" json:"event,omitempty"`
@@ -12423,7 +12423,7 @@ func (x *RoomEventView) GetActorId() string {
 	return ""
 }
 
-func (x *RoomEventView) GetActor() *v1.User {
+func (x *RoomEventView) GetActor() *UserAvatarView {
 	if x != nil {
 		return x.Actor
 	}
@@ -13302,7 +13302,7 @@ type FollowedThreadView struct {
 	ReplyCount         int32                  `protobuf:"varint,5,opt,name=reply_count,json=replyCount,proto3" json:"reply_count,omitempty"`
 	LastReplyAt        *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_reply_at,json=lastReplyAt,proto3" json:"last_reply_at,omitempty"`
 	HasUnread          bool                   `protobuf:"varint,7,opt,name=has_unread,json=hasUnread,proto3" json:"has_unread,omitempty"`
-	ThreadParticipants []*v1.User             `protobuf:"bytes,8,rep,name=thread_participants,json=threadParticipants,proto3" json:"thread_participants,omitempty"`
+	ThreadParticipants []*UserAvatarView      `protobuf:"bytes,8,rep,name=thread_participants,json=threadParticipants,proto3" json:"thread_participants,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -13386,7 +13386,7 @@ func (x *FollowedThreadView) GetHasUnread() bool {
 	return false
 }
 
-func (x *FollowedThreadView) GetThreadParticipants() []*v1.User {
+func (x *FollowedThreadView) GetThreadParticipants() []*UserAvatarView {
 	if x != nil {
 		return x.ThreadParticipants
 	}
@@ -15626,13 +15626,13 @@ const file_chatto_api_v1_chat_proto_rawDesc = "" +
 	"\x15GetLinkPreviewRequest\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\"R\n" +
 	"\x16GetLinkPreviewResponse\x128\n" +
-	"\apreview\x18\x01 \x01(\v2\x1e.chatto.api.v1.LinkPreviewViewR\apreview\"\x8e\x01\n" +
+	"\apreview\x18\x01 \x01(\v2\x1e.chatto.api.v1.LinkPreviewViewR\apreview\"\x97\x01\n" +
 	"\x13ReactionSummaryView\x12\x14\n" +
 	"\x05emoji\x18\x01 \x01(\tR\x05emoji\x12\x14\n" +
 	"\x05count\x18\x02 \x01(\x05R\x05count\x12\x1f\n" +
 	"\vhas_reacted\x18\x03 \x01(\bR\n" +
-	"hasReacted\x12*\n" +
-	"\x05users\x18\x04 \x03(\v2\x14.chatto.core.v1.UserR\x05users\"\x87\b\n" +
+	"hasReacted\x123\n" +
+	"\x05users\x18\x04 \x03(\v2\x1d.chatto.api.v1.UserAvatarViewR\x05users\"\x90\b\n" +
 	"\x11MessagePostedView\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12\x17\n" +
 	"\x04body\x18\x02 \x01(\tH\x00R\x04body\x88\x01\x01\x12?\n" +
@@ -15648,8 +15648,8 @@ const file_chatto_api_v1_chat_proto_rawDesc = "" +
 	" \x01(\tH\x06R\x12channelEchoEventId\x88\x01\x01\x12\x1f\n" +
 	"\vreply_count\x18\v \x01(\x05R\n" +
 	"replyCount\x12C\n" +
-	"\rlast_reply_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampH\aR\vlastReplyAt\x88\x01\x01\x12E\n" +
-	"\x13thread_participants\x18\r \x03(\v2\x14.chatto.core.v1.UserR\x12threadParticipants\x12@\n" +
+	"\rlast_reply_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampH\aR\vlastReplyAt\x88\x01\x01\x12N\n" +
+	"\x13thread_participants\x18\r \x03(\v2\x1d.chatto.api.v1.UserAvatarViewR\x12threadParticipants\x12@\n" +
 	"\x1aviewer_is_following_thread\x18\x0e \x01(\bH\bR\x17viewerIsFollowingThread\x88\x01\x01\x12@\n" +
 	"\treactions\x18\x0f \x03(\v2\".chatto.api.v1.ReactionSummaryViewR\treactionsB\a\n" +
 	"\x05_bodyB\r\n" +
@@ -15732,13 +15732,13 @@ const file_chatto_api_v1_chat_proto_rawDesc = "" +
 	"\x0ethread_created\x18\x16 \x01(\v2 .chatto.api.v1.ThreadCreatedViewH\x00R\rthreadCreated\x12V\n" +
 	"\x12room_member_banned\x18\x17 \x01(\v2&.chatto.api.v1.RoomModerationEventViewH\x00R\x10roomMemberBanned\x12Z\n" +
 	"\x14room_member_unbanned\x18\x18 \x01(\v2&.chatto.api.v1.RoomModerationEventViewH\x00R\x12roomMemberUnbannedB\t\n" +
-	"\apayload\"\xa8\x02\n" +
+	"\apayload\"\xb1\x02\n" +
 	"\rRoomEventView\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x129\n" +
 	"\n" +
 	"created_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x19\n" +
-	"\bactor_id\x18\x03 \x01(\tR\aactorId\x12*\n" +
-	"\x05actor\x18\x04 \x01(\v2\x14.chatto.core.v1.UserR\x05actor\x12\x1a\n" +
+	"\bactor_id\x18\x03 \x01(\tR\aactorId\x123\n" +
+	"\x05actor\x18\x04 \x01(\v2\x1d.chatto.api.v1.UserAvatarViewR\x05actor\x12\x1a\n" +
 	"\bsequence\x18\x05 \x01(\x04R\bsequence\x122\n" +
 	"\traw_event\x18\x06 \x01(\v2\x15.chatto.core.v1.EventR\brawEvent\x125\n" +
 	"\x05event\x18\a \x01(\v2\x1f.chatto.api.v1.RoomEventPayloadR\x05event\"\xed\x01\n" +
@@ -15799,7 +15799,7 @@ const file_chatto_api_v1_chat_proto_rawDesc = "" +
 	"\x1dGetThreadEventsAroundResponse\x12;\n" +
 	"\n" +
 	"root_event\x18\x01 \x01(\v2\x1c.chatto.api.v1.RoomEventViewR\trootEvent\x127\n" +
-	"\areplies\x18\x02 \x01(\v2\x1d.chatto.api.v1.RoomEventsPageR\areplies\"\x90\x03\n" +
+	"\areplies\x18\x02 \x01(\v2\x1d.chatto.api.v1.RoomEventsPageR\areplies\"\x99\x03\n" +
 	"\x12FollowedThreadView\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\x12(\n" +
 	"\x04room\x18\x02 \x01(\v2\x14.chatto.core.v1.RoomR\x04room\x12/\n" +
@@ -15809,8 +15809,8 @@ const file_chatto_api_v1_chat_proto_rawDesc = "" +
 	"replyCount\x12>\n" +
 	"\rlast_reply_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\vlastReplyAt\x12\x1d\n" +
 	"\n" +
-	"has_unread\x18\a \x01(\bR\thasUnread\x12E\n" +
-	"\x13thread_participants\x18\b \x03(\v2\x14.chatto.core.v1.UserR\x12threadParticipants\"L\n" +
+	"has_unread\x18\a \x01(\bR\thasUnread\x12N\n" +
+	"\x13thread_participants\x18\b \x03(\v2\x1d.chatto.api.v1.UserAvatarViewR\x12threadParticipants\"L\n" +
 	"\x1cListMyFollowedThreadsRequest\x12\x14\n" +
 	"\x05limit\x18\x01 \x01(\x05R\x05limit\x12\x16\n" +
 	"\x06offset\x18\x02 \x01(\x05R\x06offset\"\x98\x01\n" +
@@ -16441,12 +16441,12 @@ var file_chatto_api_v1_chat_proto_depIdxs = []int32{
 	254, // 127: chatto.api.v1.UserAvatarAssetResponse.user:type_name -> chatto.core.v1.User
 	112, // 128: chatto.api.v1.ServerBrandingAssetResponse.profile:type_name -> chatto.api.v1.ServerProfileView
 	193, // 129: chatto.api.v1.GetLinkPreviewResponse.preview:type_name -> chatto.api.v1.LinkPreviewView
-	254, // 130: chatto.api.v1.ReactionSummaryView.users:type_name -> chatto.core.v1.User
+	164, // 130: chatto.api.v1.ReactionSummaryView.users:type_name -> chatto.api.v1.UserAvatarView
 	186, // 131: chatto.api.v1.MessagePostedView.attachments:type_name -> chatto.api.v1.AttachmentView
 	193, // 132: chatto.api.v1.MessagePostedView.link_preview:type_name -> chatto.api.v1.LinkPreviewView
 	256, // 133: chatto.api.v1.MessagePostedView.updated_at:type_name -> google.protobuf.Timestamp
 	256, // 134: chatto.api.v1.MessagePostedView.last_reply_at:type_name -> google.protobuf.Timestamp
-	254, // 135: chatto.api.v1.MessagePostedView.thread_participants:type_name -> chatto.core.v1.User
+	164, // 135: chatto.api.v1.MessagePostedView.thread_participants:type_name -> chatto.api.v1.UserAvatarView
 	197, // 136: chatto.api.v1.MessagePostedView.reactions:type_name -> chatto.api.v1.ReactionSummaryView
 	186, // 137: chatto.api.v1.MessageEditedView.attachments:type_name -> chatto.api.v1.AttachmentView
 	193, // 138: chatto.api.v1.MessageEditedView.link_preview:type_name -> chatto.api.v1.LinkPreviewView
@@ -16477,7 +16477,7 @@ var file_chatto_api_v1_chat_proto_depIdxs = []int32{
 	208, // 163: chatto.api.v1.RoomEventPayload.room_member_banned:type_name -> chatto.api.v1.RoomModerationEventView
 	208, // 164: chatto.api.v1.RoomEventPayload.room_member_unbanned:type_name -> chatto.api.v1.RoomModerationEventView
 	256, // 165: chatto.api.v1.RoomEventView.created_at:type_name -> google.protobuf.Timestamp
-	254, // 166: chatto.api.v1.RoomEventView.actor:type_name -> chatto.core.v1.User
+	164, // 166: chatto.api.v1.RoomEventView.actor:type_name -> chatto.api.v1.UserAvatarView
 	263, // 167: chatto.api.v1.RoomEventView.raw_event:type_name -> chatto.core.v1.Event
 	209, // 168: chatto.api.v1.RoomEventView.event:type_name -> chatto.api.v1.RoomEventPayload
 	210, // 169: chatto.api.v1.RoomEventsPage.events:type_name -> chatto.api.v1.RoomEventView
@@ -16494,7 +16494,7 @@ var file_chatto_api_v1_chat_proto_depIdxs = []int32{
 	260, // 180: chatto.api.v1.FollowedThreadView.room:type_name -> chatto.core.v1.Room
 	210, // 181: chatto.api.v1.FollowedThreadView.root_message:type_name -> chatto.api.v1.RoomEventView
 	256, // 182: chatto.api.v1.FollowedThreadView.last_reply_at:type_name -> google.protobuf.Timestamp
-	254, // 183: chatto.api.v1.FollowedThreadView.thread_participants:type_name -> chatto.core.v1.User
+	164, // 183: chatto.api.v1.FollowedThreadView.thread_participants:type_name -> chatto.api.v1.UserAvatarView
 	225, // 184: chatto.api.v1.ListMyFollowedThreadsResponse.threads:type_name -> chatto.api.v1.FollowedThreadView
 	194, // 185: chatto.api.v1.PostMessageRequest.link_preview:type_name -> chatto.api.v1.LinkPreviewInput
 	263, // 186: chatto.api.v1.PostMessageResponse.event:type_name -> chatto.core.v1.Event

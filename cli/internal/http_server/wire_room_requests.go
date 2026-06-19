@@ -552,7 +552,7 @@ func (c *wireConn) handleWireListMyFollowedThreads(ctx context.Context, userID, 
 			if i >= 3 {
 				break
 			}
-			if user := c.optionalUser(ctx, participantID); user != nil {
+			if user := c.optionalUserAvatarView(ctx, participantID); user != nil {
 				view.ThreadParticipants = append(view.ThreadParticipants, user)
 			}
 		}

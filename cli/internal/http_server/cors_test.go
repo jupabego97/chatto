@@ -135,8 +135,8 @@ func TestCORSMiddleware(t *testing.T) {
 		if origin := w.Header().Get("Access-Control-Allow-Origin"); origin != "https://chat.example.com" {
 			t.Errorf("expected Access-Control-Allow-Origin 'https://chat.example.com', got %q", origin)
 		}
-		if methods := w.Header().Get("Access-Control-Allow-Methods"); methods != "GET, POST, OPTIONS" {
-			t.Errorf("expected Access-Control-Allow-Methods 'GET, POST, OPTIONS', got %q", methods)
+		if methods := w.Header().Get("Access-Control-Allow-Methods"); methods != "GET, POST, DELETE, OPTIONS" {
+			t.Errorf("expected Access-Control-Allow-Methods 'GET, POST, DELETE, OPTIONS', got %q", methods)
 		}
 		expectedHeaders := "Authorization, Content-Type, X-CSRF-Token, X-REQUEST-TYPE, Range, If-None-Match, If-Modified-Since, X-Chatto-Asset-Proxy"
 		if headers := w.Header().Get("Access-Control-Allow-Headers"); headers != expectedHeaders {

@@ -93,7 +93,7 @@ func (c *wireConn) roomEventView(ctx context.Context, userID string, kind core.R
 		Id:        event.Event.GetId(),
 		CreatedAt: cloneTimestamp(event.Event.GetCreatedAt()),
 		ActorId:   event.Event.GetActorId(),
-		Actor:     c.optionalUser(ctx, event.Event.GetActorId()),
+		Actor:     c.optionalUserAvatarView(ctx, event.Event.GetActorId()),
 		Sequence:  event.Sequence,
 		RawEvent:  cloneEvent(event.Event),
 		Event:     payload,
@@ -296,7 +296,7 @@ func (c *wireConn) applyThreadMetadata(ctx context.Context, userID string, kind 
 			if i >= 5 {
 				break
 			}
-			if user := c.optionalUser(ctx, participantID); user != nil {
+			if user := c.optionalUserAvatarView(ctx, participantID); user != nil {
 				view.ThreadParticipants = append(view.ThreadParticipants, user)
 			}
 		}
@@ -328,7 +328,7 @@ func (c *wireConn) reactionSummaryViews(ctx context.Context, userID, eventID str
 			if i >= 5 {
 				break
 			}
-			if user := c.optionalUser(ctx, reactionUserID); user != nil {
+			if user := c.optionalUserAvatarView(ctx, reactionUserID); user != nil {
 				view.Users = append(view.Users, user)
 			}
 		}
@@ -503,6 +503,15 @@ func (c *wireConn) optionalUser(ctx context.Context, userID string) *corev1.User
 		return nil
 	}
 	return cloneUser(user)
+}
+
+func (c *wireConn) optionalUserAvatarView(ctx context.Context, userID string) *apiv1.UserAvatarView {
+	view, err := c.userAvatarView(ctx, userID)
+	if err != nil {
+		c.server.logger.Debug("Wire failed to hydrate user avatar view", "error", err, "user_id", userID)
+		return nil
+	}
+	return view
 }
 
 func roomScopedView(roomID string) *apiv1.RoomScopedEventView {

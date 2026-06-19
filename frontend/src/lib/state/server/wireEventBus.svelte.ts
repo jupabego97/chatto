@@ -200,8 +200,7 @@ function wireEventLogPayload(event: StreamEvent) {
     invalidates: event.invalidates.map((hint) => ({
       kind: hint.kind,
       id: hint.id
-    })),
-    event
+    }))
   };
 }
 

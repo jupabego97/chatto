@@ -1,19 +1,16 @@
 import {
+  CurrentUserPresenceStatus,
   type AssetUrl,
   type AttachmentView,
   type LinkPreviewView,
   type RoomEventsPage,
   type RoomEventView as WireRoomEventView,
+  type UserAvatarView,
   type VideoProcessingView,
   VideoProcessingStatus as WireVideoProcessingStatus,
   type VideoVariantView
 } from '$lib/pb/chatto/api/v1/chat_pb';
-import type { User } from '$lib/pb/chatto/core/v1/models_pb';
-import {
-  PresenceStatus,
-  type RoomEventViewFragment,
-  VideoProcessingStatus
-} from '$lib/chatTypes';
+import { PresenceStatus, type RoomEventViewFragment, VideoProcessingStatus } from '$lib/chatTypes';
 import type { Timestamp } from '@bufbuild/protobuf';
 
 export type WireRoomEventConnectionPage = {
@@ -320,20 +317,22 @@ function emptyAssetUrl() {
   };
 }
 
-function userToFragment(user: User | undefined) {
+function userToFragment(view: UserAvatarView | undefined) {
+  const user = view?.user;
   if (!user) return null;
   return {
     __typename: 'User',
     id: user.id,
     login: user.login,
     displayName: user.displayName,
-    avatarUrl: null,
-    presenceStatus: PresenceStatus.Offline
+    avatarUrl: view.avatarUrl || null,
+    presenceStatus: presenceStatusFromWire(view.presenceStatus)
   };
 }
 
-function userToReactionUser(user: User) {
-  if (!user.id) return null;
+function userToReactionUser(view: UserAvatarView) {
+  const user = view.user;
+  if (!user?.id) return null;
   return {
     __typename: 'User',
     id: user.id,
@@ -355,6 +354,21 @@ function bigintToNumber(value: bigint | number | string): number {
 
 function bigintToNullableNumber(value: bigint | undefined): number | null {
   return value === undefined ? null : Number(value);
+}
+
+function presenceStatusFromWire(status: CurrentUserPresenceStatus): PresenceStatus {
+  switch (status) {
+    case CurrentUserPresenceStatus.ONLINE:
+      return PresenceStatus.Online;
+    case CurrentUserPresenceStatus.AWAY:
+      return PresenceStatus.Away;
+    case CurrentUserPresenceStatus.DO_NOT_DISTURB:
+      return PresenceStatus.DoNotDisturb;
+    case CurrentUserPresenceStatus.OFFLINE:
+    case CurrentUserPresenceStatus.UNSPECIFIED:
+    default:
+      return PresenceStatus.Offline;
+  }
 }
 
 function isRoomEventView(value: RoomEventViewFragment | null): value is RoomEventViewFragment {

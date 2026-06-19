@@ -85,7 +85,7 @@ func (s *HTTPServer) corsMiddleware(allowedOrigins []string) gin.HandlerFunc {
 
 		match := s.matchOrigin(origin, allowedOrigins)
 		if match != originNotAllowed {
-			c.Header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			c.Header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 			c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-CSRF-Token, X-REQUEST-TYPE, Range, If-None-Match, If-Modified-Since, X-Chatto-Asset-Proxy")
 			c.Header("Access-Control-Max-Age", "86400")
 

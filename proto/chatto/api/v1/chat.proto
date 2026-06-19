@@ -1231,7 +1231,7 @@ message ReactionSummaryView {
   string emoji = 1;
   int32 count = 2;
   bool has_reacted = 3;
-  repeated chatto.core.v1.User users = 4;
+  repeated UserAvatarView users = 4;
 }
 
 // MessagePostedView is a display-ready MessagePostedEvent payload.
@@ -1248,7 +1248,7 @@ message MessagePostedView {
   optional string channel_echo_event_id = 10;
   int32 reply_count = 11;
   optional google.protobuf.Timestamp last_reply_at = 12;
-  repeated chatto.core.v1.User thread_participants = 13;
+  repeated UserAvatarView thread_participants = 13;
   optional bool viewer_is_following_thread = 14;
   repeated ReactionSummaryView reactions = 15;
 }
@@ -1346,7 +1346,7 @@ message RoomEventView {
   string id = 1;
   google.protobuf.Timestamp created_at = 2;
   string actor_id = 3;
-  chatto.core.v1.User actor = 4;
+  UserAvatarView actor = 4;
   uint64 sequence = 5;
   chatto.core.v1.Event raw_event = 6;
   RoomEventPayload event = 7;
@@ -1453,7 +1453,7 @@ message FollowedThreadView {
   int32 reply_count = 5;
   google.protobuf.Timestamp last_reply_at = 6;
   bool has_unread = 7;
-  repeated chatto.core.v1.User thread_participants = 8;
+  repeated UserAvatarView thread_participants = 8;
 }
 
 message ListMyFollowedThreadsRequest {
