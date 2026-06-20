@@ -11,6 +11,7 @@
 
 import { createContext } from 'svelte';
 import { SvelteSet } from 'svelte/reactivity';
+import { visit, type DocumentNode } from 'graphql';
 import { graphql, useFragment } from './gql';
 import {
   RoomEventViewFragmentDoc,
@@ -105,6 +106,10 @@ export const MyServerEventsSubscriptionDoc = graphql(`
         ... on RoomUnarchivedEvent {
           roomId
         }
+        ... on RoomUniversalChangedEvent {
+          roomId
+          universal
+        }
         ... on ReactionAddedEvent {
           roomId
           messageEventId
@@ -153,10 +158,6 @@ export const MyServerEventsSubscriptionDoc = graphql(`
           callId
         }
         ... on CallParticipantLeftEvent {
-          roomId
-          callId
-        }
-        ... on CallEndedEvent {
           roomId
           callId
         }
@@ -235,6 +236,24 @@ export const MyServerEventsSubscriptionDoc = graphql(`
     }
   }
 `);
+
+const voiceEventTypeNames = new Set([
+  'CallStartedEvent',
+  'CallParticipantJoinedEvent',
+  'CallParticipantLeftEvent',
+  'CallEndedEvent'
+]);
+
+export const MyServerEventsLegacySubscriptionDoc = visit(
+  MyServerEventsSubscriptionDoc as DocumentNode,
+  {
+    InlineFragment(node) {
+      if (node.typeCondition && voiceEventTypeNames.has(node.typeCondition.name.value)) {
+        return null;
+      }
+    }
+  }
+) as typeof MyServerEventsSubscriptionDoc;
 
 /** Re-export the urql RoomEventView fragment doc so the chat-event handler can
  *  mask subscription payloads when forwarding to room-history stores. */
@@ -527,10 +546,22 @@ export function onUserSettingsUpdate(handler: (update: UserSettingsUpdate) => vo
   );
 }
 
-export type RoomLayoutUpdatedInfo = Record<string, never>;
+export type RoomLayoutUpdatedInfo = {
+  roomId?: string;
+  universal?: boolean;
+};
 
 export function onRoomLayoutUpdated(handler: (_info: RoomLayoutUpdatedInfo) => void): () => void {
-  return onTypedEvent('RoomGroupsUpdatedEvent', () => ({}), handler);
+  const unsubscribeGroupsUpdated = onTypedEvent('RoomGroupsUpdatedEvent', () => ({}), handler);
+  const unsubscribeUniversalChanged = onTypedEvent(
+    'RoomUniversalChangedEvent',
+    (_env, e) => ({ roomId: e.roomId, universal: e.universal }),
+    handler
+  );
+  return () => {
+    unsubscribeGroupsUpdated();
+    unsubscribeUniversalChanged();
+  };
 }
 
 export type NotificationLevelChanged = {
@@ -683,7 +714,22 @@ export function createEventBusHandlerRegistrar(serverId: string) {
       );
     },
     onRoomLayoutUpdated(handler: (info: RoomLayoutUpdatedInfo) => void): () => void {
-      return onTypedEventDirect(bus, 'RoomGroupsUpdatedEvent', () => ({}), handler);
+      const unsubscribeGroupsUpdated = onTypedEventDirect(
+        bus,
+        'RoomGroupsUpdatedEvent',
+        () => ({}),
+        handler
+      );
+      const unsubscribeUniversalChanged = onTypedEventDirect(
+        bus,
+        'RoomUniversalChangedEvent',
+        (_env, e) => ({ roomId: e.roomId, universal: e.universal }),
+        handler
+      );
+      return () => {
+        unsubscribeGroupsUpdated();
+        unsubscribeUniversalChanged();
+      };
     }
   };
 }

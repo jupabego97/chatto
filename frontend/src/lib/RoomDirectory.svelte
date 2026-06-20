@@ -112,6 +112,7 @@ registry.
     return rooms.some(
       (r) =>
         r.viewerCanJoinRoom &&
+        !r.isUniversal &&
         !directory.isJoined(r.id, joinedRoomIds) &&
         !directory.joiningIds.has(r.id)
     );
@@ -197,6 +198,7 @@ registry.
   -->
   {@const joinedGhost = `btn border-border bg-background text-muted hover:!border-danger hover:!bg-danger hover:!text-white ${sizing}`}
   {@const restrictedSoft = `btn border-border bg-background text-muted/70 !cursor-default opacity-80 ${sizing}`}
+  {@const universalSoft = `btn border-border bg-accent/10 text-accent !cursor-default ${sizing}`}
   {@const roomHref = resolve('/chat/[serverId]/[roomId]', {
     serverId: serverSegment,
     roomId: room.id
@@ -207,13 +209,17 @@ registry.
       : ''}"
   >
     {#snippet roomLabel()}
-      <div class="flex min-w-0 items-baseline gap-1 font-medium">
-        <span class="text-muted/60">#</span>
-        <span class="truncate">{room.name}</span>
+      <div class="flex min-w-0 items-start gap-2 font-medium">
+        <span class="mt-0.5 shrink-0 text-muted/60">#</span>
+        <div class="min-w-0 flex-1">
+          <div class="flex min-w-0 items-center gap-2">
+            <span class="min-w-0 truncate">{room.name}</span>
+          </div>
+          {#if room.description}
+            <div class="truncate text-xs font-normal text-muted/80">{room.description}</div>
+          {/if}
+        </div>
       </div>
-      {#if room.description}
-        <div class="truncate text-xs text-muted/80">{room.description}</div>
-      {/if}
     {/snippet}
     {#if joined}
       <a href={roomHref} class="min-w-0 flex-1">
@@ -225,7 +231,12 @@ registry.
       </div>
     {/if}
 
-    {#if joined}
+    {#if joined && room.isUniversal}
+      <span class={universalSoft} title="Universal rooms are joined automatically">
+        <span class="iconify uil--globe"></span>
+        Universal
+      </span>
+    {:else if joined}
       <button
         type="button"
         class="group {joinedGhost}"

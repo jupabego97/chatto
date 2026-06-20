@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -160,9 +161,20 @@ func (s *HTTPServer) newMetricsServer() (*http.Server, error) {
 
 	mux := http.NewServeMux()
 	mux.Handle(s.config.Metrics.PathOrDefault(), promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
+	if s.config.Metrics.Pprof {
+		registerPprofHandlers(mux)
+	}
 
 	addr := net.JoinHostPort(s.config.Metrics.BindAddressOrDefault(), fmt.Sprint(s.config.Metrics.PortOrDefault()))
 	return newHTTPServer(addr, mux), nil
+}
+
+func registerPprofHandlers(mux *http.ServeMux) {
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 }
 
 type chattoCollector struct {

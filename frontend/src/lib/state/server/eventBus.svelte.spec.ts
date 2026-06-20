@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { createEventBusHandlerRegistrar } from '$lib/eventBus.svelte';
 import { eventBusManager } from './eventBus.svelte';
 import { serverRegistry } from './registry.svelte';
 import { startClientLiveSubscription } from './clientLive';
@@ -225,6 +226,24 @@ describe('eventBusManager client-live stream robustness', () => {
     expect(
       consoleWarn.mock.calls.some((c: unknown[]) => String(c[0]).includes('heartbeat stalled'))
     ).toBe(true);
+  });
+
+  it('treats room universal changes as room layout updates', () => {
+    eventBusManager.startBus(TEST_SERVER, fakeGqlClient());
+    const handler = vi.fn();
+    const unsubscribe = createEventBusHandlerRegistrar(TEST_SERVER)!.onRoomLayoutUpdated(handler);
+
+    liveControllers.at(-1)!.onEvent(
+      eventEnvelope({
+        __typename: 'RoomUniversalChangedEvent',
+        roomId: 'room-1',
+        universal: false
+      })
+    );
+
+    expect(handler).toHaveBeenCalledWith({ roomId: 'room-1', universal: false });
+
+    unsubscribe();
   });
 
   it('backs off repeated client-live stream startup failures', () => {

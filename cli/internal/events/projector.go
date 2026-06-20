@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -89,12 +88,24 @@ type Projection interface {
 	Restore(snapshot []byte) error
 }
 
+// ReplaySubjectProjection can be implemented when a projection's logical
+// consumed subjects are narrower than the physical stream subjects it should
+// replay. This lets related projections share one ordered consumer and one
+// protobuf decode path while waits/admin still report the narrower Subjects.
+type ReplaySubjectProjection interface {
+	ReplaySubjects() []string
+}
+
 // Projector runs the consumer + apply loop for one projection.
 type Projector struct {
 	js     jetstream.JetStream
 	stream jetstream.Stream
 	proj   Projection
 	logger Logger
+
+	subjects        []string
+	replaySubjects  []string
+	subjectMatchers []compiledSubjectFilter
 
 	mu        sync.Mutex
 	lastSeq   uint64
@@ -143,12 +154,17 @@ type seqWaiter struct {
 // NewProjector binds a projection to a stream. Does not start the consumer
 // — call Run for that.
 func NewProjector(js jetstream.JetStream, stream jetstream.Stream, proj Projection, logger Logger) *Projector {
+	subjects := append([]string(nil), proj.Subjects()...)
+	replaySubjects := append([]string(nil), projectionReplaySubjects(proj, subjects)...)
 	return &Projector{
-		js:       js,
-		stream:   stream,
-		proj:     proj,
-		logger:   logger,
-		failedCh: make(chan struct{}),
+		js:              js,
+		stream:          stream,
+		proj:            proj,
+		logger:          logger,
+		subjects:        subjects,
+		replaySubjects:  replaySubjects,
+		subjectMatchers: compileSubjectFilters(subjects),
+		failedCh:        make(chan struct{}),
 	}
 }
 
@@ -204,7 +220,12 @@ func (p *Projector) Started() bool {
 // Subjects returns the subject filters this projector consumes.
 // The returned slice is a copy so callers cannot mutate projection state.
 func (p *Projector) Subjects() []string {
-	return append([]string(nil), p.proj.Subjects()...)
+	return append([]string(nil), p.subjects...)
+}
+
+// ReplaySubjects returns the physical stream filters used for replay.
+func (p *Projector) ReplaySubjects() []string {
+	return append([]string(nil), p.replaySubjects...)
 }
 
 // AppendAndWait publishes an event for an aggregate and blocks until
@@ -325,14 +346,13 @@ func (p *Projector) waitForSeq(ctx context.Context, seq uint64) error {
 }
 
 func (p *Projector) validateConsumesSubject(subject string) error {
-	subjects := p.proj.Subjects()
-	for _, filter := range subjects {
-		if subjectMatchesFilter(filter, subject) {
+	for i := range p.subjectMatchers {
+		if p.subjectMatchers[i].matches(subject) {
 			return nil
 		}
 	}
 	return fmt.Errorf("%w: subject %q not matched by filters %v",
-		ErrProjectionSubjectNotConsumed, subject, subjects)
+		ErrProjectionSubjectNotConsumed, subject, p.subjects)
 }
 
 func (p *Projector) validateSeqSubject(ctx context.Context, pos StreamPosition) error {
@@ -351,24 +371,75 @@ func (p *Projector) validateSeqSubject(ctx context.Context, pos StreamPosition) 
 }
 
 func subjectMatchesFilter(filter, subject string) bool {
-	if filter == "" || subject == "" {
+	return compileSubjectFilter(filter).matches(subject)
+}
+
+type compiledSubjectFilter struct {
+	raw    string
+	tokens []string
+}
+
+func compileSubjectFilters(filters []string) []compiledSubjectFilter {
+	compiled := make([]compiledSubjectFilter, 0, len(filters))
+	for _, filter := range filters {
+		compiled = append(compiled, compileSubjectFilter(filter))
+	}
+	return compiled
+}
+
+func compileSubjectFilter(filter string) compiledSubjectFilter {
+	return compiledSubjectFilter{
+		raw:    filter,
+		tokens: splitSubjectTokens(filter),
+	}
+}
+
+func splitSubjectTokens(subject string) []string {
+	if subject == "" {
+		return nil
+	}
+	tokenCount := 1
+	for i := 0; i < len(subject); i++ {
+		if subject[i] == '.' {
+			tokenCount++
+		}
+	}
+	tokens := make([]string, 0, tokenCount)
+	start := 0
+	for i := 0; i <= len(subject); i++ {
+		if i == len(subject) || subject[i] == '.' {
+			tokens = append(tokens, subject[start:i])
+			start = i + 1
+		}
+	}
+	return tokens
+}
+
+func (f compiledSubjectFilter) matches(subject string) bool {
+	if f.raw == "" || subject == "" {
 		return false
 	}
-	filterTokens := strings.Split(filter, ".")
-	subjectTokens := strings.Split(subject, ".")
-
-	for i, token := range filterTokens {
+	pos := 0
+	for i, token := range f.tokens {
 		if token == ">" {
-			return i == len(filterTokens)-1 && len(subjectTokens) > i
+			return i == len(f.tokens)-1 && pos < len(subject)
 		}
-		if i >= len(subjectTokens) {
+		if pos > len(subject) {
 			return false
 		}
-		if token != "*" && token != subjectTokens[i] {
+		end := pos
+		for end < len(subject) && subject[end] != '.' {
+			end++
+		}
+		if end == pos {
 			return false
 		}
+		if token != "*" && token != subject[pos:end] {
+			return false
+		}
+		pos = end + 1
 	}
-	return len(subjectTokens) == len(filterTokens)
+	return pos == len(subject)+1
 }
 
 // WaitForCurrent blocks until the projection has applied the latest
@@ -400,7 +471,7 @@ type projectionTarget struct {
 
 func (p *Projector) currentTarget(ctx context.Context) (projectionTarget, error) {
 	var target projectionTarget
-	for _, subject := range p.proj.Subjects() {
+	for _, subject := range p.subjects {
 		msg, err := p.stream.GetLastMsgForSubject(ctx, subject)
 		if err != nil {
 			if errors.Is(err, jetstream.ErrMsgNotFound) {
@@ -413,6 +484,22 @@ func (p *Projector) currentTarget(ctx context.Context) (projectionTarget, error)
 		}
 	}
 	return target, nil
+}
+
+func projectionReplaySubjects(proj Projection, subjects []string) []string {
+	if replay, ok := proj.(ReplaySubjectProjection); ok {
+		return replay.ReplaySubjects()
+	}
+	return subjects
+}
+
+func (p *Projector) consumesSubject(subject string) bool {
+	for i := range p.subjectMatchers {
+		if p.subjectMatchers[i].matches(subject) {
+			return true
+		}
+	}
+	return false
 }
 
 // advance updates lastSeq and releases any waiters that have now been
@@ -481,7 +568,7 @@ func (p *Projector) Run(ctx context.Context) error {
 	p.mu.Unlock()
 
 	cons, err := p.stream.OrderedConsumer(ctx, jetstream.OrderedConsumerConfig{
-		FilterSubjects:    p.proj.Subjects(),
+		FilterSubjects:    p.replaySubjects,
 		DeliverPolicy:     jetstream.DeliverAllPolicy,
 		InactiveThreshold: 30 * time.Second,
 	})
@@ -532,10 +619,14 @@ func (p *Projector) handleMessage(msg jetstream.Msg) {
 		return
 	}
 
-	meta, err := msg.Metadata()
+	seq, err := streamSequenceFromMsg(msg)
 	if err != nil {
 		p.logger.Error("Projection message metadata failed", "subject", msg.Subject(), "error", err)
 		p.fail(0, fmt.Errorf("message metadata for subject %q: %w", msg.Subject(), err))
+		return
+	}
+
+	if !p.consumesSubject(msg.Subject()) {
 		return
 	}
 
@@ -544,24 +635,24 @@ func (p *Projector) handleMessage(msg jetstream.Msg) {
 		err = fmt.Errorf("unmarshal event on subject %q: %w", msg.Subject(), err)
 		p.logger.Error("Projection decode failed",
 			"subject", msg.Subject(),
-			"seq", meta.Sequence.Stream,
+			"seq", seq,
 			"error", err)
-		p.fail(meta.Sequence.Stream, err)
+		p.fail(seq, err)
 		return
 	}
 
-	if err := p.proj.Apply(&event, meta.Sequence.Stream); err != nil {
+	if err := p.proj.Apply(&event, seq); err != nil {
 		p.logger.Error("Projection Apply failed",
 			"subject", msg.Subject(),
-			"seq", meta.Sequence.Stream,
+			"seq", seq,
 			"event_id", event.GetId(),
 			"error", err)
-		p.fail(meta.Sequence.Stream, err)
+		p.fail(seq, err)
 		return
 	}
 
 	p.countStartupMessage()
-	p.advance(meta.Sequence.Stream)
+	p.advance(seq)
 	p.maybeCompleteStartup(time.Now())
 }
 
@@ -603,7 +694,7 @@ func (p *Projector) maybeCompleteStartup(now time.Time) {
 			"messages_per_second", rate,
 			"last_seq", lastSeq,
 			"target_seq", targetSeq,
-			"subjects", p.proj.Subjects(),
+			"subjects", p.subjects,
 		)
 	}
 }
@@ -616,7 +707,7 @@ func (p *Projector) handleConsumeErr(_ jetstream.ConsumeContext, err error) {
 	p.logger.Warn("Projection consumer error (auto-recovering)", "error", err)
 }
 
-// RunProjectors starts one consumer for projectors with identical subject
+// RunProjectors starts one consumer for projectors with identical replay
 // filters and fans each decoded event out to every projection. Each projector
 // still owns its own lifecycle state, waiters, and failure status.
 func RunProjectors(ctx context.Context, projectors ...*Projector) error {
@@ -633,10 +724,35 @@ func RunProjectors(ctx context.Context, projectors ...*Projector) error {
 		return projectors[0].Run(ctx)
 	}
 
-	subjects := projectors[0].proj.Subjects()
+	subjects := projectors[0].ReplaySubjects()
 	for _, projector := range projectors {
-		if !sameSubjects(subjects, projector.proj.Subjects()) {
-			return fmt.Errorf("shared projectors must use identical subjects: %v != %v", subjects, projector.proj.Subjects())
+		if !sameSubjects(subjects, projector.ReplaySubjects()) {
+			return fmt.Errorf("shared projectors must use identical replay subjects: %v != %v", subjects, projector.ReplaySubjects())
+		}
+	}
+
+	return runProjectorsOnSubjects(ctx, subjects, projectors...)
+}
+
+// RunProjectorsOnSubjects starts one consumer for the supplied physical replay
+// filters and fans each decoded event out to projectors whose logical Subjects
+// match the event subject. It is used by ChattoCore to replay the EVT stream
+// once per process while preserving per-projection status and readiness.
+func RunProjectorsOnSubjects(ctx context.Context, replaySubjects []string, projectors ...*Projector) error {
+	if len(replaySubjects) == 0 {
+		return fmt.Errorf("shared projectors require at least one replay subject")
+	}
+	return runProjectorsOnSubjects(ctx, append([]string(nil), replaySubjects...), projectors...)
+}
+
+func runProjectorsOnSubjects(ctx context.Context, subjects []string, projectors ...*Projector) error {
+	if len(projectors) == 0 {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	for i, projector := range projectors {
+		if projector == nil {
+			return fmt.Errorf("shared projection %d is nil", i)
 		}
 	}
 
@@ -651,11 +767,11 @@ func RunProjectors(ctx context.Context, projectors ...*Projector) error {
 		}
 	}
 
-	target, err := projectors[0].currentTarget(ctx)
-	if err != nil {
-		return fmt.Errorf("read projection startup target: %w", err)
-	}
 	for _, projector := range projectors {
+		target, err := projector.currentTarget(ctx)
+		if err != nil {
+			return fmt.Errorf("read projection startup target: %w", err)
+		}
 		projector.setStartupTarget(target.seq)
 	}
 
@@ -725,7 +841,7 @@ func sameSubjects(a, b []string) bool {
 }
 
 func handleSharedProjectorMessage(msg jetstream.Msg, projectors []*Projector, failedCh chan<- struct{}) {
-	meta, err := msg.Metadata()
+	seq, err := streamSequenceFromMsg(msg)
 	if err != nil {
 		err := fmt.Errorf("message metadata for subject %q: %w", msg.Subject(), err)
 		for _, projector := range projectors {
@@ -736,42 +852,110 @@ func handleSharedProjectorMessage(msg jetstream.Msg, projectors []*Projector, fa
 		return
 	}
 
+	now := time.Now()
+	var consumerBuf [16]*Projector
+	consumers := consumerBuf[:0]
+	for _, projector := range projectors {
+		if projector.consumesSubject(msg.Subject()) {
+			consumers = append(consumers, projector)
+		}
+	}
+	if len(consumers) == 0 {
+		return
+	}
+
 	var event corev1.Event
 	if err := proto.Unmarshal(msg.Data(), &event); err != nil {
 		err = fmt.Errorf("unmarshal event on subject %q: %w", msg.Subject(), err)
-		for _, projector := range projectors {
+		for _, projector := range consumers {
 			projector.logger.Error("Projection decode failed",
 				"subject", msg.Subject(),
-				"seq", meta.Sequence.Stream,
+				"seq", seq,
 				"error", err)
-			projector.fail(meta.Sequence.Stream, err)
+			projector.fail(seq, err)
 		}
 		notifySharedProjectorFailure(failedCh)
 		return
 	}
 
-	now := time.Now()
 	var applyErr error
-	for _, projector := range projectors {
-		if err := projector.proj.Apply(&event, meta.Sequence.Stream); err != nil {
+	for _, projector := range consumers {
+		if err := projector.proj.Apply(&event, seq); err != nil {
 			projector.logger.Error("Projection Apply failed",
 				"subject", msg.Subject(),
-				"seq", meta.Sequence.Stream,
+				"seq", seq,
 				"event_id", event.GetId(),
 				"error", err)
-			projector.fail(meta.Sequence.Stream, err)
+			projector.fail(seq, err)
 			if applyErr == nil {
 				applyErr = err
 			}
 			continue
 		}
 		projector.countStartupMessage()
-		projector.advance(meta.Sequence.Stream)
+		projector.advance(seq)
 		projector.maybeCompleteStartup(now)
 	}
 	if applyErr != nil {
 		notifySharedProjectorFailure(failedCh)
 	}
+}
+
+func streamSequenceFromMsg(msg jetstream.Msg) (uint64, error) {
+	return streamSequenceFromReply(msg.Reply())
+}
+
+func streamSequenceFromReply(reply string) (uint64, error) {
+	const jsAckPrefix = "$JS.ACK."
+	if len(reply) < len(jsAckPrefix) || reply[:len(jsAckPrefix)] != jsAckPrefix {
+		return 0, fmt.Errorf("invalid JetStream ACK reply subject")
+	}
+
+	var v1Start, v1End int
+	var v2Start, v2End int
+	tokenStart := 0
+	tokenIndex := 0
+	for i := 0; i <= len(reply); i++ {
+		if i != len(reply) && reply[i] != '.' {
+			continue
+		}
+		switch tokenIndex {
+		case 5:
+			v1Start, v1End = tokenStart, i
+		case 7:
+			v2Start, v2End = tokenStart, i
+		}
+		tokenIndex++
+		tokenStart = i + 1
+	}
+
+	switch {
+	case tokenIndex == 9:
+		return parseAckSequenceToken(reply[v1Start:v1End])
+	case tokenIndex >= 11:
+		return parseAckSequenceToken(reply[v2Start:v2End])
+	default:
+		return 0, fmt.Errorf("invalid JetStream ACK reply subject")
+	}
+}
+
+func parseAckSequenceToken(token string) (uint64, error) {
+	if token == "" {
+		return 0, fmt.Errorf("invalid JetStream ACK stream sequence")
+	}
+	var n uint64
+	for i := 0; i < len(token); i++ {
+		c := token[i]
+		if c < '0' || c > '9' {
+			return 0, fmt.Errorf("invalid JetStream ACK stream sequence")
+		}
+		digit := uint64(c - '0')
+		if n > (^uint64(0)-digit)/10 {
+			return 0, fmt.Errorf("invalid JetStream ACK stream sequence")
+		}
+		n = n*10 + digit
+	}
+	return n, nil
 }
 
 func notifySharedProjectorFailure(ch chan<- struct{}) {

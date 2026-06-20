@@ -296,6 +296,11 @@ func (r *roomResolver) ViewerCanBanRoomMembers(ctx context.Context, obj *corev1.
 	return r.core.PermResolver().HasRoomPermission(ctx, user.Id, core.KindOfRoom(obj), obj.Id, core.PermRoomMemberBan)
 }
 
+// IsUniversal is the resolver for the isUniversal field.
+func (r *roomResolver) IsUniversal(ctx context.Context, obj *corev1.Room) (bool, error) {
+	return core.KindOfRoom(obj) == core.KindChannel && obj.GetUniversal(), nil
+}
+
 // GroupID is the resolver for the groupId field.
 func (r *roomResolver) GroupID(ctx context.Context, obj *corev1.Room) (*string, error) {
 	if core.KindOfRoom(obj) == core.KindDM {
@@ -440,7 +445,7 @@ func (r *roomResolver) VoiceCallToken(ctx context.Context, obj *corev1.Room) (*c
 		return nil, err
 	}
 
-	roomName := core.LiveKitRoomName(r.livekitConfig.ServerID, core.LegacySpaceIDForRoomKind(core.KindOfRoom(obj)), obj.Id)
+	roomName := core.LiveKitRoomName(r.livekitConfig.ServerID, core.LegacySpaceIDForRoomKind(core.KindOfRoom(obj)), obj.Id, activeCall.CallID)
 	token, err := core.GenerateVoiceCallToken(
 		r.livekitConfig.APIKey,
 		r.livekitConfig.APISecret,
@@ -450,12 +455,11 @@ func (r *roomResolver) VoiceCallToken(ctx context.Context, obj *corev1.Room) (*c
 		user.Login,
 		avatarURL,
 		e2eeKey,
+		activeCall.CallID,
 	)
 	if err != nil {
 		return nil, err
 	}
-	token.CallID = activeCall.CallID
-
 	return token, nil
 }
 
