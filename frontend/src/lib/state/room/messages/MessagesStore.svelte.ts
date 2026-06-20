@@ -593,7 +593,7 @@ export class MessagesStore {
       { __typename: 'MessagePostedEvent' }
     >['reactions']
   ): void {
-    this.patchMessagePosted(messageEventId, (evt) => ({ ...evt, reactions }));
+    this.patchMessagePostedExact(messageEventId, (evt) => ({ ...evt, reactions }));
   }
 
   private applyAttachmentUpdate(
@@ -625,6 +625,30 @@ export class MessagesStore {
       const evt = e.event;
       if (evt?.__typename !== 'MessagePostedEvent') continue;
       if (e.id !== messageEventId && evt.echoOfEventId !== messageEventId) continue;
+      this.events[i] = { ...e, event: patch(evt) };
+    }
+
+    const previewKey = this.previewKey(messageEventId);
+    const preview = this.previewEvents.get(previewKey);
+    if (preview?.event?.__typename === 'MessagePostedEvent') {
+      this.previewEvents.set(previewKey, { ...preview, event: patch(preview.event) });
+    }
+  }
+
+  private patchMessagePostedExact(
+    messageEventId: string,
+    patch: (
+      evt: Extract<
+        NonNullable<RoomEventViewFragment['event']>,
+        { __typename: 'MessagePostedEvent' }
+      >
+    ) => Extract<NonNullable<RoomEventViewFragment['event']>, { __typename: 'MessagePostedEvent' }>
+  ): void {
+    for (let i = 0; i < this.events.length; i++) {
+      const e = this.events[i];
+      const evt = e.event;
+      if (evt?.__typename !== 'MessagePostedEvent') continue;
+      if (e.id !== messageEventId) continue;
       this.events[i] = { ...e, event: patch(evt) };
     }
 

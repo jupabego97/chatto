@@ -8,7 +8,11 @@ import {
   ClientLiveServerFrameSchema
 } from '$lib/pb/chatto/core/v1/client_live_pb';
 import { AssetDeletedEventSchema } from '$lib/pb/chatto/core/v1/asset_events_pb';
-import { LiveRoomEventSchema } from '$lib/pb/chatto/core/v1/live_events_pb';
+import {
+  LiveEventSchema,
+  LiveRoomEventSchema,
+  SessionTerminatedEventSchema
+} from '$lib/pb/chatto/core/v1/live_events_pb';
 import { liveRoomEventToEnvelope, startClientLiveSubscription } from './clientLive';
 import type { LiveInfo, RegisteredServer } from './registry.svelte';
 
@@ -127,6 +131,7 @@ describe('client live websocket request mux', () => {
   });
 
   it('waits for the socket to open, sends a typed request frame, and resolves the matching response', async () => {
+    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
     const subscription = start();
     await vi.waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
     const ws = MockWebSocket.instances[0];
@@ -137,6 +142,7 @@ describe('client live websocket request mux', () => {
     ws.open();
     ws.receive(serverHello());
     await vi.waitFor(() => expect(ws.sent).toHaveLength(1));
+    expect(consoleLog).toHaveBeenCalledWith('[ws:%s] Connected (client-live)', 'chat.example.test');
 
     const requestFrame = fromBinary(ClientLiveClientFrameSchema, ws.sent[0]);
     expect(requestFrame.requestId).toBe(1n);
@@ -286,6 +292,49 @@ describe('client live websocket request mux', () => {
     await vi.waitFor(() => expect(onError).toHaveBeenCalled());
     expect(String(onError.mock.calls[0][0])).toContain('wrong.protocol');
     expect(MockWebSocket.instances).toHaveLength(0);
+  });
+
+  it('dispatches session termination without treating the following close as a reconnect', async () => {
+    const onEvent = vi.fn();
+    const onEnd = vi.fn();
+    const onError = vi.fn();
+    startClientLiveSubscription({
+      server,
+      info,
+      onEvent,
+      onCatchUpNeeded: vi.fn(),
+      onEnd,
+      onError
+    });
+    await vi.waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    const ws = MockWebSocket.instances[0];
+    ws.open();
+    ws.receive(serverHello());
+
+    ws.receive(
+      create(ClientLiveServerFrameSchema, {
+        id: 'session-ended',
+        payload: {
+          case: 'liveEvent',
+          value: create(LiveEventSchema, {
+            event: {
+              case: 'sessionTerminated',
+              value: create(SessionTerminatedEventSchema, { reason: 'logout' })
+            }
+          })
+        }
+      })
+    );
+    ws.close();
+
+    expect(onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'session-ended',
+        event: { __typename: 'SessionTerminatedEvent', reason: 'logout' }
+      })
+    );
+    expect(onEnd).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
   });
 });
 

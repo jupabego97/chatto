@@ -79,6 +79,7 @@ export function startClientLiveSubscription({
   let lastDeliverySequence = 0n;
   let nextRequestId = 1n;
   let readySettled = false;
+  let terminalClose = false;
   let resolveReady: () => void = () => {};
   let rejectReady: (err: unknown) => void = () => {};
   let handshakeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -163,9 +164,8 @@ export function startClientLiveSubscription({
       validateTicketProtocol(ticket, info);
       if (stopped) return;
 
-      ws = new WebSocket(
-        withTicket(ticket.url || resolveServerURL(server.url, info.url), ticket.ticket)
-      );
+      const wsURL = withTicket(ticket.url || resolveServerURL(server.url, info.url), ticket.ticket);
+      ws = new WebSocket(wsURL);
       ws.binaryType = 'arraybuffer';
 
       handshakeTimer = setTimeout(() => {
@@ -185,6 +185,7 @@ export function startClientLiveSubscription({
             validateHello(frame.payload.value, info);
             clearHandshakeTimer();
             settleReady();
+            console.log('[ws:%s] Connected (client-live)', websocketHost(wsURL));
             onReady?.();
             return;
           }
@@ -236,6 +237,9 @@ export function startClientLiveSubscription({
             onCatchUpNeeded();
           }
           if (decoded.event) {
+            if (decoded.event.event?.__typename === 'SessionTerminatedEvent') {
+              terminalClose = true;
+            }
             onEvent(decoded.event);
           }
         } catch (err) {
@@ -251,6 +255,10 @@ export function startClientLiveSubscription({
       };
       ws.onclose = () => {
         clearHandshakeTimer();
+        if (terminalClose) {
+          rejectPending(new Error('Chatto live WebSocket closed after session termination'));
+          return;
+        }
         rejectPending(new Error('Chatto live WebSocket closed'));
         if (stopped) return;
         onEnd();
@@ -916,6 +924,14 @@ function withTicket(rawURL: string, ticket: string): string {
   const url = new URL(rawURL);
   url.searchParams.set('ticket', ticket);
   return url.toString();
+}
+
+function websocketHost(rawURL: string): string {
+  try {
+    return new URL(rawURL).host;
+  } catch {
+    return rawURL;
+  }
 }
 
 function resolveServerURL(baseURL: string, maybeRelative: string): string {

@@ -486,6 +486,56 @@ describe('MessagesStore — room lifecycle ownership', () => {
 		store.dispose();
 	});
 
+	it('does not apply original reply reaction patches to channel echoes', async () => {
+		const echo = threadMessageEvent('echo');
+		const fake = new FakeGqlClient([
+			roomEventsResult({
+				events: [
+					{
+						...echo,
+						event: {
+							...echo.event,
+							body: 'reply',
+							echoOfEventId: 'reply',
+							echoFromThreadRootEventId: 'root'
+						}
+					}
+				],
+				startCursor: 'seq:1',
+				endCursor: 'seq:1',
+				hasOlder: false,
+				hasNewer: false
+			})
+		]);
+		const store = new MessagesStore(fake as unknown as GraphQLClient, () => null);
+
+		store.setRoom('room-1');
+		await settle();
+		fake.queryMock.mockClear();
+
+		store.ingestServerEvent({
+			id: 'reaction-1',
+			createdAt: '2026-05-27T00:00:01Z',
+			actorId: 'u2',
+			actor: null,
+			event: {
+				__typename: 'MessageReactionsUpdatedEvent',
+				roomId: 'room-1',
+				messageEventId: 'reply',
+				reactions: [{ emoji: 'thumbsup', count: 1, hasReacted: true, users: [] }]
+			}
+		} as never);
+		await settle();
+
+		expect(fake.queryMock).not.toHaveBeenCalled();
+		expect(store.rootEvents[0].event).toMatchObject({
+			__typename: 'MessagePostedEvent',
+			echoOfEventId: 'reply',
+			reactions: []
+		});
+		store.dispose();
+	});
+
 	it('hides only the echo when an echo is retracted', async () => {
 		const fake = new FakeGqlClient({
 			room: {

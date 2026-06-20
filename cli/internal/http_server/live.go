@@ -146,11 +146,16 @@ type clientLiveSession struct {
 	userID string
 	cancel context.CancelFunc
 
-	send chan *corev1.ClientLiveServerFrame
+	send chan clientLiveOutboundFrame
 	reqs chan struct{}
 
 	seqMu sync.Mutex
 	seq   uint64
+}
+
+type clientLiveOutboundFrame struct {
+	frame *corev1.ClientLiveServerFrame
+	done  chan error
 }
 
 func newClientLiveSession(server *HTTPServer, conn *websocket.Conn, userID string, cancel context.CancelFunc) *clientLiveSession {
@@ -159,7 +164,7 @@ func newClientLiveSession(server *HTTPServer, conn *websocket.Conn, userID strin
 		conn:   conn,
 		userID: userID,
 		cancel: cancel,
-		send:   make(chan *corev1.ClientLiveServerFrame, 64),
+		send:   make(chan clientLiveOutboundFrame, 64),
 		reqs:   make(chan struct{}, clientLiveMaxConcurrentRequests),
 	}
 }
@@ -237,13 +242,16 @@ func (s *clientLiveSession) run(ctx context.Context) {
 				})
 				continue
 			}
-			s.enqueue(frame)
 			if core.EventSessionTerminated(event) != nil {
+				if err := s.enqueueAndWait(frame, clientLiveWriteTimeout); err != nil {
+					s.server.logger.Warn("Failed to flush client live session termination event", "error", err)
+				}
 				s.cancel()
 				_ = s.conn.Close()
 				wg.Wait()
 				return
 			}
+			s.enqueue(frame)
 		}
 	}
 }
@@ -348,11 +356,15 @@ func (s *clientLiveSession) writeLoop(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case frame, ok := <-s.send:
+		case outbound, ok := <-s.send:
 			if !ok {
 				return
 			}
-			if err := s.writeFrame(frame); err != nil {
+			err := s.writeFrame(outbound.frame)
+			if outbound.done != nil {
+				outbound.done <- err
+			}
+			if err != nil {
 				s.cancel()
 				return
 			}
@@ -364,15 +376,41 @@ func (s *clientLiveSession) enqueue(frame *corev1.ClientLiveServerFrame) {
 	if frame == nil {
 		return
 	}
+	s.assignDeliverySequence(frame)
+	select {
+	case s.send <- clientLiveOutboundFrame{frame: frame}:
+	default:
+		s.cancel()
+	}
+}
+
+func (s *clientLiveSession) enqueueAndWait(frame *corev1.ClientLiveServerFrame, timeout time.Duration) error {
+	if frame == nil {
+		return nil
+	}
+	s.assignDeliverySequence(frame)
+	done := make(chan error, 1)
+	select {
+	case s.send <- clientLiveOutboundFrame{frame: frame, done: done}:
+	case <-time.After(timeout):
+		s.cancel()
+		return errors.New("timed out enqueueing client live frame")
+	}
+
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(timeout):
+		s.cancel()
+		return errors.New("timed out flushing client live frame")
+	}
+}
+
+func (s *clientLiveSession) assignDeliverySequence(frame *corev1.ClientLiveServerFrame) {
 	s.seqMu.Lock()
 	defer s.seqMu.Unlock()
 	s.seq++
 	frame.DeliverySequence = s.seq
-	select {
-	case s.send <- frame:
-	default:
-		s.cancel()
-	}
 }
 
 func (s *clientLiveSession) enqueueError(requestID uint64, code, message string, fatal bool) {
