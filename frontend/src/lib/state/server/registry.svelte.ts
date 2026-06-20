@@ -17,8 +17,6 @@ export interface RegisteredServer {
 	name: string;
 	/** Server icon URL, or null if none */
 	iconUrl: string | null;
-	/** Chatto version reported by /api/server, or null/undefined when unknown */
-	version?: string | null;
 	/** Bearer token for API auth, or null when unauthenticated/legacy cookie auth */
 	token: string | null;
 	/** Authenticated user ID on this server, or null if not yet authenticated */
@@ -38,12 +36,6 @@ export interface AuthenticatedUserSummary {
 	login: string;
 	displayName?: string | null;
 	avatarUrl?: string | null;
-}
-
-interface ServerDiscoveryInfo {
-	name?: unknown;
-	version?: unknown;
-	iconUrl?: unknown;
 }
 
 /**
@@ -184,15 +176,7 @@ class ServerRegistry {
 				if (this.originServer) return; // Registered while we were fetching
 
 				const id = generateServerId(origin, this.servers.map((s) => s.id));
-				this.#registerOrigin(
-					id,
-					origin,
-					typeof data.name === 'string' ? data.name : 'Chatto',
-					typeof data.iconUrl === 'string' ? data.iconUrl : null,
-					null,
-					null,
-					typeof data.version === 'string' ? data.version : null
-				);
+				this.#registerOrigin(id, origin, data.name || 'Chatto', data.iconUrl ?? null);
 				this.settleOriginUnauthenticated();
 			})
 			.catch(() => {
@@ -209,15 +193,13 @@ class ServerRegistry {
 		name: string,
 		iconUrl: string | null,
 		token: string | null = null,
-		user: AuthenticatedUserSummary | null = null,
-		version: string | null = null
+		user: AuthenticatedUserSummary | null = null
 	): void {
 		this.addServer({
 			id,
 			url,
 			name,
 			iconUrl,
-			version,
 			token,
 			userId: user?.id ?? null,
 			userLogin: user?.login ?? null,
@@ -447,7 +429,6 @@ class ServerRegistry {
 				err
 			);
 		});
-		void this.refreshServerDiscovery(server.id);
 
 		if (server.token === null) {
 			// Cookie auth (origin) — the SvelteKit load function already determined
@@ -481,32 +462,6 @@ class ServerRegistry {
 		}
 
 		return store;
-	}
-
-	/**
-	 * Refresh discovery metadata from the stable, public endpoint. This includes
-	 * the server version used by the multi-server compatibility warning.
-	 */
-	async refreshServerDiscovery(id: string): Promise<void> {
-		const server = this.getServer(id);
-		if (!server) return;
-
-		try {
-			const response = await fetch(`${server.url}/api/server`, {
-				signal: AbortSignal.timeout(10000)
-			});
-			if (!response.ok) return;
-
-			const info = (await response.json()) as ServerDiscoveryInfo;
-			this.updateServer(id, {
-				name: typeof info.name === 'string' ? info.name : server.name,
-				iconUrl: typeof info.iconUrl === 'string' ? info.iconUrl : server.iconUrl,
-				version: typeof info.version === 'string' ? info.version : (server.version ?? null)
-			});
-		} catch {
-			// Failure here should not make a registered server disappear or block
-			// its GraphQL state. The existing connection indicator covers reachability.
-		}
 	}
 
 	/** Whether the server has an authenticated user. False if not registered. */

@@ -44,7 +44,6 @@ export interface OAuthFlowState {
 	remoteUrl: string;
 	serverName: string;
 	serverIconUrl: string | null;
-	serverVersion?: string | null;
 }
 
 /** Save OAuth flow state to sessionStorage before redirecting. */

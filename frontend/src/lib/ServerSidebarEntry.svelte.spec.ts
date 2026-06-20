@@ -18,7 +18,6 @@ const { mocks } = vi.hoisted(() => {
 				url: 'https://remote.example.com',
 				name: 'Remote Chatto',
 				iconUrl: null,
-				version: null as string | null,
 				token: 'token',
 				userId: 'user-1',
 				userLogin: 'alice',
@@ -73,10 +72,6 @@ vi.mock('$app/paths', () => ({
 		path
 			.replace('[serverId]', params?.serverId ?? '')
 			.replace('[roomId]', params?.roomId ?? '')
-}));
-
-vi.mock('$app/environment', () => ({
-	version: '0.3.7'
 }));
 
 vi.mock('$lib/hooks', () => ({
@@ -164,7 +159,6 @@ describe('ServerSidebarEntry', () => {
 		mocks.store.serverIndicator.mockReturnValue(null);
 		mocks.store.serverInfo.name = 'Chatto';
 		mocks.store.serverInfo.iconUrl = null;
-		mocks.server.version = null;
 	});
 
 	afterEach(() => {
@@ -261,33 +255,5 @@ describe('ServerSidebarEntry', () => {
 			expect(mocks.store.notifications.setUnreadNotificationCount).toHaveBeenLastCalledWith(0);
 		});
 		expect(consoleWarnSpy).not.toHaveBeenCalled();
-	});
-
-	it('shows a compatibility warning for servers from an older minor version', async () => {
-		mocks.server.version = '0.2.9';
-		mockSidebarQueries({
-			ServerSidebarEntryInit: { data: initData() },
-			ServerSidebarEntryNotificationCount: {
-				data: {
-					server: {
-						viewerNotifications: { totalCount: 0 }
-					}
-				},
-				error: null
-			}
-		});
-
-		const { container } = render(ServerSidebarEntry, {
-			props: {
-				serverId: 'remote',
-				currentUserId: 'user-1'
-			}
-		});
-
-		await vi.waitFor(() => {
-			expect(container.querySelector('[data-testid="server-version-warning"]')).not.toBeNull();
-		});
-		const warning = q(container, '[data-testid="server-version-warning"]')!;
-		expect(warning.getAttribute('title')).toContain('Some features may not work');
 	});
 });

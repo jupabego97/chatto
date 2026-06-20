@@ -10,7 +10,6 @@
   import { isUnsupportedGraphQLFieldError } from '$lib/gql/compatibility';
   import { notificationTarget } from '$lib/state/server/notifications.svelte';
   import { appState } from '$lib/state/globals.svelte';
-  import { serverVersionWarning } from '$lib/versionCompatibility';
   import ServerIcon from './ServerIcon.svelte';
   import { useTabResumeCallback } from '$lib/hooks';
 
@@ -55,7 +54,6 @@
   const iconTitle = $derived(
     iconDimmed ? `${iconServer.name} (connection unavailable)` : iconServer.name
   );
-  const versionWarning = $derived(serverVersionWarning(registeredServer?.version));
 
   // Single dispatcher for icon clicks — kind comes from serverIndicator()
   // so the two paths can't drift out of sync with what was rendered.
@@ -378,5 +376,4 @@
   onIndicatorClick={handleServerIndicatorClick}
   title={iconTitle}
   dimmed={iconDimmed}
-  {versionWarning}
 />
