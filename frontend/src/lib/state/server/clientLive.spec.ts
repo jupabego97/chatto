@@ -205,6 +205,7 @@ describe('client live websocket request mux', () => {
 
   it('uses same-origin cookie auth for the live ticket when no bearer token is registered', async () => {
     const origin = 'https://local.chatto.test';
+    vi.stubGlobal('document', { cookie: 'chatto_csrf=csrf-token' });
     vi.stubGlobal('window', {
       location: {
         origin,
@@ -230,7 +231,10 @@ describe('client live websocket request mux', () => {
       `${origin}/api/live-token`,
       expect.objectContaining({
         credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' }
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': 'csrf-token'
+        }
       })
     );
   });

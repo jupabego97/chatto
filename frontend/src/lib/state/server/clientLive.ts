@@ -6,6 +6,7 @@ import {
   TimeFormat,
   VideoProcessingStatus
 } from '$lib/gql/graphql';
+import { csrfHeaders } from '$lib/auth/csrf';
 import type { EventEnvelope, EventHandler } from '$lib/eventBus.svelte';
 import {
   ClientLiveClientFrameSchema,
@@ -298,6 +299,8 @@ async function fetchLiveTicket(
   };
   if (bearerToken) {
     headers.Authorization = `Bearer ${bearerToken}`;
+  } else {
+    Object.assign(headers, csrfHeaders());
   }
   const response = await fetch(resolveServerURL(server.url, info.tokenUrl), {
     method: 'POST',
