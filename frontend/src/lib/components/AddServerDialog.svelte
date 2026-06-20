@@ -191,7 +191,8 @@ ADR-027 — only user-facing copy says "server".
         state,
         remoteUrl: probedUrl,
         serverName: probedInfo.name,
-        serverIconUrl: probedInfo.iconUrl ?? null
+        serverIconUrl: probedInfo.iconUrl ?? null,
+        serverVersion: probedInfo.version ?? null
       });
 
       const params = new URLSearchParams({

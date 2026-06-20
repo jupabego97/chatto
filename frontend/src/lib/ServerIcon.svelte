@@ -14,7 +14,8 @@
     notificationCount = 0,
     onIndicatorClick,
     title,
-    dimmed = false
+    dimmed = false,
+    versionWarning = null
   }: {
     /** Display data for the icon (server name + optional logo). */
     server?: { name: string; logoUrl?: string | null };
@@ -31,6 +32,8 @@
     title?: string;
     /** Render as unavailable/degraded while keeping the icon in the gutter. */
     dimmed?: boolean;
+    /** Compatibility warning shown in the lower-right corner. */
+    versionWarning?: string | null;
   } = $props();
 </script>
 
@@ -101,5 +104,17 @@
         />
       {/if}
     {/if}
+  {/if}
+
+  {#if versionWarning}
+    <span
+      class="absolute -right-1.5 -bottom-1.5 z-20 flex h-5 w-5 items-center justify-center rounded-full bg-warning text-white ring-2 ring-background"
+      title={versionWarning}
+      aria-label={versionWarning}
+      role="img"
+      data-testid="server-version-warning"
+    >
+      <span class="iconify uil--exclamation-triangle text-xs"></span>
+    </span>
   {/if}
 </div>
