@@ -1,7 +1,6 @@
 <script lang="ts">
-	import { tick, onMount } from 'svelte';
+	import { onMount } from 'svelte';
 	import type { VideoProcessingStatus } from '$lib/gql/graphql';
-	import { fullscreenVideo } from '$lib/state/globals.svelte';
 
 	import 'vidstack/player/styles/default/theme.css';
 	import 'vidstack/player/styles/default/layouts/video.css';
@@ -38,7 +37,8 @@
 		reasonCode = null,
 		filename,
 		autoLoop = false,
-		onMediaError
+		onMediaError,
+		onOpenFullSize
 	}: {
 		status: VideoProcessingStatus;
 		variants?: Variant[];
@@ -49,6 +49,12 @@
 		filename: string;
 		autoLoop?: boolean;
 		onMediaError?: () => void;
+		onOpenFullSize?: (media: {
+			src: string;
+			poster: string | null;
+			startTime: number;
+			variantQuality: string;
+		}) => void;
 	} = $props();
 
 	const MAX_WIDTH = 480;
@@ -91,9 +97,19 @@
 
 	let playerEl = $state<HTMLElement | null>(null);
 
+	function openFullSize(startTime = 0) {
+		if (!selectedVariant) return;
+		onOpenFullSize?.({
+			src: selectedVariant.url,
+			poster: thumbnailUrl ?? null,
+			startTime,
+			variantQuality: selectedVariant.quality
+		});
+	}
+
 	// Intercept Vidstack's fullscreen request — the <media-player> lives inside
 	// virtua's virtualized list, so native fullscreen would cause virtua to
-	// unmount the DOM node. Instead, open our CSS overlay outside the list.
+	// unmount the DOM node. Open the routed media viewer instead.
 	$effect(() => {
 		if (!playerEl) return;
 
@@ -104,20 +120,7 @@
 			const video = playerEl?.querySelector('video');
 			if (video) video.pause();
 
-			fullscreenVideo.open(
-				selectedVariant.url,
-				thumbnailUrl ?? null,
-				video?.currentTime ?? 0
-			);
-
-			// Request native fullscreen on the overlay after Svelte renders it.
-			// tick() preserves the user activation from this click event.
-			tick().then(() => {
-				document
-					.querySelector('.fullscreen-overlay')
-					?.requestFullscreen()
-					.catch(() => {});
-			});
+			openFullSize(video?.currentTime ?? 0);
 		}
 
 		// Use capture phase so we intercept before Vidstack's internal handler.
@@ -132,8 +135,18 @@
 {#if status === 'COMPLETED' && selectedVariant && autoLoop}
 	<!-- Converted GIFs use a native <video> for reliable autoplay + loop behavior. -->
 	<div
-		class="embed-frame"
+		role="button"
+		tabindex="0"
+		class={['embed-frame', onOpenFullSize && 'cursor-pointer']}
 		style="width: {displaySize.width}px; max-width: 100%;"
+		onclick={() => openFullSize()}
+		onkeydown={(e) => {
+			if (e.key === 'Enter' || e.key === ' ') {
+				e.preventDefault();
+				openFullSize();
+			}
+		}}
+		aria-label={onOpenFullSize ? `View ${filename}` : undefined}
 	>
 		<video
 			autoplay

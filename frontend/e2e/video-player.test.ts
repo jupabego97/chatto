@@ -69,6 +69,22 @@ test.describe('video player @ffmpeg', () => {
           expect(computedDisplay).toBe('none');
         }
 
+        // The inline player's fullscreen action opens Chatto's routed media viewer.
+        await roomPage.mediaPlayer.evaluate((player) => {
+          player.dispatchEvent(
+            new Event('media-enter-fullscreen-request', {
+              bubbles: true,
+              cancelable: true
+            })
+          );
+        });
+        const dialog = page.locator('dialog[open]');
+        await expect(dialog).toBeVisible({ timeout: TIMEOUTS.UI_FAST });
+        await expect(dialog.locator('media-player')).toBeVisible({ timeout: TIMEOUTS.UI_STANDARD });
+        await expect(dialog.getByText('test-video.mp4')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(dialog).not.toBeVisible({ timeout: TIMEOUTS.UI_FAST });
+
         // User 2: the asset processing completion event must also be delivered
         // via the subscription so that the second user sees the player without reloading.
         await expect(roomPage2.mediaPlayer).toBeVisible({ timeout: VIDEO_PROCESSING_TIMEOUT });

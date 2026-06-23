@@ -46,7 +46,7 @@
   import type { FragmentType } from '$lib/gql/fragment-masking';
   import { useFragment } from '$lib/gql/fragment-masking';
   import type { MessageAttachmentViewFragment } from '$lib/gql/graphql';
-  import type { ImageItem } from '$lib/ui/ImageModal.svelte';
+  import type { MediaViewerItem } from '$lib/ui/mediaViewer';
 
   type RawAttachment = MessageAttachmentViewFragment;
   import VideoPlayer from '$lib/components/chat/VideoPlayer.svelte';
@@ -172,7 +172,122 @@
     };
   }
 
-  const imageAttachments = $derived(attachments.filter((a) => a.contentType.startsWith('image/')));
+  type VideoVariant = NonNullable<Attachment['videoProcessing']>['variants'][number];
+
+  function bestVideoVariant(attachment: Attachment): VideoVariant | null {
+    const variants = attachment.videoProcessing?.variants ?? [];
+    if (variants.length === 0) return null;
+    return variants.reduce((best, variant) => (variant.height > best.height ? variant : best));
+  }
+
+  function freshAssetUrl(
+    freshUrls: Map<string, RefreshedAttachmentUrls> | null,
+    attachment: Attachment
+  ): string {
+    return normalizeAssetUrl(freshUrls?.get(attachment.id)?.assetUrl)?.url ?? attachment.url;
+  }
+
+  function freshVideoVariantUrl(
+    freshUrls: Map<string, RefreshedAttachmentUrls> | null,
+    attachment: Attachment,
+    variant: VideoVariant
+  ): string {
+    return (
+      normalizeAssetUrl(freshUrls?.get(attachment.id)?.variantAssetUrls.get(variant.quality))?.url ??
+      variant.url
+    );
+  }
+
+  function freshVideoPosterUrl(
+    freshUrls: Map<string, RefreshedAttachmentUrls> | null,
+    attachment: Attachment
+  ): string | null {
+    return (
+      normalizeAssetUrl(freshUrls?.get(attachment.id)?.videoThumbnailAssetUrl)?.url ??
+      attachment.videoProcessing?.thumbnailUrl ??
+      null
+    );
+  }
+
+  function mediaViewerItem(
+    attachment: Attachment,
+    freshUrls: Map<string, RefreshedAttachmentUrls> | null = null,
+    startTime = 0
+  ): MediaViewerItem | null {
+    if (attachment.contentType === 'image/gif' && attachment.videoProcessing) {
+      const variant = bestVideoVariant(attachment);
+      if (!variant?.url) return null;
+      return {
+        kind: 'video',
+        id: attachment.id,
+        src: freshVideoVariantUrl(freshUrls, attachment, variant),
+        poster: freshVideoPosterUrl(freshUrls, attachment),
+        filename: attachment.filename,
+        autoLoop: true,
+        width: attachment.videoProcessing.width,
+        height: attachment.videoProcessing.height,
+        startTime,
+        openUrl: freshAssetUrl(freshUrls, attachment),
+        source: {
+          kind: 'variant',
+          quality: variant.quality
+        }
+      };
+    }
+
+    if (attachment.contentType.startsWith('image/')) {
+      const src = freshAssetUrl(freshUrls, attachment);
+      return {
+        kind: 'image',
+        id: attachment.id,
+        src,
+        openUrl: src,
+        alt: attachment.filename,
+        filename: attachment.filename
+      };
+    }
+
+    if (attachment.contentType.startsWith('video/') && attachment.videoProcessing) {
+      const variant = bestVideoVariant(attachment);
+      if (!variant?.url) return null;
+      return {
+        kind: 'video',
+        id: attachment.id,
+        src: freshVideoVariantUrl(freshUrls, attachment, variant),
+        poster: freshVideoPosterUrl(freshUrls, attachment),
+        filename: attachment.filename,
+        width: attachment.videoProcessing.width,
+        height: attachment.videoProcessing.height,
+        startTime,
+        openUrl: freshAssetUrl(freshUrls, attachment),
+        source: {
+          kind: 'variant',
+          quality: variant.quality
+        }
+      };
+    }
+
+    if (attachment.contentType.startsWith('video/')) {
+      const src = freshAssetUrl(freshUrls, attachment);
+      return {
+        kind: 'video',
+        id: attachment.id,
+        src,
+        filename: attachment.filename,
+        width: attachment.width,
+        height: attachment.height,
+        startTime,
+        openUrl: src,
+        source: {
+          kind: 'asset'
+        }
+      };
+    }
+
+    return null;
+  }
+
+  const mediaAttachments = $derived(attachments.filter((a) => mediaViewerItem(a) !== null));
 
   const connection = useConnection();
 
@@ -275,24 +390,21 @@
     return refreshAttachmentUrlsForMessage(connection().client, roomId, eventId);
   }
 
-  async function openImageModal(attachment: Attachment) {
-    const idx = imageAttachments.indexOf(attachment);
+  async function openMediaViewer(attachment: Attachment, startTime = 0) {
+    const idx = mediaAttachments.indexOf(attachment);
     // Refresh in one round-trip so navigating between images in the
-    // lightbox can't hit an expired URL mid-session.
+    // media viewer can't hit an expired URL mid-session.
     const freshUrls = await refreshAndApplyUrls();
-    const imageItems: ImageItem[] = imageAttachments.map((a) => ({
-      id: a.id,
-      src: normalizeAssetUrl(freshUrls.get(a.id)?.assetUrl)?.url ?? a.url,
-      alt: a.filename,
-      filename: a.filename
-    }));
+    const mediaItems: MediaViewerItem[] = mediaAttachments
+      .map((a) => mediaViewerItem(a, freshUrls, a.id === attachment.id ? startTime : 0))
+      .filter((item): item is MediaViewerItem => item !== null);
     pushState('', {
       modal: {
-        type: 'imageViewer',
+        type: 'mediaViewer',
         roomId,
         eventId,
-        imageItems,
-        imageIndex: idx >= 0 ? idx : 0
+        mediaItems,
+        mediaIndex: idx >= 0 ? idx : 0
       }
     });
   }
@@ -308,7 +420,7 @@
   }
 
   function openDeleteConfirmation(attachment: Attachment, event: Event) {
-    // Prevent opening the image modal
+    // Prevent opening the media viewer
     event.stopPropagation();
 
     pushState('', {
@@ -338,6 +450,7 @@
             filename={attachment.filename}
             autoLoop
             onMediaError={() => refreshAfterAssetError(attachment, 'video')}
+            onOpenFullSize={({ startTime }) => openMediaViewer(attachment, startTime)}
           />
           {#if canDeleteAttachment}
             <button
@@ -358,7 +471,7 @@
             : null}
         <button
           type="button"
-          onclick={() => openImageModal(attachment)}
+          onclick={() => openMediaViewer(attachment)}
           aria-label="View {attachment.filename}"
           class={[
             'group/attachment relative block min-w-0 cursor-pointer embed-frame',
@@ -406,6 +519,7 @@
             reasonCode={attachment.videoProcessing.reasonCode}
             filename={attachment.filename}
             onMediaError={() => refreshAfterAssetError(attachment, 'video')}
+            onOpenFullSize={({ startTime }) => openMediaViewer(attachment, startTime)}
           />
           {#if canDeleteAttachment}
             <button
@@ -426,7 +540,7 @@
           or processing has never been requested for this asset. Render the raw
           original so the user can at least play it.
         -->
-        <div class="embed-frame">
+        <div class="group/attachment relative embed-frame">
           <video
             controls
             preload="metadata"
@@ -436,6 +550,18 @@
           >
             <track kind="captions" />
           </video>
+          <button
+            type="button"
+            onclick={(e) => {
+              const video = e.currentTarget.parentElement?.querySelector('video');
+              void openMediaViewer(attachment, video?.currentTime ?? 0);
+            }}
+            class="embed-control-button z-10 md:group-hover/attachment:opacity-100"
+            aria-label="View {attachment.filename}"
+            title="View"
+          >
+            <span class="iconify text-sm uil--expand-arrows"></span>
+          </button>
         </div>
       {:else if attachment.contentType.startsWith('audio/')}
         <div class="group/attachment relative min-w-0">

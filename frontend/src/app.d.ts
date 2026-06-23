@@ -1,3 +1,5 @@
+import type { MediaViewerItem } from '$lib/ui/mediaViewer';
+
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 declare global {
@@ -17,7 +19,7 @@ declare global {
           | 'leaveServer'
           | 'deleteAttachment'
           | 'deleteLinkPreview'
-          | 'imageViewer';
+          | 'mediaViewer';
         spaceId?: string;
         roomId?: string;
         roomName?: string;
@@ -27,8 +29,8 @@ declare global {
         attachmentId?: string;
         attachmentFilename?: string;
         previewUrl?: string;
-        imageItems?: Array<{ id?: string; src: string; alt?: string; filename?: string }>;
-        imageIndex?: number;
+        mediaItems?: MediaViewerItem[];
+        mediaIndex?: number;
       };
     }
     // interface Platform {}

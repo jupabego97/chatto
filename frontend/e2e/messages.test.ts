@@ -569,7 +569,7 @@ test('deleted message with thread replies remains visible', async ({
   }
 });
 
-test('image lightbox supports keyboard navigation with multiple images', async ({
+test('media viewer supports keyboard navigation with multiple images', async ({
   page,
   chatPage,
   roomPage
@@ -593,10 +593,10 @@ test('image lightbox supports keyboard navigation with multiple images', async (
   // Wait for both attachment images to appear in the message
   await expect(roomPage.attachmentImage).toHaveCount(2, { timeout: TIMEOUTS.COMPLEX_OPERATION });
 
-  // Click the first image to open the lightbox
+  // Click the first image to open the media viewer
   await roomPage.attachmentImage.first().click();
 
-  // Verify lightbox is open with counter showing "1 / 2"
+  // Verify media viewer is open with counter showing "1 / 2"
   const dialog = page.locator('dialog[open]');
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText('1 / 2')).toBeVisible();
@@ -620,11 +620,11 @@ test('image lightbox supports keyboard navigation with multiple images', async (
   await expect(dialog.getByText('brighton2.jpg')).toBeVisible();
 
   // Verify navigation buttons are present
-  await expect(dialog.getByRole('button', { name: 'Previous image' })).toBeVisible();
-  await expect(dialog.getByRole('button', { name: 'Next image' })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Previous media' })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Next media' })).toBeVisible();
 
-  // Click the "Next image" button
-  await dialog.getByRole('button', { name: 'Next image' }).click();
+  // Click the "Next media" button
+  await dialog.getByRole('button', { name: 'Next media' }).click();
   await expect(dialog.getByText('1 / 2')).toBeVisible();
 
   // Close with Escape
@@ -632,7 +632,7 @@ test('image lightbox supports keyboard navigation with multiple images', async (
   await expect(dialog).not.toBeVisible();
 });
 
-test('image lightbox does not show navigation for single image', async ({
+test('media viewer does not show navigation for single image', async ({
   page,
   chatPage,
   roomPage
@@ -644,16 +644,16 @@ test('image lightbox does not show navigation for single image', async ({
   // Upload a single image
   await roomPage.sendAttachment('e2e/fixtures/brighton.jpg');
 
-  // Click the image to open the lightbox
+  // Click the image to open the media viewer
   await roomPage.attachmentImage.click();
 
-  // Verify lightbox is open
+  // Verify media viewer is open
   const dialog = page.locator('dialog[open]');
   await expect(dialog).toBeVisible();
 
   // Verify no navigation controls are shown
-  await expect(dialog.getByRole('button', { name: 'Previous image' })).not.toBeVisible();
-  await expect(dialog.getByRole('button', { name: 'Next image' })).not.toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Previous media' })).not.toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Next media' })).not.toBeVisible();
 
   // Verify no counter is shown
   await expect(dialog.getByText(/\d+ \/ \d+/)).not.toBeVisible();
@@ -663,8 +663,8 @@ test('image lightbox does not show navigation for single image', async ({
   await expect(dialog).not.toBeVisible();
 });
 
-test.describe('image lightbox back button and tap behavior', () => {
-  test('closes lightbox with browser back and stays on room page', async ({
+test.describe('media viewer back button and tap behavior', () => {
+  test('closes media viewer with browser back and stays on room page', async ({
     page,
     chatPage,
     roomPage
@@ -675,7 +675,7 @@ test.describe('image lightbox back button and tap behavior', () => {
 
     await roomPage.sendAttachment('e2e/fixtures/brighton.jpg');
 
-    // Remember the URL before opening lightbox
+    // Remember the URL before opening media viewer
     const roomUrl = page.url();
 
     await roomPage.attachmentImage.click();
@@ -685,14 +685,14 @@ test.describe('image lightbox back button and tap behavior', () => {
     // Press browser back
     await page.goBack();
 
-    // Lightbox should close
+    // Media viewer should close
     await expect(dialog).not.toBeVisible({ timeout: TIMEOUTS.UI_FAST });
 
     // Should still be on the same room page
     expect(page.url()).toBe(roomUrl);
   });
 
-  test('closes lightbox by clicking backdrop', async ({ page, chatPage, roomPage }) => {
+  test('closes media viewer by clicking backdrop', async ({ page, chatPage, roomPage }) => {
     await createAndLoginTestUser(page);
     await chatPage.goto();
     await chatPage.enterRoom('general');

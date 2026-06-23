@@ -73,6 +73,17 @@ test.describe('animated GIF to video conversion @ffmpeg', () => {
       // No Vidstack player or controls should be rendered for converted GIFs.
       await expect(roomPage.mediaPlayer).not.toBeVisible({ timeout: TIMEOUTS.UI_FAST });
 
+      // Clicking the converted GIF opens it in the full-size media viewer.
+      await gifVideo.click();
+      const dialog = page.locator('dialog[open]');
+      await expect(dialog).toBeVisible({ timeout: TIMEOUTS.UI_FAST });
+      await expect(dialog.locator('video[data-autoloop]')).toBeVisible({
+        timeout: TIMEOUTS.UI_FAST
+      });
+      await expect(dialog.getByText('test-animation.gif')).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(dialog).not.toBeVisible({ timeout: TIMEOUTS.UI_FAST });
+
       // User 2: Should also see the converted video via real-time subscription.
       const gifVideo2 = page2.locator('video[data-autoloop]');
       await expect(gifVideo2).toBeVisible({ timeout: VIDEO_PROCESSING_TIMEOUT });

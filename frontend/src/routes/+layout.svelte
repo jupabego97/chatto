@@ -9,7 +9,6 @@
   import IdleTracker from '$lib/components/IdleTracker.svelte';
   import NotificationSync from '$lib/components/NotificationSync.svelte';
   import UpdateNotifier from '$lib/components/UpdateNotifier.svelte';
-  import FullscreenVideoOverlay from '$lib/components/chat/FullscreenVideoOverlay.svelte';
   import { usePageTitle, usePinchZoomPrevention, useVisualViewport } from '$lib/hooks';
   import {
     installAssetProxyResyncHandler,
@@ -246,7 +245,6 @@
   </div>
 
   <ModalContainer />
-  <FullscreenVideoOverlay />
 {/snippet}
 
 <ToastContainer />

@@ -15,10 +15,12 @@
   import { Button } from '$lib/ui/form';
   import CreateRoom from '$lib/CreateRoom.svelte';
 
-  import ImageModal from '$lib/ui/ImageModal.svelte';
+  import MediaViewer from '$lib/ui/MediaViewer.svelte';
+  import type { MediaViewerItem } from '$lib/ui/mediaViewer';
 
   import { graphql } from '$lib/gql';
   import { refreshAttachmentUrlsForMessage } from '$lib/attachments/attachmentUrls';
+  import { assetUrlForServer } from '$lib/assets/assetUrls';
   import { toast } from '$lib/ui/toast';
   import { clearLastRoom } from '$lib/storage/lastRoom';
 
@@ -42,8 +44,8 @@
   let deletingLinkPreview = $state(false);
   let deletingAttachment = $state(false);
 
-  // Keep the lightbox ahead of the one-hour access ticket expiry.
-  const IMAGE_MODAL_URL_REFRESH_MS = 50 * 60 * 1000;
+  // Keep the media viewer ahead of the one-hour access ticket expiry.
+  const MEDIA_VIEWER_URL_REFRESH_MS = 50 * 60 * 1000;
 
   async function handleLeaveRoom(roomId: string) {
     leavingRoom = true;
@@ -173,9 +175,55 @@
     closeModal();
   }
 
-  async function refreshImageViewerUrls() {
+  function normalizeAssetUrl(url: string | null | undefined): string | null {
+    if (!url) return null;
+    return assetUrlForServer(activeInstanceId, url) ?? url;
+  }
+
+  function refreshMediaViewerItem(
+    item: MediaViewerItem,
+    freshUrls: Awaited<ReturnType<typeof refreshAttachmentUrlsForMessage>>
+  ): MediaViewerItem {
+    if (!item.id) return item;
+
+    const refreshed = freshUrls.get(item.id);
+    if (!refreshed) return item;
+
+    if (item.kind === 'image') {
+      const src = normalizeAssetUrl(refreshed.assetUrl.url) ?? item.src;
+      return {
+        ...item,
+        src,
+        openUrl: src
+      };
+    }
+
+    const openUrl = normalizeAssetUrl(refreshed.assetUrl.url) ?? item.openUrl;
+    const poster = normalizeAssetUrl(refreshed.videoThumbnailAssetUrl?.url) ?? item.poster;
+
+    if (item.source.kind === 'asset') {
+      const src = normalizeAssetUrl(refreshed.assetUrl.url) ?? item.src;
+      return {
+        ...item,
+        src,
+        openUrl: src,
+        poster
+      };
+    }
+
+    const src =
+      normalizeAssetUrl(refreshed.variantAssetUrls.get(item.source.quality)?.url) ?? item.src;
+    return {
+      ...item,
+      src,
+      openUrl,
+      poster
+    };
+  }
+
+  async function refreshMediaViewerUrls() {
     const modal = page.state.modal;
-    if (modal?.type !== 'imageViewer' || !roomId || !eventId || !modal.imageItems?.length) {
+    if (modal?.type !== 'mediaViewer' || !roomId || !eventId || !modal.mediaItems?.length) {
       return;
     }
     const refreshRoomId = roomId;
@@ -190,22 +238,21 @@
     }
     const currentModal = page.state.modal;
     if (
-      currentModal?.type !== 'imageViewer' ||
+      currentModal?.type !== 'mediaViewer' ||
       currentModal.roomId !== refreshRoomId ||
       currentModal.eventId !== refreshEventId ||
-      !currentModal.imageItems?.length
+      !currentModal.mediaItems?.length
     ) {
       return;
     }
-    const imageItems = currentModal.imageItems.map((item) => ({
-      ...item,
-      src: item.id ? (freshUrls.get(item.id)?.assetUrl.url ?? item.src) : item.src
-    }));
+    const mediaItems = currentModal.mediaItems.map((item) =>
+      refreshMediaViewerItem(item, freshUrls)
+    );
     replaceState('', {
       ...page.state,
       modal: {
         ...currentModal,
-        imageItems
+        mediaItems
       }
     });
   }
@@ -218,19 +265,19 @@
   const attachmentId = $derived(page.state.modal?.attachmentId);
   const _attachmentFilename = $derived(page.state.modal?.attachmentFilename);
   const previewUrl = $derived(page.state.modal?.previewUrl);
-  const imageItems = $derived(page.state.modal?.imageItems ?? []);
-  const imageIndex = $derived(page.state.modal?.imageIndex ?? 0);
+  const mediaItems = $derived(page.state.modal?.mediaItems ?? []);
+  const mediaIndex = $derived(page.state.modal?.mediaIndex ?? 0);
 
   $effect(() => {
-    if (modalType !== 'imageViewer') {
+    if (modalType !== 'mediaViewer') {
       return;
     }
 
     const interval = window.setInterval(() => {
-      refreshImageViewerUrls().catch((error: unknown) => {
-        console.warn('Failed to refresh image viewer URLs', error);
+      refreshMediaViewerUrls().catch((error: unknown) => {
+        console.warn('Failed to refresh media viewer URLs', error);
       });
-    }, IMAGE_MODAL_URL_REFRESH_MS);
+    }, MEDIA_VIEWER_URL_REFRESH_MS);
 
     return () => window.clearInterval(interval);
   });
@@ -326,6 +373,6 @@
   >
     Are you sure you want to remove this link preview? This cannot be undone.
   </ConfirmDialog>
-{:else if modalType === 'imageViewer' && imageItems.length > 0}
-  <ImageModal items={imageItems} index={imageIndex} onclose={closeModal} />
+{:else if modalType === 'mediaViewer' && mediaItems.length > 0}
+  <MediaViewer items={mediaItems} index={mediaIndex} onclose={closeModal} />
 {/if}

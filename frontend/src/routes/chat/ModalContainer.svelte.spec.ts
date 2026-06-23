@@ -14,8 +14,10 @@ const { mocks } = vi.hoisted(() => ({
     goto: vi.fn(),
     toastSuccess: vi.fn(),
     toastError: vi.fn(),
+    replaceState: vi.fn(),
     joinRoom: vi.fn(),
     refreshRooms: vi.fn(),
+    refreshAttachmentUrlsForMessage: vi.fn(),
     activeServer: 'origin',
     serverIdParam: '-' as string | undefined,
     servers: [] as Array<{ id: string; url: string; name: string; token: string | null }>,
@@ -48,7 +50,7 @@ vi.mock('$app/state', () => ({
 
 vi.mock('$app/navigation', () => ({
   goto: mocks.goto,
-  replaceState: vi.fn()
+  replaceState: mocks.replaceState
 }));
 
 vi.mock('$app/paths', () => ({
@@ -126,16 +128,19 @@ vi.mock('$lib/auth/signOut', () => ({
 }));
 
 vi.mock('$lib/attachments/attachmentUrls', () => ({
-  refreshAttachmentUrlsForMessage: vi.fn()
+  refreshAttachmentUrlsForMessage: mocks.refreshAttachmentUrlsForMessage
 }));
 
 vi.mock('$lib/CreateRoom.svelte', () => ({
   default: {}
 }));
 
-vi.mock('$lib/ui/ImageModal.svelte', () => ({
-  default: {}
-}));
+vi.mock('$lib/ui/MediaViewer.svelte', async () => {
+  const { default: MediaViewerMock } = await import('./ModalContainerMediaViewerMock.svelte');
+  return {
+    default: MediaViewerMock
+  };
+});
 
 vi.mock('$lib/ui/ConfirmDialog.svelte', async () => {
   const { default: ConfirmDialogMock } = await import('./ModalContainerConfirmDialogMock.svelte');
@@ -182,6 +187,7 @@ beforeEach(() => {
   mocks.refreshRooms.mockResolvedValue(undefined);
   mocks.signOutServer.mockResolvedValue(new Response('{}', { status: 200 }));
   mocks.signOutServers.mockResolvedValue(undefined);
+  mocks.refreshAttachmentUrlsForMessage.mockResolvedValue(new Map());
   mocks.activeServer = 'origin';
   mocks.serverIdParam = '-';
   mocks.originServer = {
@@ -193,6 +199,106 @@ beforeEach(() => {
   mocks.servers = [mocks.originServer];
   mocks.authenticated = { origin: true };
   vi.clearAllMocks();
+});
+
+describe('ModalContainer media viewer modal', () => {
+  it('refreshes image, video variant, and poster URLs while open', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.modal = {
+        type: 'mediaViewer',
+        roomId: 'room-1',
+        eventId: 'event-1',
+        mediaIndex: 1,
+        mediaItems: [
+          {
+            kind: 'image',
+            id: 'img-1',
+            src: '/assets/files/img-1?access=old',
+            openUrl: '/assets/files/img-1?access=old',
+            filename: 'image.jpg'
+          },
+          {
+            kind: 'video',
+            id: 'vid-1',
+            src: '/assets/files/vid-1-720?access=old',
+            poster: '/assets/files/vid-1-thumb?access=old',
+            openUrl: '/assets/files/vid-1?access=old',
+            filename: 'clip.mp4',
+            source: { kind: 'variant', quality: '720p' }
+          }
+        ]
+      };
+      mocks.refreshAttachmentUrlsForMessage.mockResolvedValue(
+        new Map([
+          [
+            'img-1',
+            {
+              assetUrl: {
+                url: '/assets/files/img-1?access=fresh',
+                expiresAt: '2026-06-23T12:00:00Z'
+              },
+              thumbnailAssetUrl: null,
+              videoThumbnailAssetUrl: null,
+              variantAssetUrls: new Map()
+            }
+          ],
+          [
+            'vid-1',
+            {
+              assetUrl: {
+                url: '/assets/files/vid-1?access=fresh',
+                expiresAt: '2026-06-23T12:00:00Z'
+              },
+              thumbnailAssetUrl: null,
+              videoThumbnailAssetUrl: {
+                url: '/assets/files/vid-1-thumb?access=fresh',
+                expiresAt: '2026-06-23T12:00:00Z'
+              },
+              variantAssetUrls: new Map([
+                [
+                  '720p',
+                  {
+                    url: '/assets/files/vid-1-720?access=fresh',
+                    expiresAt: '2026-06-23T12:00:00Z'
+                  }
+                ]
+              ])
+            }
+          ]
+        ])
+      );
+
+      render(ModalContainer);
+      await vi.advanceTimersByTimeAsync(50 * 60 * 1000);
+
+      await vi.waitFor(() => {
+        expect(mocks.replaceState).toHaveBeenCalledWith(
+          '',
+          expect.objectContaining({
+            modal: expect.objectContaining({
+              type: 'mediaViewer',
+              mediaItems: [
+                expect.objectContaining({
+                  kind: 'image',
+                  src: 'https://origin.example.test/assets/files/img-1?access=fresh',
+                  openUrl: 'https://origin.example.test/assets/files/img-1?access=fresh'
+                }),
+                expect.objectContaining({
+                  kind: 'video',
+                  src: 'https://origin.example.test/assets/files/vid-1-720?access=fresh',
+                  poster: 'https://origin.example.test/assets/files/vid-1-thumb?access=fresh',
+                  openUrl: 'https://origin.example.test/assets/files/vid-1?access=fresh'
+                })
+              ]
+            })
+          })
+        );
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('ModalContainer join room modal', () => {
