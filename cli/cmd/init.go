@@ -98,6 +98,7 @@ var initCmd = &cobra.Command{
 			},
 			Management: config.ManagementConfig{
 				SocketPath: ".chatto/admin.sock",
+				SocketMode: "0600",
 			},
 			Core: config.CoreConfig{
 				SecretKey: coreSecretString,

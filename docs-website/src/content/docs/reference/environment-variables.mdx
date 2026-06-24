@@ -106,7 +106,15 @@ The management API is a private Unix-socket API used by local operator CLI comma
 </EnvVar>
 
 <EnvVar name="CHATTO_MANAGEMENT_SOCKET_PATH" toml="management.socket_path" default=".chatto/admin.sock">
-  Unix socket path for the private management API. Relative config-file paths resolve relative to the `chatto.toml` directory. The server creates the parent directory with private permissions and binds the socket with mode `0600`; existing parent directories must not be accessible by group or other users.
+  Unix socket path for the private management API. Relative config-file paths resolve relative to the `chatto.toml` directory. The server creates the parent directory with private permissions. Existing parent directories must be owned by the server user and must not be accessible by other users.
+</EnvVar>
+
+<EnvVar name="CHATTO_MANAGEMENT_SOCKET_MODE" toml="management.socket_mode" default="0600">
+  Unix socket permission mode for the private management API. Use `0600` for owner-only access. Use `0660` only with an explicit `management.socket_group`.
+</EnvVar>
+
+<EnvVar name="CHATTO_MANAGEMENT_SOCKET_GROUP" toml="management.socket_group">
+  Expected Unix group for the management socket parent directory when `management.socket_mode = "0660"`. The parent directory must be owned by the server user, have this group, be group-executable, not be group-writable, and not be accessible by other users.
 </EnvVar>
 
 ## Exporter

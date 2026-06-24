@@ -2,11 +2,13 @@ package managementserver
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -67,13 +69,72 @@ func TestServerServesUserAdminServiceOnUnixSocket(t *testing.T) {
 	}
 }
 
+func TestServerUsesConfiguredGroupSocketMode(t *testing.T) {
+	_, nc := testutil.StartNATS(t)
+	ctx := context.Background()
+	chattoCore, err := core.NewChattoCore(ctx, nc, config.CoreConfig{})
+	if err != nil {
+		t.Fatalf("NewChattoCore: %v", err)
+	}
+	startCoreServices(t, chattoCore)
+
+	socketDir := filepath.Join(t.TempDir(), "group-readable")
+	if err := os.Mkdir(socketDir, 0750); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	if err := os.Chmod(socketDir, 0750); err != nil {
+		t.Fatalf("Chmod: %v", err)
+	}
+	socketPath := filepath.Join(socketDir, "admin.sock")
+	server := New(config.ManagementConfig{
+		SocketPath:  socketPath,
+		SocketMode:  "0660",
+		SocketGroup: dirGroup(t, socketDir),
+	}, chattoCore)
+	serverCtx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- server.Run(serverCtx) }()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("management server stopped with error: %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("management server did not stop")
+		}
+	})
+	waitForSocket(t, socketPath)
+
+	info, err := os.Stat(socketPath)
+	if err != nil {
+		t.Fatalf("stat socket: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0660 {
+		t.Fatalf("socket permissions = %o, want 0660", got)
+	}
+}
+
+func TestServerRejectsInvalidSocketMode(t *testing.T) {
+	server := New(config.ManagementConfig{
+		SocketPath: filepath.Join(privateTempDir(t), "admin.sock"),
+		SocketMode: "0640",
+	}, nil)
+
+	err := server.Run(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "management.socket_mode must be 0600 or 0660") {
+		t.Fatalf("Run() error = %v, want invalid socket mode error", err)
+	}
+}
+
 func TestPrepareSocketPathRefusesNonSocketPath(t *testing.T) {
 	path := filepath.Join(privateTempDir(t), "admin.sock")
 	if err := os.WriteFile(path, []byte("do not delete"), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	err := prepareSocketPath(path)
+	err := prepareSocketPath(path, 0600, "")
 	if err == nil || !strings.Contains(err.Error(), "not a socket") {
 		t.Fatalf("prepareSocketPath error = %v, want not-a-socket error", err)
 	}
@@ -93,11 +154,64 @@ func TestPrepareSocketPathRejectsSharedParentDirectory(t *testing.T) {
 				t.Fatalf("Chmod: %v", err)
 			}
 
-			err := prepareSocketPath(filepath.Join(dir, "admin.sock"))
-			if err == nil || !strings.Contains(err.Error(), "must not be accessible by group or others") {
+			err := prepareSocketPath(filepath.Join(dir, "admin.sock"), 0600, "")
+			if err == nil || !strings.Contains(err.Error(), "must not be accessible by other users") {
 				t.Fatalf("prepareSocketPath error = %v, want shared-parent error", err)
 			}
 		})
+	}
+}
+
+func TestPrepareSocketPathAllowsExplicitGroupReadableParent(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "group-readable")
+	if err := os.Mkdir(dir, 0750); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	if err := os.Chmod(dir, 0750); err != nil {
+		t.Fatalf("Chmod: %v", err)
+	}
+
+	err := prepareSocketPath(filepath.Join(dir, "admin.sock"), 0660, dirGroup(t, dir))
+	if err != nil {
+		t.Fatalf("prepareSocketPath: %v", err)
+	}
+}
+
+func TestPrepareSocketPathRejectsGroupModeWithoutExpectedGroup(t *testing.T) {
+	err := prepareSocketPath(filepath.Join(privateTempDir(t), "admin.sock"), 0660, "")
+	if err == nil || !strings.Contains(err.Error(), "management.socket_group is required") {
+		t.Fatalf("prepareSocketPath error = %v, want missing-group error", err)
+	}
+}
+
+func TestPrepareSocketPathRejectsGroupWritableParentDirectory(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "group-writable")
+	if err := os.Mkdir(dir, 0770); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	if err := os.Chmod(dir, 0770); err != nil {
+		t.Fatalf("Chmod: %v", err)
+	}
+
+	err := prepareSocketPath(filepath.Join(dir, "admin.sock"), 0660, dirGroup(t, dir))
+	if err == nil || !strings.Contains(err.Error(), "must not be group-writable") {
+		t.Fatalf("prepareSocketPath error = %v, want group-writable error", err)
+	}
+}
+
+func TestPrepareSocketPathRejectsUnexpectedParentDirectoryGroup(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "wrong-group")
+	if err := os.Mkdir(dir, 0750); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	if err := os.Chmod(dir, 0750); err != nil {
+		t.Fatalf("Chmod: %v", err)
+	}
+
+	expectedGID := dirGroupID(t, dir) + 1
+	err := prepareSocketPath(filepath.Join(dir, "admin.sock"), 0660, fmt.Sprint(expectedGID))
+	if err == nil || !strings.Contains(err.Error(), "directory group does not match") {
+		t.Fatalf("prepareSocketPath error = %v, want group mismatch error", err)
 	}
 }
 
@@ -111,7 +225,7 @@ func TestPrepareSocketPathRemovesStaleSocket(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 
-	if err := prepareSocketPath(path); err != nil {
+	if err := prepareSocketPath(path, 0600, ""); err != nil {
 		t.Fatalf("prepareSocketPath: %v", err)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -127,7 +241,7 @@ func TestPrepareSocketPathRefusesActiveSocket(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = ln.Close() })
 
-	err = prepareSocketPath(path)
+	err = prepareSocketPath(path, 0600, "")
 	if err == nil || !strings.Contains(err.Error(), "already in use") {
 		t.Fatalf("prepareSocketPath error = %v, want already-in-use error", err)
 	}
@@ -167,6 +281,24 @@ func privateTempDir(t *testing.T) string {
 		t.Fatalf("Chmod private temp dir: %v", err)
 	}
 	return dir
+}
+
+func dirGroup(t *testing.T, dir string) string {
+	t.Helper()
+	return fmt.Sprint(dirGroupID(t, dir))
+}
+
+func dirGroupID(t *testing.T, dir string) uint32 {
+	t.Helper()
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("Stat %s: %v", dir, err)
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		t.Fatalf("Stat %s returned unsupported stat type", dir)
+	}
+	return stat.Gid
 }
 
 func startCoreServices(t *testing.T, c *core.ChattoCore) {
