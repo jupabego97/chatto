@@ -807,8 +807,7 @@ type UserExternalIdentityLinkedEvent struct {
 	UserId string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	// Durable identity namespace used for lookup. For OIDC providers this is the
 	// verified issuer URL from the ID token, which lets the link survive local
-	// provider ID or label changes. For OAuth-only providers this is the stable
-	// configured local provider ID because there is no verified issuer URL.
+	// provider ID or label changes.
 	Issuer string `protobuf:"bytes,2,opt,name=issuer,proto3" json:"issuer,omitempty"`
 	// Raw provider subjects are included only for events written after this
 	// field existed. Projections prefer subject_hash when present.

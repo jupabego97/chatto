@@ -414,33 +414,24 @@ type CoreConfig struct {
 
 const (
 	AuthProviderTypeOpenIDConnect = "oidc"
-	AuthProviderTypeGitHub        = "github"
-	AuthProviderTypeGitLab        = "gitlab"
-	AuthProviderTypeGoogle        = "google"
-	AuthProviderTypeDiscord       = "discord"
 )
 
 var authProviderDefaultLabels = map[string]string{
 	AuthProviderTypeOpenIDConnect: "OpenID Connect",
-	AuthProviderTypeGitHub:        "GitHub",
-	AuthProviderTypeGitLab:        "GitLab",
-	AuthProviderTypeGoogle:        "Google",
-	AuthProviderTypeDiscord:       "Discord",
 }
 
-// AuthProviderConfig contains one configured external login provider. The ID is
-// a stable local issuer namespace for OAuth-only providers and must not be
-// changed after users link identities through it.
+// AuthProviderConfig contains one configured OIDC login provider. The ID is
+// local routing/config metadata; durable identity matching uses issuer+subject.
 type AuthProviderConfig struct {
-	ID              string            `toml:"id" comment:"Stable provider ID used in callback URLs and external identity links. Do not change after users link accounts."`
-	Type            string            `toml:"type" comment:"Provider type: oidc, github, gitlab, google, or discord."`
+	ID              string            `toml:"id" comment:"Stable provider ID used in callback URLs and auth provider metadata."`
+	Type            string            `toml:"type" comment:"Provider type. Only oidc is supported."`
 	Label           string            `toml:"label,commented" comment:"Button label shown on the login page. Defaults to the provider type's display name."`
-	ClientID        string            `toml:"client_id" comment:"OAuth/OIDC client ID."`
-	ClientSecret    string            `toml:"client_secret" comment:"OAuth/OIDC client secret. NEVER SHARE THIS!"`
-	IssuerURL       string            `toml:"issuer_url,commented" comment:"OIDC issuer URL. Required when type = 'oidc'."`
-	Scopes          []string          `toml:"scopes,commented" comment:"Optional OAuth scopes. Defaults are provider-specific."`
-	RequestEmail    *bool             `toml:"request_email,commented" comment:"Whether to request email scopes for providers that support it. Default: true."`
-	ProviderOptions map[string]string `toml:"provider_options,commented" comment:"Provider-specific options reserved for future use."`
+	ClientID        string            `toml:"client_id" comment:"OIDC client ID."`
+	ClientSecret    string            `toml:"client_secret" comment:"OIDC client secret. NEVER SHARE THIS!"`
+	IssuerURL       string            `toml:"issuer_url" comment:"OIDC issuer URL."`
+	Scopes          []string          `toml:"scopes,commented" comment:"Optional OIDC scopes. Defaults to openid, profile, and email when request_email is true."`
+	RequestEmail    *bool             `toml:"request_email,commented" comment:"Whether to request the email scope. Default: true."`
+	ProviderOptions map[string]string `toml:"provider_options,commented" comment:"OIDC provider-specific options reserved for future use."`
 }
 
 // LabelOrDefault returns the configured label, or a provider-specific default.
@@ -529,7 +520,7 @@ func (c *AuthConfig) DirectRegistrationOrDefault() bool {
 	return *c.DirectRegistration
 }
 
-// EnabledProviders returns a list of configured SSO provider IDs.
+// EnabledProviders returns a list of configured OIDC provider IDs.
 func (c *AuthConfig) EnabledProviders() []string {
 	providers := make([]string, 0, len(c.Providers))
 	for _, provider := range c.Providers {
@@ -538,16 +529,13 @@ func (c *AuthConfig) EnabledProviders() []string {
 	return providers
 }
 
-// EnabledProviderMethods returns legacy method-oriented SSO provider names.
+// EnabledProviderMethods returns legacy method-oriented provider names.
 // Provider-specific IDs are exposed through PublicProviders/AuthProvider.
 func (c *AuthConfig) EnabledProviderMethods() []string {
 	methods := make([]string, 0, len(c.Providers))
 	seen := make(map[string]struct{}, len(c.Providers))
-	for _, provider := range c.Providers {
-		method := provider.Type
-		if provider.Type == AuthProviderTypeOpenIDConnect {
-			method = "oidc"
-		}
+	for range c.Providers {
+		method := AuthProviderTypeOpenIDConnect
 		if _, ok := seen[method]; ok {
 			continue
 		}
@@ -1041,8 +1029,12 @@ func (c *ChattoConfig) Validate() error {
 		} else {
 			seenProviderIDs[provider.ID] = struct{}{}
 		}
+		if provider.Type == "" {
+			provider.Type = AuthProviderTypeOpenIDConnect
+			c.Auth.Providers[i].Type = provider.Type
+		}
 		if !IsAllowedAuthProviderType(provider.Type) {
-			errs = append(errs, prefix+".type must be one of: oidc, github, gitlab, google, discord")
+			errs = append(errs, prefix+".type must be oidc")
 		}
 		if provider.ClientID == "" {
 			errs = append(errs, prefix+".client_id is required")
@@ -1050,8 +1042,8 @@ func (c *ChattoConfig) Validate() error {
 		if provider.ClientSecret == "" {
 			errs = append(errs, prefix+".client_secret is required")
 		}
-		if provider.Type == AuthProviderTypeOpenIDConnect && provider.IssuerURL == "" {
-			errs = append(errs, prefix+".issuer_url is required when type = 'oidc'")
+		if provider.IssuerURL == "" {
+			errs = append(errs, prefix+".issuer_url is required")
 		}
 		if provider.IssuerURL != "" {
 			if err := validateAbsoluteHTTPURL(prefix+".issuer_url", provider.IssuerURL); err != nil {
@@ -1225,44 +1217,31 @@ func ReadConfig(configPath string) (ChattoConfig, error) {
 }
 
 func applyAuthProviderEnv(cfg *ChattoConfig) error {
+	if legacyNames := legacyOIDCEnvNames(); len(legacyNames) > 0 {
+		return fmt.Errorf("%s is no longer supported; configure OIDC with CHATTO_AUTH_PROVIDERS_<index>_* variables instead", legacyNames[0])
+	}
 	providers, providersSet, err := authProvidersFromEnv()
 	if err != nil {
 		return err
 	}
-	legacyOIDCEnabled := strings.TrimSpace(os.Getenv("CHATTO_AUTH_OIDC_ENABLED"))
 
 	if providersSet {
-		if legacyOIDCEnabled != "" {
-			return fmt.Errorf("CHATTO_AUTH_PROVIDERS_* cannot be combined with legacy CHATTO_AUTH_OIDC_ENABLED")
-		}
 		cfg.Auth.Providers = providers
-		return nil
 	}
-
-	if legacyOIDCEnabled == "" {
-		return nil
-	}
-	enabled, err := strconv.ParseBool(legacyOIDCEnabled)
-	if err != nil {
-		return fmt.Errorf("CHATTO_AUTH_OIDC_ENABLED must be a boolean: %w", err)
-	}
-	if !enabled {
-		cfg.Auth.Providers = nil
-		return nil
-	}
-	label := os.Getenv("CHATTO_AUTH_OIDC_LABEL")
-	if label == "" {
-		label = "Chatto Hub"
-	}
-	cfg.Auth.Providers = []AuthProviderConfig{{
-		ID:           "oidc",
-		Type:         AuthProviderTypeOpenIDConnect,
-		Label:        label,
-		IssuerURL:    os.Getenv("CHATTO_AUTH_OIDC_ISSUER_URL"),
-		ClientID:     os.Getenv("CHATTO_AUTH_OIDC_CLIENT_ID"),
-		ClientSecret: os.Getenv("CHATTO_AUTH_OIDC_CLIENT_SECRET"),
-	}}
 	return nil
+}
+
+func legacyOIDCEnvNames() []string {
+	const prefix = "CHATTO_AUTH_OIDC_"
+	var names []string
+	for _, entry := range os.Environ() {
+		name, _, ok := strings.Cut(entry, "=")
+		if ok && strings.HasPrefix(name, prefix) {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 func authProvidersFromEnv() ([]AuthProviderConfig, bool, error) {

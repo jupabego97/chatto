@@ -306,13 +306,13 @@ export type AttachmentUrlArgs = {
 /** External login provider metadata safe to expose before authentication. */
 export type AuthProvider = {
   __typename?: 'AuthProvider';
-  /** Stable provider ID used in login URLs and external identity links. */
+  /** Stable provider ID used in login URLs and provider metadata. */
   id: Scalars['ID']['output'];
   /** Human-readable label for login UI. */
   label: Scalars['String']['output'];
   /** Relative URL that starts this provider's login flow. */
   loginUrl: Scalars['String']['output'];
-  /** Provider type, such as 'oidc', 'github', or 'google'. */
+  /** Provider type. Only 'oidc' is supported. */
   type: Scalars['String']['output'];
 };
 

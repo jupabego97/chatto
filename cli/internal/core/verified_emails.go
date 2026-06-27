@@ -251,6 +251,12 @@ func (c *ChattoCore) addVerifiedEmail(ctx context.Context, userID, email string)
 		}
 	}
 
+	c.assignOwnerRoleForVerifiedEmail(ctx, userID, email)
+
+	return nil
+}
+
+func (c *ChattoCore) assignOwnerRoleForVerifiedEmail(ctx context.Context, userID, email string) {
 	// Auto-promote on config-owner email match. This is what closes the
 	// chicken-and-egg gap on fresh deployments: as soon as the operator's
 	// account verifies their email, they pick up the `owner` role without
@@ -264,8 +270,6 @@ func (c *ChattoCore) addVerifiedEmail(ctx context.Context, userID, email string)
 				"user_id", userID)
 		}
 	}
-
-	return nil
 }
 
 // GetVerifiedEmails returns all verified emails for a user from the user projection.
@@ -290,7 +294,7 @@ func (c *ChattoCore) GetUserByVerifiedEmail(ctx context.Context, email string) (
 	if user, ok := c.Users.GetByEmail(email); ok {
 		return user, nil
 	}
-	return nil, fmt.Errorf("no user found with verified email")
+	return nil, ErrNotFound
 }
 
 // CountVerifiedUsers returns the number of distinct users with at least

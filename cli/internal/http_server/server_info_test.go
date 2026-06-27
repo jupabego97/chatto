@@ -117,7 +117,7 @@ func TestServerInfo(t *testing.T) {
 		s := setupServerInfoServer(t, config.AuthConfig{
 			Providers: []config.AuthProviderConfig{
 				{ID: "hub", Type: config.AuthProviderTypeOpenIDConnect, Label: "Chatto Hub"},
-				{ID: "github-main", Type: config.AuthProviderTypeGitHub},
+				{ID: "hub-backup", Type: config.AuthProviderTypeOpenIDConnect},
 			},
 		})
 
@@ -130,7 +130,7 @@ func TestServerInfo(t *testing.T) {
 			t.Fatalf("failed to parse response: %v", err)
 		}
 
-		if got, want := resp.AuthMethods, []string{"password", "oidc", "github"}; strings.Join(got, ",") != strings.Join(want, ",") {
+		if got, want := resp.AuthMethods, []string{"password", "oidc"}; strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Fatalf("authMethods = %v, want %v", got, want)
 		}
 		if len(resp.AuthProviders) != 2 {
@@ -139,7 +139,7 @@ func TestServerInfo(t *testing.T) {
 		if resp.AuthProviders[0].ID != "hub" || resp.AuthProviders[0].Type != config.AuthProviderTypeOpenIDConnect || resp.AuthProviders[0].Label != "Chatto Hub" || resp.AuthProviders[0].LoginURL != "/auth/providers/hub" {
 			t.Fatalf("authProviders[0] = %+v", resp.AuthProviders[0])
 		}
-		if resp.AuthProviders[1].ID != "github-main" || resp.AuthProviders[1].Type != config.AuthProviderTypeGitHub || resp.AuthProviders[1].Label != "GitHub" || resp.AuthProviders[1].LoginURL != "/auth/providers/github-main" {
+		if resp.AuthProviders[1].ID != "hub-backup" || resp.AuthProviders[1].Type != config.AuthProviderTypeOpenIDConnect || resp.AuthProviders[1].Label != "OpenID Connect" || resp.AuthProviders[1].LoginURL != "/auth/providers/hub-backup" {
 			t.Fatalf("authProviders[1] = %+v", resp.AuthProviders[1])
 		}
 	})

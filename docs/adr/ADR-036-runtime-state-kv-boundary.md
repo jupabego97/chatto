@@ -70,6 +70,10 @@ Current occupants include:
   deletes entries whose stored user ID matches.
 - OAuth authorization-code verifiers: `grant.{hmac}`, with per-key 5-minute
   TTL. Values include the user auth generation they were issued against.
+- Pending OIDC confirmations: `pending_oidc.{hmac}`, with per-key 15-minute
+  TTL. Values include the verified issuer, subject, and optional verified
+  profile claims needed after an unlinked provider callback while the user
+  confirms account creation or linking.
 - Account workflow credential verifiers: `email_otp.{hmac(subject)}.{hmac(code)}`,
   `email_otp.{hmac(subject)}.challenge`, `registration_completion.{hmac}`,
   `password_reset.{hmac}`, and `account_deletion_token.{hmac}`, with per-key
@@ -80,12 +84,13 @@ Current occupants include:
   `UserDataEncryptionKey` per purpose-scoped user DEK epoch. These records have
   no TTL and are shredded on account deletion.
 
-The HMAC keys for cookie sessions, bearer tokens, OAuth codes, and account workflow tokens are
-derived with `[core].secret_key` from the raw token/code plus a per-flow scope
-string. `RUNTIME_STATE` is included in backups, so active sessions and pending
-flows survive restore when the same secret is used; restoring with a different
-secret intentionally invalidates those credentials. Backup archives do not
-contain raw cookie session IDs, bearer tokens, links, or OAuth codes.
+The HMAC keys for cookie sessions, bearer tokens, OAuth codes, pending OIDC
+tokens, and account workflow tokens are derived with `[core].secret_key` from
+the raw token/code plus a per-flow scope string. `RUNTIME_STATE` is included in
+backups, so active sessions and pending flows survive restore when the same
+secret is used; restoring with a different secret intentionally invalidates
+those credentials. Backup archives do not contain raw cookie session IDs,
+bearer tokens, pending OIDC tokens, links, or OAuth codes.
 
 Attachment declarations and video derivative manifests are not a `RUNTIME_STATE`
 target. Uploaded assets are content and are declared with `AssetCreatedEvent`;

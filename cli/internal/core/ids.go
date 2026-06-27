@@ -98,6 +98,11 @@ func NewAuthToken() string {
 	return "cht_" + newID("AT")
 }
 
+// NewPendingOIDCToken generates a short-lived pending OIDC confirmation token.
+func NewPendingOIDCToken() string {
+	return "cht_" + newID("PO")
+}
+
 // NewCookieSessionID generates a new opaque cookie session ID with "cht_CS" prefix.
 func NewCookieSessionID() string {
 	return "cht_" + newID("CS")

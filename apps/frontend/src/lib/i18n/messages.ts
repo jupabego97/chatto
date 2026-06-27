@@ -314,6 +314,11 @@ const msg_settings_account_danger_description = (): LocalizedString => messages(
 const msg_settings_account_delete_button = (): LocalizedString => messages().settings_account_delete_button(empty());
 const msg_settings_account_delete_failed = (): LocalizedString => messages().settings_account_delete_failed(empty());
 const msg_settings_account_delete_request_failed = (): LocalizedString => messages().settings_account_delete_request_failed(empty());
+const msg_settings_account_oidc_title = (): LocalizedString => messages().settings_account_oidc_title(empty());
+const msg_settings_account_oidc_description = (): LocalizedString => messages().settings_account_oidc_description(empty());
+const msg_settings_account_oidc_connect_provider = (
+  inputs: Parameters<LocaleMessages['settings_account_oidc_connect_provider']>[0]
+): LocalizedString => messages().settings_account_oidc_connect_provider(inputs);
 const msg_settings_account_delete_modal_title = (): LocalizedString => messages().settings_account_delete_modal_title(empty());
 const msg_settings_account_delete_modal_warning_label = (): LocalizedString => messages().settings_account_delete_modal_warning_label(empty());
 const msg_settings_account_delete_modal_warning_text = (): LocalizedString => messages().settings_account_delete_modal_warning_text(empty());
@@ -339,6 +344,23 @@ const msg_auth_login_signing_in = (): LocalizedString => messages().auth_login_s
 const msg_auth_login_forgot_password = (): LocalizedString => messages().auth_login_forgot_password(empty());
 const msg_auth_login_failed = (): LocalizedString => messages().auth_login_failed(empty());
 const msg_auth_login_missing_token = (): LocalizedString => messages().auth_login_missing_token(empty());
+const msg_auth_oidc_title = (): LocalizedString => messages().auth_oidc_title(empty());
+const msg_auth_oidc_heading = (): LocalizedString => messages().auth_oidc_heading(empty());
+const msg_auth_oidc_pending_missing = (): LocalizedString => messages().auth_oidc_pending_missing(empty());
+const msg_auth_oidc_load_failed = (): LocalizedString => messages().auth_oidc_load_failed(empty());
+const msg_auth_oidc_submit_failed = (): LocalizedString => messages().auth_oidc_submit_failed(empty());
+const msg_auth_oidc_submit_timeout = (): LocalizedString => messages().auth_oidc_submit_timeout(empty());
+const msg_auth_oidc_missing_redirect = (): LocalizedString => messages().auth_oidc_missing_redirect(empty());
+const msg_auth_oidc_unlinked_notice = (
+  inputs: Parameters<LocaleMessages['auth_oidc_unlinked_notice']>[0]
+): LocalizedString => messages().auth_oidc_unlinked_notice(inputs);
+const msg_auth_oidc_identity_label = (): LocalizedString => messages().auth_oidc_identity_label(empty());
+const msg_auth_oidc_create_new = (): LocalizedString => messages().auth_oidc_create_new(empty());
+const msg_auth_oidc_link_existing = (): LocalizedString => messages().auth_oidc_link_existing(empty());
+const msg_auth_oidc_link_current = (): LocalizedString => messages().auth_oidc_link_current(empty());
+const msg_auth_oidc_creating = (): LocalizedString => messages().auth_oidc_creating(empty());
+const msg_auth_oidc_linking = (): LocalizedString => messages().auth_oidc_linking(empty());
+const msg_auth_oidc_return_login = (): LocalizedString => messages().auth_oidc_return_login(empty());
 const msg_auth_forgot_password_title = (): LocalizedString => messages().auth_forgot_password_title(empty());
 const msg_auth_forgot_password_submitted_title = (): LocalizedString => messages().auth_forgot_password_submitted_title(empty());
 const msg_auth_forgot_password_submitted_text = (): LocalizedString => messages().auth_forgot_password_submitted_text(empty());
@@ -1480,6 +1502,9 @@ export { msg_settings_account_danger_description as 'settings.account.danger_des
 export { msg_settings_account_delete_button as 'settings.account.delete_button' };
 export { msg_settings_account_delete_failed as 'settings.account.delete_failed' };
 export { msg_settings_account_delete_request_failed as 'settings.account.delete_request_failed' };
+export { msg_settings_account_oidc_title as 'settings.account.oidc.title' };
+export { msg_settings_account_oidc_description as 'settings.account.oidc.description' };
+export { msg_settings_account_oidc_connect_provider as 'settings.account.oidc.connect_provider' };
 export { msg_settings_account_delete_modal_title as 'settings.account.delete_modal.title' };
 export { msg_settings_account_delete_modal_warning_label as 'settings.account.delete_modal.warning_label' };
 export { msg_settings_account_delete_modal_warning_text as 'settings.account.delete_modal.warning_text' };
@@ -1503,6 +1528,21 @@ export { msg_auth_login_signing_in as 'auth.login.signing_in' };
 export { msg_auth_login_forgot_password as 'auth.login.forgot_password' };
 export { msg_auth_login_failed as 'auth.login.failed' };
 export { msg_auth_login_missing_token as 'auth.login.missing_token' };
+export { msg_auth_oidc_title as 'auth.oidc.title' };
+export { msg_auth_oidc_heading as 'auth.oidc.heading' };
+export { msg_auth_oidc_pending_missing as 'auth.oidc.pending_missing' };
+export { msg_auth_oidc_load_failed as 'auth.oidc.load_failed' };
+export { msg_auth_oidc_submit_failed as 'auth.oidc.submit_failed' };
+export { msg_auth_oidc_submit_timeout as 'auth.oidc.submit_timeout' };
+export { msg_auth_oidc_missing_redirect as 'auth.oidc.missing_redirect' };
+export { msg_auth_oidc_unlinked_notice as 'auth.oidc.unlinked_notice' };
+export { msg_auth_oidc_identity_label as 'auth.oidc.identity_label' };
+export { msg_auth_oidc_create_new as 'auth.oidc.create_new' };
+export { msg_auth_oidc_link_existing as 'auth.oidc.link_existing' };
+export { msg_auth_oidc_link_current as 'auth.oidc.link_current' };
+export { msg_auth_oidc_creating as 'auth.oidc.creating' };
+export { msg_auth_oidc_linking as 'auth.oidc.linking' };
+export { msg_auth_oidc_return_login as 'auth.oidc.return_login' };
 export { msg_auth_forgot_password_title as 'auth.forgot_password.title' };
 export { msg_auth_forgot_password_submitted_title as 'auth.forgot_password.submitted_title' };
 export { msg_auth_forgot_password_submitted_text as 'auth.forgot_password.submitted_text' };

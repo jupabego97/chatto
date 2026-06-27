@@ -8,10 +8,14 @@
   import { useQuery } from '$lib/hooks';
   import { notifyLogout } from '$lib/auth/sessionChannel';
   import { csrfFetch } from '$lib/auth/csrf';
+  import { getAuthServerInfo } from '$lib/components/authServerInfo';
   import * as m from '$lib/i18n/messages';
 
   const currentUser = $derived(serverRegistry.getStore(getActiveServer()).currentUser);
   const connection = useConnection();
+  const authServerInfo = getAuthServerInfo();
+  const authProviders = $derived(authServerInfo()?.authProviders ?? []);
+  const isOriginServer = $derived(serverRegistry.isOriginServer(getActiveServer()));
 
   // Check if the user has permission to delete their own account
   const permQuery = useQuery(
@@ -113,6 +117,11 @@
       isDeleting = false;
     }
   }
+
+  function providerLinkHref(provider: { loginUrl: string }): string {
+    const redirect = `/chat/${getActiveServer()}/settings/account`;
+    return `${provider.loginUrl}?mode=link&redirect=${encodeURIComponent(redirect)}`;
+  }
 </script>
 
 <PaneHeader
@@ -135,6 +144,20 @@
       </div>
     </dl>
   </FormSection>
+
+  {#if isOriginServer && authProviders.length > 0}
+    <FormSection title={m['settings.account.oidc.title']()} maxWidth="max-w-md">
+      <div class="flex flex-col gap-3">
+        <p class="text-sm text-muted">{m['settings.account.oidc.description']()}</p>
+        {#each authProviders as provider (provider.id)}
+          <Button variant="secondary" href={providerLinkHref(provider)}>
+            <span class="iconify mdi--link-variant"></span>
+            {m['settings.account.oidc.connect_provider']({ provider: provider.label })}
+          </Button>
+        {/each}
+      </div>
+    </FormSection>
+  {/if}
 
   <!-- Danger Zone (only shown if user has permission to delete their own account) -->
   {#if canDeleteAccount}

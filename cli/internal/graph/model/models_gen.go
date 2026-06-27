@@ -139,9 +139,9 @@ type AssignRoleInput struct {
 
 // External login provider metadata safe to expose before authentication.
 type AuthProvider struct {
-	// Stable provider ID used in login URLs and external identity links.
+	// Stable provider ID used in login URLs and provider metadata.
 	ID string `json:"id"`
-	// Provider type, such as 'oidc', 'github', or 'google'.
+	// Provider type. Only 'oidc' is supported.
 	Type string `json:"type"`
 	// Human-readable label for login UI.
 	Label string `json:"label"`

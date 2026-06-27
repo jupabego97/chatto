@@ -45,7 +45,7 @@ func DeletedUserReference(userID string) *corev1.User {
 // CreateUser creates a new user.
 // Uses the mentionables projection plus stream-wide OCC to prevent user/role
 // handle collisions across replicas.
-// Password is optional - pass empty string for OAuth-only users.
+// Password is optional - pass empty string for passwordless users.
 // Note: actorID parameter is retained for future use (e.g., admin-created users) but is not currently used.
 func (c *ChattoCore) CreateUser(ctx context.Context, actorID string, login, displayName, password string) (*corev1.User, error) {
 	// Trim and validate login (preserve original casing)
@@ -398,7 +398,7 @@ func (c *ChattoCore) verifyUserPassword(ctx context.Context, user *corev1.User, 
 	// Retrieve password hash from the user projection.
 	passwordHash, ok := c.Users.PasswordHash(user.Id)
 	if !ok {
-		// No password set (OAuth-only user) - run dummy bcrypt to match timing
+		// No password set (passwordless user) - run dummy bcrypt to match timing.
 		bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
 		return nil, 0, fmt.Errorf("password not set for this user")
 	}

@@ -68,21 +68,6 @@
     }
   }
 
-  function providerIcon(type: string): string {
-    switch (type) {
-      case 'github':
-        return 'mdi--github';
-      case 'gitlab':
-        return 'mdi--gitlab';
-      case 'google':
-        return 'mdi--google';
-      case 'discord':
-        return 'mdi--discord';
-      default:
-        return 'mdi--shield-account';
-    }
-  }
-
   function providerLoginHref(provider: PublicAuthProvider): string {
     return `${provider.loginUrl}?redirect=${encodeURIComponent(data.redirectUrl)}`;
   }
@@ -174,7 +159,7 @@
       <div class="flex flex-col gap-3">
         {#each authProviders as provider (provider.id)}
           <Button variant="secondary" size="lg" fullWidth href={providerLoginHref(provider)}>
-            <span class={['iconify text-lg', providerIcon(provider.type)]}></span>
+            <span class="iconify text-lg mdi--shield-account"></span>
             {m['auth.login.continue_with_provider']({ provider: provider.label })}
           </Button>
         {/each}

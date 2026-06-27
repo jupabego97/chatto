@@ -90,9 +90,6 @@ func TestInitGeneratesCoreSecret(t *testing.T) {
 	if !strings.Contains(rawText, "\n# [[auth.providers]]\n# id = 'chatto-hub'\n# type = 'oidc'") {
 		t.Fatal("generated config should include a commented OIDC auth provider example")
 	}
-	if !strings.Contains(rawText, "\n# [[auth.providers]]\n# id = 'github'\n# type = 'github'") {
-		t.Fatal("generated config should include a commented GitHub auth provider example")
-	}
 	if !strings.Contains(rawText, "\n[auth.email_otp]\n") {
 		t.Fatal("generated config should include an active auth.email_otp section")
 	}

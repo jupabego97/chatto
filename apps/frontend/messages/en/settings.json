@@ -276,6 +276,11 @@
       "delete_button": "Delete Account",
       "delete_failed": "Failed to delete account",
       "delete_request_failed": "Failed to request account deletion",
+      "oidc": {
+        "title": "Connected Sign-In",
+        "description": "Connect an external OIDC identity so you can sign in through that provider.",
+        "connect_provider": "Connect {provider}"
+      },
       "delete_modal": {
         "title": "Delete Account",
         "warning_label": "Warning:",

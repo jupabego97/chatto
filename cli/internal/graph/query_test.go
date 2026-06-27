@@ -1067,7 +1067,7 @@ func TestQueryResolver_Server(t *testing.T) {
 			version: "1.0.0",
 			authConfig: config.AuthConfig{Providers: []config.AuthProviderConfig{
 				{ID: "chatto-hub", Type: config.AuthProviderTypeOpenIDConnect},
-				{ID: "github-main", Type: config.AuthProviderTypeGitHub},
+				{ID: "company-idp", Type: config.AuthProviderTypeOpenIDConnect},
 			}},
 		}
 

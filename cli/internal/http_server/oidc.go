@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,14 +19,12 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
-	"github.com/markbates/goth"
-	"github.com/markbates/goth/providers/discord"
-	"github.com/markbates/goth/providers/github"
-	"github.com/markbates/goth/providers/gitlab"
-	"github.com/markbates/goth/providers/google"
 	"golang.org/x/oauth2"
 	"hmans.de/chatto/internal/config"
+	"hmans.de/chatto/internal/core"
 	"hmans.de/chatto/internal/core/linkpreview"
+	graphauth "hmans.de/chatto/internal/graph/auth"
+	corev1 "hmans.de/chatto/internal/pb/chatto/core/v1"
 )
 
 const (
@@ -82,7 +81,6 @@ func (s *HTTPServer) setupOIDCRoutes() {
 	}
 
 	configured := make(map[string]*authProviderRuntime, len(providers))
-	var legacyOIDCConfig *config.AuthProviderConfig
 	for _, providerConfig := range providers {
 		runtime, err := newAuthProviderRuntime(providerConfig, s.providerCallbackURL(providerConfig.ID))
 		if err != nil {
@@ -90,25 +88,9 @@ func (s *HTTPServer) setupOIDCRoutes() {
 			continue
 		}
 		configured[providerConfig.ID] = runtime
-		if providerConfig.Type == config.AuthProviderTypeOpenIDConnect {
-			providerConfig := providerConfig
-			if legacyOIDCConfig == nil || providerConfig.ID == "oidc" {
-				legacyOIDCConfig = &providerConfig
-			}
-		}
 	}
 	if len(configured) == 0 {
 		return
-	}
-
-	var legacyOIDCRuntime *authProviderRuntime
-	if legacyOIDCConfig != nil {
-		runtime, err := newAuthProviderRuntime(*legacyOIDCConfig, s.legacyOIDCCallbackURL())
-		if err != nil {
-			s.logger.Error("Skipping legacy OIDC auth route", "provider_id", legacyOIDCConfig.ID, "error", err)
-		} else {
-			legacyOIDCRuntime = runtime
-		}
 	}
 
 	auth := s.router.Group("/auth")
@@ -136,15 +118,20 @@ func (s *HTTPServer) setupOIDCRoutes() {
 
 		s.handleProviderCallback(c, providerRuntime)
 	})
-
-	if legacyOIDCRuntime != nil {
+	if legacyRuntime := s.legacyOIDCRuntime(configured); legacyRuntime != nil {
 		auth.GET("oidc", func(c *gin.Context) {
-			s.handleProviderStart(c, legacyOIDCRuntime)
+			s.handleProviderStart(c, legacyRuntime)
 		})
 		auth.GET("oidc/callback", func(c *gin.Context) {
-			s.handleProviderCallback(c, legacyOIDCRuntime)
+			s.handleProviderCallback(c, legacyRuntime)
 		})
 	}
+
+	auth.GET("pending-oidc/:token", s.handlePendingOIDCGet)
+	auth.POST("pending-oidc/:token/create", s.handlePendingOIDCCreate)
+	auth.POST("pending-oidc/:token/link-password", s.handlePendingOIDCLinkPassword)
+	auth.POST("pending-oidc/:token/link-current", s.handlePendingOIDCLinkCurrent)
+	auth.POST("pending-oidc/:token/cancel", s.handlePendingOIDCCancel)
 }
 
 func (s *HTTPServer) handleProviderStart(c *gin.Context, providerRuntime *authProviderRuntime) {
@@ -155,6 +142,15 @@ func (s *HTTPServer) handleProviderStart(c *gin.Context, providerRuntime *authPr
 		if isValidInternalRedirect(redirect) {
 			session.Set("oauth_redirect", redirect)
 		}
+	}
+	if c.Query("mode") == "link" {
+		session.Set(providerSessionKey(providerRuntime.config.ID, "mode"), "link")
+		if linked := s.authenticatedUser(c); linked != nil {
+			session.Set(providerSessionKey(providerRuntime.config.ID, "link_user_id"), linked.Id)
+		}
+	} else {
+		session.Delete(providerSessionKey(providerRuntime.config.ID, "mode"))
+		session.Delete(providerSessionKey(providerRuntime.config.ID, "link_user_id"))
 	}
 
 	state, err := randomString(32)
@@ -167,37 +163,21 @@ func (s *HTTPServer) handleProviderStart(c *gin.Context, providerRuntime *authPr
 	session.Set(providerSessionKey(providerRuntime.config.ID, "state"), state)
 
 	var authURL string
-	if providerRuntime.config.Type == config.AuthProviderTypeOpenIDConnect {
-		if !providerRuntime.ensureOIDC(c) {
-			return
-		}
-		codeVerifier, err := randomString(64)
-		if err != nil {
-			log.Error("Failed to generate PKCE code verifier", "provider_id", providerRuntime.config.ID, "error", err)
-			c.Redirect(http.StatusTemporaryRedirect, "/login?error=provider_failed")
-			return
-		}
-		session.Set(providerSessionKey(providerRuntime.config.ID, "code_verifier"), codeVerifier)
-		codeChallenge := s256Challenge(codeVerifier)
-		authURL = providerRuntime.oidc.oauth2Config.AuthCodeURL(state,
-			oauth2.SetAuthURLParam("code_challenge", codeChallenge),
-			oauth2.SetAuthURLParam("code_challenge_method", "S256"),
-		)
-	} else {
-		gothSession, err := providerRuntime.goth.BeginAuth(state)
-		if err != nil {
-			log.Error("Failed to begin provider auth", "provider_id", providerRuntime.config.ID, "provider_type", providerRuntime.config.Type, "error", err)
-			c.Redirect(http.StatusTemporaryRedirect, "/login?error=provider_failed")
-			return
-		}
-		session.Set(providerSessionKey(providerRuntime.config.ID, "session"), gothSession.Marshal())
-		authURL, err = gothSession.GetAuthURL()
-		if err != nil {
-			log.Error("Failed to build provider auth URL", "provider_id", providerRuntime.config.ID, "provider_type", providerRuntime.config.Type, "error", err)
-			c.Redirect(http.StatusTemporaryRedirect, "/login?error=provider_failed")
-			return
-		}
+	if !providerRuntime.ensureOIDC(c) {
+		return
 	}
+	codeVerifier, err := randomString(64)
+	if err != nil {
+		log.Error("Failed to generate PKCE code verifier", "provider_id", providerRuntime.config.ID, "error", err)
+		c.Redirect(http.StatusTemporaryRedirect, "/login?error=provider_failed")
+		return
+	}
+	session.Set(providerSessionKey(providerRuntime.config.ID, "code_verifier"), codeVerifier)
+	codeChallenge := s256Challenge(codeVerifier)
+	authURL = providerRuntime.oidc.oauth2Config.AuthCodeURL(state,
+		oauth2.SetAuthURLParam("code_challenge", codeChallenge),
+		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
+	)
 
 	if err := session.Save(); err != nil {
 		log.Error("Failed to save provider auth session", "provider_id", providerRuntime.config.ID, "error", err)
@@ -218,41 +198,41 @@ func (s *HTTPServer) handleProviderCallback(c *gin.Context, providerRuntime *aut
 		log.Warn("Provider callback state mismatch", "provider_id", providerRuntime.config.ID, "provider_type", providerRuntime.config.Type)
 		session.Delete(providerSessionKey(providerRuntime.config.ID, "state"))
 		session.Delete(providerSessionKey(providerRuntime.config.ID, "code_verifier"))
-		session.Delete(providerSessionKey(providerRuntime.config.ID, "session"))
+		session.Delete(providerSessionKey(providerRuntime.config.ID, "mode"))
+		session.Delete(providerSessionKey(providerRuntime.config.ID, "link_user_id"))
 		_ = session.Save()
 		c.Redirect(http.StatusTemporaryRedirect, "/login?error=provider_failed")
 		return
 	}
 
 	session.Delete(providerSessionKey(providerRuntime.config.ID, "state"))
+	mode, _ := session.Get(providerSessionKey(providerRuntime.config.ID, "mode")).(string)
+	session.Delete(providerSessionKey(providerRuntime.config.ID, "mode"))
+	linkUserID, _ := session.Get(providerSessionKey(providerRuntime.config.ID, "link_user_id")).(string)
+	session.Delete(providerSessionKey(providerRuntime.config.ID, "link_user_id"))
 
 	// Check for error from provider
 	if errCode := c.Query("error"); errCode != "" {
 		log.Warn("Provider returned auth error", "provider_id", providerRuntime.config.ID, "provider_type", providerRuntime.config.Type, "error", errCode)
 		session.Delete(providerSessionKey(providerRuntime.config.ID, "code_verifier"))
-		session.Delete(providerSessionKey(providerRuntime.config.ID, "session"))
 		_ = session.Save()
 		c.Redirect(http.StatusTemporaryRedirect, "/login?error=provider_denied")
 		return
 	}
 
-	if providerRuntime.config.Type == config.AuthProviderTypeOpenIDConnect {
-		if !providerRuntime.ensureOIDC(c) {
-			return
-		}
+	if !providerRuntime.ensureOIDC(c) {
+		return
 	}
 
 	identity, err := providerRuntime.resolveIdentity(c, session)
 	if err != nil {
 		log.Error("Provider callback failed", "provider_id", providerRuntime.config.ID, "provider_type", providerRuntime.config.Type, "error", err)
 		session.Delete(providerSessionKey(providerRuntime.config.ID, "code_verifier"))
-		session.Delete(providerSessionKey(providerRuntime.config.ID, "session"))
 		_ = session.Save()
 		c.Redirect(http.StatusTemporaryRedirect, "/login?error=provider_failed")
 		return
 	}
 	session.Delete(providerSessionKey(providerRuntime.config.ID, "code_verifier"))
-	session.Delete(providerSessionKey(providerRuntime.config.ID, "session"))
 	_ = session.Save()
 
 	user, err := s.core.GetUserByExternalIdentity(ctx, identity.issuer, identity.subject)
@@ -262,9 +242,41 @@ func (s *HTTPServer) handleProviderCallback(c *gin.Context, providerRuntime *aut
 		return
 	}
 	if user == nil {
+		if mode == "link" {
+			if linked := s.authenticatedUser(c); linked != nil {
+				if linkUserID == "" || linked.Id != linkUserID {
+					c.Redirect(http.StatusTemporaryRedirect, "/chat?error=oidc_link_failed")
+					return
+				}
+				if _, err := s.core.LinkOIDCIdentityToUser(ctx, linked.Id, identity.toProvisionProfile(providerRuntime.config)); err != nil {
+					log.Error("Failed to link OIDC identity", "provider_id", providerRuntime.config.ID, "userId", linked.Id, "error", err)
+					c.Redirect(http.StatusTemporaryRedirect, "/chat?error=oidc_link_failed")
+					return
+				}
+				c.Redirect(http.StatusTemporaryRedirect, s.providerRedirectURL(session, "/chat?oidc_linked=1"))
+				return
+			}
+		}
 		log.Info("Provider login has no linked Chatto account", "provider_id", providerRuntime.config.ID, "provider_type", providerRuntime.config.Type)
-		c.Redirect(http.StatusTemporaryRedirect, "/login?error=external_identity_unlinked")
+		token, err := s.createPendingOIDCIdentity(c, session, providerRuntime.config, identity, mode, linkUserID)
+		if err != nil {
+			log.Error("Failed to create pending OIDC identity", "provider_id", providerRuntime.config.ID, "error", err)
+			c.Redirect(http.StatusTemporaryRedirect, "/login?error=provider_failed")
+			return
+		}
+		c.Redirect(http.StatusTemporaryRedirect, "/login/oidc?token="+url.QueryEscape(token))
 		return
+	}
+
+	if mode == "link" {
+		if linked := s.authenticatedUser(c); linked != nil {
+			if linked.Id == user.Id {
+				c.Redirect(http.StatusTemporaryRedirect, s.providerRedirectURL(session, "/chat?oidc_linked=1"))
+				return
+			}
+			c.Redirect(http.StatusTemporaryRedirect, "/chat?error=oidc_identity_conflict")
+			return
+		}
 	}
 
 	log.Info("Provider login matched by external identity", "provider_id", providerRuntime.config.ID, "provider_type", providerRuntime.config.Type, "userId", user.Id)
@@ -289,37 +301,47 @@ type authProviderRuntime struct {
 	config      config.AuthProviderConfig
 	callbackURL string
 	oidc        *oidcProvider
-	goth        goth.Provider
 }
 
 type resolvedProviderIdentity struct {
-	issuer    string
-	subject   string
-	email     string
-	avatarURL string
+	issuer        string
+	subject       string
+	email         string
+	emailVerified bool
+	name          string
+	username      string
+	avatarURL     string
 }
 
 func newAuthProviderRuntime(providerConfig config.AuthProviderConfig, callbackURL string) (*authProviderRuntime, error) {
 	runtime := &authProviderRuntime{config: providerConfig, callbackURL: callbackURL}
-	scopes := providerScopes(providerConfig)
 	switch providerConfig.Type {
 	case config.AuthProviderTypeOpenIDConnect:
 		runtime.oidc = &oidcProvider{}
-	case config.AuthProviderTypeGitHub:
-		runtime.goth = github.New(providerConfig.ClientID, providerConfig.ClientSecret, callbackURL, scopes...)
-	case config.AuthProviderTypeGitLab:
-		runtime.goth = gitlab.New(providerConfig.ClientID, providerConfig.ClientSecret, callbackURL, scopes...)
-	case config.AuthProviderTypeGoogle:
-		runtime.goth = google.New(providerConfig.ClientID, providerConfig.ClientSecret, callbackURL, scopes...)
-	case config.AuthProviderTypeDiscord:
-		runtime.goth = discord.New(providerConfig.ClientID, providerConfig.ClientSecret, callbackURL, scopes...)
 	default:
 		return nil, fmt.Errorf("unsupported auth provider type %q", providerConfig.Type)
 	}
-	if runtime.goth != nil {
-		runtime.goth.SetName(providerConfig.ID)
-	}
 	return runtime, nil
+}
+
+func (s *HTTPServer) legacyOIDCRuntime(configured map[string]*authProviderRuntime) *authProviderRuntime {
+	if len(configured) != 1 {
+		return nil
+	}
+	for _, runtime := range configured {
+		legacyRuntime, err := newAuthProviderRuntime(runtime.config, s.legacyOIDCCallbackURL())
+		if err != nil {
+			s.logger.Error("Skipping legacy OIDC alias runtime", "provider_id", runtime.config.ID, "error", err)
+			return nil
+		}
+		return legacyRuntime
+	}
+	return nil
+}
+
+func (s *HTTPServer) legacyOIDCCallbackURL() string {
+	baseURL := strings.TrimRight(s.config.Webserver.URL, "/")
+	return baseURL + "/auth/oidc/callback"
 }
 
 func providerScopes(providerConfig config.AuthProviderConfig) []string {
@@ -337,21 +359,7 @@ func providerScopes(providerConfig config.AuthProviderConfig) []string {
 		}
 		return scopes
 	}
-	if !providerConfig.RequestEmailOrDefault() {
-		return nil
-	}
-	switch providerConfig.Type {
-	case config.AuthProviderTypeGitHub:
-		return []string{"read:user", "user:email"}
-	case config.AuthProviderTypeGoogle:
-		return []string{"openid", "profile", "email"}
-	case config.AuthProviderTypeDiscord:
-		return []string{discord.ScopeIdentify, discord.ScopeEmail}
-	case config.AuthProviderTypeGitLab:
-		return []string{"read_user"}
-	default:
-		return nil
-	}
+	return nil
 }
 
 func hasScope(scopes []string, target string) bool {
@@ -365,10 +373,6 @@ func hasScope(scopes []string, target string) bool {
 
 func (s *HTTPServer) providerCallbackURL(providerID string) string {
 	return strings.TrimRight(s.config.Webserver.URL, "/") + "/auth/providers/" + url.PathEscape(providerID) + "/callback"
-}
-
-func (s *HTTPServer) legacyOIDCCallbackURL() string {
-	return strings.TrimRight(s.config.Webserver.URL, "/") + "/auth/oidc/callback"
 }
 
 func providerSessionKey(providerID, name string) string {
@@ -388,10 +392,7 @@ func (r *authProviderRuntime) ensureOIDC(c *gin.Context) bool {
 }
 
 func (r *authProviderRuntime) resolveIdentity(c *gin.Context, session sessions.Session) (resolvedProviderIdentity, error) {
-	if r.config.Type == config.AuthProviderTypeOpenIDConnect {
-		return r.resolveOIDCIdentity(c, session)
-	}
-	return r.resolveGothIdentity(c, session)
+	return r.resolveOIDCIdentity(c, session)
 }
 
 func (r *authProviderRuntime) resolveOIDCIdentity(c *gin.Context, session sessions.Session) (resolvedProviderIdentity, error) {
@@ -451,45 +452,282 @@ func (r *authProviderRuntime) resolveOIDCIdentity(c *gin.Context, session sessio
 		claims.Email = strings.ToLower(strings.TrimSpace(claims.Email))
 	}
 	return resolvedProviderIdentity{
-		issuer:    idToken.Issuer,
-		subject:   idToken.Subject,
-		email:     claims.Email,
-		avatarURL: claims.Picture,
+		issuer:        idToken.Issuer,
+		subject:       idToken.Subject,
+		email:         claims.Email,
+		emailVerified: claims.EmailVerified,
+		name:          claims.Name,
+		username:      claims.PreferredUser,
+		avatarURL:     claims.Picture,
 	}, nil
 }
 
-func (r *authProviderRuntime) resolveGothIdentity(c *gin.Context, session sessions.Session) (resolvedProviderIdentity, error) {
-	storedSession, _ := session.Get(providerSessionKey(r.config.ID, "session")).(string)
-	if storedSession == "" {
-		return resolvedProviderIdentity{}, fmt.Errorf("missing provider session")
+func (identity resolvedProviderIdentity) toProvisionProfile(providerConfig config.AuthProviderConfig) core.OIDCProvisionProfile {
+	return core.OIDCProvisionProfile{
+		ProviderID:    providerConfig.ID,
+		ProviderLabel: providerConfig.LabelOrDefault(),
+		Issuer:        identity.issuer,
+		Subject:       identity.subject,
+		Email:         identity.email,
+		EmailVerified: identity.emailVerified,
+		Name:          identity.name,
+		Username:      identity.username,
 	}
-	gothSession, err := r.goth.UnmarshalSession(storedSession)
+}
+
+func pendingOIDCToProvisionProfile(pending *core.PendingOIDCIdentity) core.OIDCProvisionProfile {
+	return core.OIDCProvisionProfile{
+		ProviderID:    pending.ProviderID,
+		ProviderLabel: pending.ProviderLabel,
+		Issuer:        pending.Issuer,
+		Subject:       pending.Subject,
+		Email:         pending.Email,
+		EmailVerified: pending.EmailVerified,
+		Name:          pending.Name,
+		Username:      pending.Username,
+	}
+}
+
+func (s *HTTPServer) createPendingOIDCIdentity(c *gin.Context, session sessions.Session, providerConfig config.AuthProviderConfig, identity resolvedProviderIdentity, mode, linkUserID string) (string, error) {
+	redirectURL := "/"
+	if redirect := session.Get("oauth_redirect"); redirect != nil {
+		if r, ok := redirect.(string); ok && r != "" && isValidInternalRedirect(r) {
+			redirectURL = r
+		}
+		session.Delete("oauth_redirect")
+		_ = session.Save()
+	}
+	return s.core.CreatePendingOIDCIdentity(c.Request.Context(), core.PendingOIDCIdentity{
+		ProviderID:    providerConfig.ID,
+		ProviderLabel: providerConfig.LabelOrDefault(),
+		Issuer:        identity.issuer,
+		Subject:       identity.subject,
+		Email:         identity.email,
+		EmailVerified: identity.emailVerified,
+		Name:          identity.name,
+		Username:      identity.username,
+		AvatarURL:     identity.avatarURL,
+		RedirectURL:   redirectURL,
+		Mode:          mode,
+		LinkUserID:    linkUserID,
+	})
+}
+
+func (s *HTTPServer) providerRedirectURL(session sessions.Session, fallback string) string {
+	if redirect := session.Get("oauth_redirect"); redirect != nil {
+		if r, ok := redirect.(string); ok && r != "" && isValidInternalRedirect(r) {
+			session.Delete("oauth_redirect")
+			_ = session.Save()
+			return r
+		}
+	}
+	return fallback
+}
+
+func (s *HTTPServer) handlePendingOIDCGet(c *gin.Context) {
+	pending, err := s.core.GetPendingOIDCIdentity(c.Request.Context(), c.Param("token"))
 	if err != nil {
-		return resolvedProviderIdentity{}, fmt.Errorf("unmarshal provider session: %w", err)
+		status := http.StatusInternalServerError
+		code := "provider_failed"
+		if errors.Is(err, core.ErrPendingOIDCNotFound) || errors.Is(err, core.ErrPendingOIDCExpired) {
+			status = http.StatusNotFound
+			code = "pending_oidc_not_found"
+		}
+		c.JSON(status, gin.H{"error": code})
+		return
 	}
-	if _, err := gothSession.Authorize(r.goth, c.Request.URL.Query()); err != nil {
-		return resolvedProviderIdentity{}, fmt.Errorf("authorize provider session: %w", err)
+	canLinkCurrent := false
+	if pending.LinkUserID != "" {
+		if user := s.authenticatedUser(c); user != nil && user.Id == pending.LinkUserID {
+			canLinkCurrent = true
+		}
 	}
-	gothUser, err := r.goth.FetchUser(gothSession)
+	c.JSON(http.StatusOK, gin.H{
+		"providerId":     pending.ProviderID,
+		"providerLabel":  pending.ProviderLabel,
+		"email":          pending.Email,
+		"emailVerified":  pending.EmailVerified,
+		"name":           pending.Name,
+		"username":       pending.Username,
+		"mode":           pending.Mode,
+		"canLinkCurrent": canLinkCurrent,
+	})
+}
+
+func (s *HTTPServer) handlePendingOIDCCreate(c *gin.Context) {
+	session := sessions.Default(c)
+	ctx := c.Request.Context()
+	token := c.Param("token")
+	pending, err := s.core.GetPendingOIDCIdentity(ctx, token)
 	if err != nil {
-		return resolvedProviderIdentity{}, fmt.Errorf("fetch provider user: %w", err)
+		s.pendingOIDCError(c, err)
+		return
 	}
-	if gothUser.UserID == "" {
-		return resolvedProviderIdentity{}, fmt.Errorf("provider returned empty user id")
+	if user, err := s.core.GetUserByExternalIdentity(ctx, pending.Issuer, pending.Subject); err != nil {
+		log.Error("Failed to lookup pending OIDC identity", "provider_id", pending.ProviderID, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "provider_failed"})
+		return
+	} else if user != nil {
+		_ = s.core.DeletePendingOIDCIdentity(ctx, token)
+		setPendingOIDCRedirect(session, pending)
+		if err := s.completeProviderLogin(c, session, user.Id, config.AuthProviderConfig{ID: pending.ProviderID, Type: config.AuthProviderTypeOpenIDConnect}); err != nil {
+			log.Error("Failed to complete linked pending OIDC login", "provider_id", pending.ProviderID, "userId", user.Id, "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "provider_failed"})
+		}
+		return
 	}
-	return resolvedProviderIdentity{
-		issuer:    r.config.ID,
-		subject:   gothUser.UserID,
-		email:     strings.ToLower(strings.TrimSpace(gothUser.Email)),
-		avatarURL: gothUser.AvatarURL,
-	}, nil
+	user, _, err := s.core.ProvisionOIDCUser(ctx, pendingOIDCToProvisionProfile(pending))
+	if err != nil {
+		log.Error("Failed to provision OIDC user", "provider_id", pending.ProviderID, "error", err)
+		c.JSON(http.StatusConflict, gin.H{"error": "oidc_provision_failed"})
+		return
+	}
+	_ = s.core.DeletePendingOIDCIdentity(ctx, token)
+	if pending.AvatarURL != "" {
+		if existingAvatar, _ := s.core.GetUserAvatar(ctx, user.Id); existingAvatar == nil {
+			if err := fetchAndUploadAvatarFromURL(ctx, pending.AvatarURL, s, user.Id); err != nil {
+				log.Error("Failed to fetch provider avatar", "provider_id", pending.ProviderID, "error", err)
+			}
+		}
+	}
+	setPendingOIDCRedirect(session, pending)
+	if err := s.completeProviderLogin(c, session, user.Id, config.AuthProviderConfig{ID: pending.ProviderID, Type: config.AuthProviderTypeOpenIDConnect}); err != nil {
+		log.Error("Failed to complete provisioned OIDC login", "provider_id", pending.ProviderID, "userId", user.Id, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "provider_failed"})
+		return
+	}
+}
+
+func (s *HTTPServer) handlePendingOIDCLinkPassword(c *gin.Context) {
+	var req struct {
+		Identifier string `json:"identifier"`
+		Login      string `json:"login"`
+		Password   string `json:"password" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Password is required"})
+		return
+	}
+	identifier := req.Identifier
+	if identifier == "" {
+		identifier = req.Login
+	}
+	if strings.TrimSpace(identifier) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Login is required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	token := c.Param("token")
+	pending, err := s.core.GetPendingOIDCIdentity(ctx, token)
+	if err != nil {
+		s.pendingOIDCError(c, err)
+		return
+	}
+	user, authGeneration, err := s.core.VerifyPasswordWithAuthGeneration(ctx, identifier, req.Password)
+	if err != nil {
+		if auditErr := s.core.RecordLoginFailed(ctx, identifier); auditErr != nil {
+			log.Warn("Failed to append failed-login audit event", "error", auditErr)
+		}
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		return
+	}
+	if _, err := s.core.LinkOIDCIdentityToUser(ctx, user.Id, pendingOIDCToProvisionProfile(pending)); err != nil {
+		log.Error("Failed to link pending OIDC identity", "provider_id", pending.ProviderID, "userId", user.Id, "error", err)
+		c.JSON(http.StatusConflict, gin.H{"error": "oidc_identity_conflict"})
+		return
+	}
+	_ = s.core.DeletePendingOIDCIdentity(ctx, token)
+	setPendingOIDCRedirect(sessions.Default(c), pending)
+	if err := s.completeProviderLoginForGeneration(c, sessions.Default(c), user.Id, config.AuthProviderConfig{ID: pending.ProviderID, Type: config.AuthProviderTypeOpenIDConnect}, authGeneration); err != nil {
+		log.Error("Failed to complete linked OIDC login", "provider_id", pending.ProviderID, "userId", user.Id, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "provider_failed"})
+		return
+	}
+}
+
+func (s *HTTPServer) handlePendingOIDCLinkCurrent(c *gin.Context) {
+	user := s.authenticatedUser(c)
+	if user == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication_required"})
+		return
+	}
+	ctx := c.Request.Context()
+	token := c.Param("token")
+	pending, err := s.core.GetPendingOIDCIdentity(ctx, token)
+	if err != nil {
+		s.pendingOIDCError(c, err)
+		return
+	}
+	if pending.LinkUserID == "" || pending.LinkUserID != user.Id {
+		c.JSON(http.StatusForbidden, gin.H{"error": "oidc_link_not_allowed"})
+		return
+	}
+	if _, err := s.core.LinkOIDCIdentityToUser(ctx, user.Id, pendingOIDCToProvisionProfile(pending)); err != nil {
+		log.Error("Failed to link pending OIDC identity to current user", "provider_id", pending.ProviderID, "userId", user.Id, "error", err)
+		c.JSON(http.StatusConflict, gin.H{"error": "oidc_identity_conflict"})
+		return
+	}
+	_ = s.core.DeletePendingOIDCIdentity(ctx, token)
+	setPendingOIDCRedirect(sessions.Default(c), pending)
+	if err := s.completeProviderLogin(c, sessions.Default(c), user.Id, config.AuthProviderConfig{ID: pending.ProviderID, Type: config.AuthProviderTypeOpenIDConnect}); err != nil {
+		log.Error("Failed to complete current-account OIDC login", "provider_id", pending.ProviderID, "userId", user.Id, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "provider_failed"})
+		return
+	}
+}
+
+func setPendingOIDCRedirect(session sessions.Session, pending *core.PendingOIDCIdentity) {
+	if pending == nil {
+		return
+	}
+	if pending.RedirectURL != "" && isValidInternalRedirect(pending.RedirectURL) {
+		session.Set("oauth_redirect", pending.RedirectURL)
+	}
+}
+
+func (s *HTTPServer) handlePendingOIDCCancel(c *gin.Context) {
+	if err := s.core.DeletePendingOIDCIdentity(c.Request.Context(), c.Param("token")); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "provider_failed"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+func (s *HTTPServer) pendingOIDCError(c *gin.Context, err error) {
+	if errors.Is(err, core.ErrPendingOIDCNotFound) || errors.Is(err, core.ErrPendingOIDCExpired) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "pending_oidc_not_found"})
+		return
+	}
+	log.Error("Pending OIDC operation failed", "error", err)
+	c.JSON(http.StatusInternalServerError, gin.H{"error": "provider_failed"})
+}
+
+func (s *HTTPServer) authenticatedUser(c *gin.Context) *corev1.User {
+	req := s.injectUserIntoContext(c)
+	return graphauth.ForContext(req.Context())
 }
 
 func (s *HTTPServer) completeProviderLogin(c *gin.Context, session sessions.Session, userID string, providerConfig config.AuthProviderConfig) error {
-	ctx := c.Request.Context()
 	source := providerConfig.Type + "_login"
-	if err := s.createCookieSession(c, userID, source); err != nil {
-		return fmt.Errorf("save cookie session: %w", err)
+	return s.completeProviderLoginWithSource(c, session, userID, providerConfig, source, nil)
+}
+
+func (s *HTTPServer) completeProviderLoginForGeneration(c *gin.Context, session sessions.Session, userID string, providerConfig config.AuthProviderConfig, authGeneration uint64) error {
+	source := providerConfig.Type + "_login"
+	return s.completeProviderLoginWithSource(c, session, userID, providerConfig, source, &authGeneration)
+}
+
+func (s *HTTPServer) completeProviderLoginWithSource(c *gin.Context, session sessions.Session, userID string, providerConfig config.AuthProviderConfig, source string, authGeneration *uint64) error {
+	ctx := c.Request.Context()
+	if authGeneration != nil {
+		if err := s.createCookieSessionForGeneration(c, userID, source, *authGeneration); err != nil {
+			return fmt.Errorf("save cookie session: %w", err)
+		}
+	} else {
+		if err := s.createCookieSession(c, userID, source); err != nil {
+			return fmt.Errorf("save cookie session: %w", err)
+		}
 	}
 	if err := s.ensureCSRFToken(c); err != nil {
 		session = sessions.Default(c)
@@ -515,6 +753,14 @@ func (s *HTTPServer) completeProviderLogin(c *gin.Context, session sessions.Sess
 		if err != nil {
 			return fmt.Errorf("read auth generation for OAuth authorize: %w", err)
 		}
+		if wantsJSONResponse(c) {
+			redirectURL, ok := s.pendingOAuthAuthorizeRedirectURL(c, userID, authGeneration)
+			if !ok {
+				return nil
+			}
+			c.JSON(http.StatusOK, gin.H{"redirectUrl": redirectURL})
+			return nil
+		}
 		s.continueOAuthAuthorize(c, userID, authGeneration)
 		return nil
 	}
@@ -528,7 +774,14 @@ func (s *HTTPServer) completeProviderLogin(c *gin.Context, session sessions.Sess
 		_ = session.Save()
 	}
 
-	if bearerToken, err := s.core.CreateAuthTokenWithSource(ctx, userID, source); err == nil {
+	var bearerToken string
+	var err error
+	if authGeneration != nil {
+		bearerToken, err = s.core.CreateAuthTokenWithSourceGeneration(ctx, userID, source, *authGeneration)
+	} else {
+		bearerToken, err = s.core.CreateAuthTokenWithSource(ctx, userID, source)
+	}
+	if err == nil {
 		separator := "?"
 		if strings.Contains(redirectURL, "?") {
 			separator = "&"
@@ -538,8 +791,48 @@ func (s *HTTPServer) completeProviderLogin(c *gin.Context, session sessions.Sess
 		log.Warn("Failed to create auth token on provider login", "provider_id", providerConfig.ID, "userId", userID, "error", err)
 	}
 
+	if wantsJSONResponse(c) {
+		c.JSON(http.StatusOK, gin.H{"redirectUrl": redirectURL})
+		return nil
+	}
 	c.Redirect(http.StatusTemporaryRedirect, redirectURL)
 	return nil
+}
+
+func wantsJSONResponse(c *gin.Context) bool {
+	return strings.Contains(c.GetHeader("Accept"), "application/json")
+}
+
+func (s *HTTPServer) pendingOAuthAuthorizeRedirectURL(c *gin.Context, userID string, authGeneration uint64) (string, bool) {
+	params, err := readPendingOAuthAuthorize(sessions.Default(c))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":             "invalid_request",
+			"error_description": "No pending authorization request",
+		})
+		return "", false
+	}
+	redirectOrigin, ok := s.allowedOAuthRedirectOrigin(params.RedirectURI)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":             "invalid_request",
+			"error_description": "Invalid redirect_uri",
+		})
+		return "", false
+	}
+	consented, err := s.core.HasOAuthConsent(c.Request.Context(), userID, redirectOrigin)
+	if err != nil {
+		log.Error("Failed to check OAuth consent", "error", err, "userId", userID)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":             "server_error",
+			"error_description": "Failed to check OAuth consent",
+		})
+		return "", false
+	}
+	if !consented {
+		return "/oauth/consent", true
+	}
+	return s.completeOAuthAuthorizeURL(c, userID, authGeneration)
 }
 
 // randomString generates a URL-safe random string of n bytes.

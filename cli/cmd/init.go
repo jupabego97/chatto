@@ -145,7 +145,7 @@ var initCmd = &cobra.Command{
 
 func addAuthProviderExamples(tomlText string) string {
 	const generatedEmptyProviders = "# External login providers. Configure as repeated [[auth.providers]] tables.\nproviders = []"
-	const providerExamples = `# External login providers. Uncomment and adapt one or more [[auth.providers]] tables.
+	const providerExamples = `# External OIDC login providers. Uncomment and adapt one or more [[auth.providers]] tables.
 #
 # [[auth.providers]]
 # id = 'chatto-hub'
@@ -154,13 +154,7 @@ func addAuthProviderExamples(tomlText string) string {
 # issuer_url = 'https://id.example.com/realms/chatto'
 # client_id = 'chatto'
 # client_secret = 'replace-me'
-# scopes = ['openid', 'profile', 'email']
-#
-# [[auth.providers]]
-# id = 'github'
-# type = 'github'
-# client_id = 'replace-me'
-# client_secret = 'replace-me'`
+# scopes = ['openid', 'profile', 'email']`
 
 	return strings.Replace(tomlText, generatedEmptyProviders, providerExamples, 1)
 }

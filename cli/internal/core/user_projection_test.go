@@ -258,13 +258,13 @@ func TestUserProjection_VerifiedEmailAvatarOIDCAndDelete(t *testing.T) {
 		Id: "E5b",
 		Event: &corev1.Event_UserExternalIdentityLinked{UserExternalIdentityLinked: &corev1.UserExternalIdentityLinkedEvent{
 			UserId:       "U1",
-			Issuer:       "github-main",
+			Issuer:       "https://issuer.example",
 			Subject:      "12345",
-			ProviderId:   "github-main",
-			ProviderType: "github",
+			ProviderId:   "hub",
+			ProviderType: "oidc",
 		}},
 	}, 5))
-	byExternal, ok := p.GetByExternalIdentity("github-main", "12345")
+	byExternal, ok := p.GetByExternalIdentity("https://issuer.example", "12345")
 	require.True(t, ok)
 	require.Equal(t, "U1", byExternal.GetId())
 	avatar, ok := p.Avatar("U1")
@@ -288,6 +288,6 @@ func TestUserProjection_VerifiedEmailAvatarOIDCAndDelete(t *testing.T) {
 	require.False(t, p.EmailClaimed("Alice@Example.com"))
 	_, ok = p.GetByOIDCSubject("https://issuer.example", "subject-1")
 	require.False(t, ok)
-	_, ok = p.GetByExternalIdentity("github-main", "12345")
+	_, ok = p.GetByExternalIdentity("https://issuer.example", "12345")
 	require.False(t, ok)
 }

@@ -19,7 +19,7 @@ Passwords are hashed with **bcrypt** at the library default cost. Chatto enforce
 
 Password hash changes are durable user events in the `EVT` stream and are read through the user projection. Raw passwords are never written to storage, audit events, logs, or live subscriptions. Password changes and resets also advance the user's auth generation, so older cookie sessions, bearer tokens, and OAuth authorization codes are rejected.
 
-Login comparison runs bcrypt against a dummy hash for unknown users and OAuth-only users so the response time is identical regardless of whether the account exists. This blocks the most basic form of user enumeration via timing.
+Login comparison runs bcrypt against a dummy hash for unknown users and passwordless users so the response time is identical regardless of whether the account exists. This blocks the most basic form of user enumeration via timing.
 
 ### Sessions and tokens
 
@@ -226,14 +226,14 @@ For HSTS, CSP, and other policy headers, add them at your reverse proxy.
 | Per-call LiveKit E2EE keys | `ENCRYPTION_KEYS` (NATS KV, short-lived) | No (active calls are not recoverable without them) |
 | Wrapped app DEK records | `RUNTIME_STATE` (`dek.*` protobuf records) | Yes (unusable without KEKs) |
 | Bearer/cookie session verifiers | `RUNTIME_STATE` (HMAC-keyed, with TTL) | Yes (not raw tokens or session IDs) |
-| Account-flow and OAuth-code verifiers | `RUNTIME_STATE` (HMAC-keyed, with TTL) | Yes (not raw codes or links) |
+| Account-flow, pending OIDC, and OAuth-code verifiers | `RUNTIME_STATE` (HMAC-keyed, with TTL) | Yes (not raw codes or links) |
 | Core secret key | `chatto.toml` / `CHATTO_CORE_SECRET_KEY` | n/a |
 | Cookie signing secret | `chatto.toml` / `CHATTO_WEBSERVER_COOKIE_SIGNING_SECRET` | n/a |
 | Cookie encryption secret (optional) | `chatto.toml` / `CHATTO_WEBSERVER_COOKIE_ENCRYPTION_SECRET` | n/a |
 | Asset URL signing secret | `chatto.toml` / `CHATTO_CORE_ASSETS_SIGNING_SECRET` | n/a |
 | S3 access key ID and secret access key | `chatto.toml` / `CHATTO_CORE_ASSETS_S3_ACCESS_KEY_ID`, `CHATTO_CORE_ASSETS_S3_SECRET_ACCESS_KEY` | n/a |
 | NATS embedded/client credentials | `chatto.toml` / `CHATTO_NATS_EMBEDDED_AUTH_TOKEN`, `CHATTO_NATS_CLIENT_TOKEN`, `CHATTO_NATS_CLIENT_PASSWORD`, `CHATTO_NATS_CLIENT_CREDENTIALS_FILE`, or `CHATTO_NATS_CLIENT_NKEY_SEED` | n/a |
-| OAuth/OIDC provider client secrets | `chatto.toml` `[[auth.providers]]` / `CHATTO_AUTH_PROVIDERS_<index>_CLIENT_SECRET` or legacy `CHATTO_AUTH_OIDC_CLIENT_SECRET` | n/a |
+| OIDC provider client secrets | `chatto.toml` `[[auth.providers]]` / `CHATTO_AUTH_PROVIDERS_<index>_CLIENT_SECRET` | n/a |
 | SMTP password | `chatto.toml` / `CHATTO_SMTP_PASSWORD` | n/a |
 | Web Push VAPID key pair | `chatto.toml` / `CHATTO_PUSH_VAPID_PUBLIC_KEY`, `CHATTO_PUSH_VAPID_PRIVATE_KEY` | n/a |
 | LiveKit API and webhook secrets | `chatto.toml` / `CHATTO_LIVEKIT_API_KEY`, `CHATTO_LIVEKIT_API_SECRET`, `CHATTO_LIVEKIT_WEBHOOK_API_KEY`, `CHATTO_LIVEKIT_WEBHOOK_API_SECRET` | n/a |

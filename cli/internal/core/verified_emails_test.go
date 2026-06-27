@@ -408,8 +408,8 @@ func TestChattoCore_GetUserByVerifiedEmail(t *testing.T) {
 
 	t.Run("returns error when email not found", func(t *testing.T) {
 		_, err := core.GetUserByVerifiedEmail(ctx, "nonexistent@example.com")
-		if err == nil {
-			t.Error("Expected error for nonexistent email")
+		if !errors.Is(err, ErrNotFound) {
+			t.Errorf("GetUserByVerifiedEmail error = %v, want ErrNotFound", err)
 		}
 	})
 

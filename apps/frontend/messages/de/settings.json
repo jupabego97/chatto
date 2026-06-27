@@ -276,6 +276,11 @@
       "delete_button": "Konto löschen",
       "delete_failed": "Konto konnte nicht gelöscht werden",
       "delete_request_failed": "Kontolöschung konnte nicht angefordert werden",
+      "oidc": {
+        "title": "Verbundene Anmeldung",
+        "description": "Verknüpfe eine externe OIDC-Identität, damit du dich über diesen Anbieter anmelden kannst.",
+        "connect_provider": "{provider} verbinden"
+      },
       "delete_modal": {
         "title": "Konto löschen",
         "warning_label": "Warnung:",

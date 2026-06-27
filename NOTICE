@@ -35,8 +35,6 @@ Server and CLI Go Components:
 - Goldmark Markdown parser (https://github.com/yuin/goldmark) - MIT License
 - Gorilla securecookie, sessions, and websocket
   (https://github.com/gorilla) - BSD 3-Clause License
-- Goth OAuth/OIDC authentication (https://github.com/markbates/goth) -
-  MIT License
 - imageorient (https://github.com/disintegration/imageorient) - MIT License
 - LiveKit Protocol (https://github.com/livekit/protocol) - Apache License 2.0
 - NATS Server, Go client, JSM, and nkeys (https://nats.io/) - Apache License 2.0
