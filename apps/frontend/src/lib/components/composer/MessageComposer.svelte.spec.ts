@@ -1964,6 +1964,31 @@ describe('MessageComposer', () => {
       expect(roomStateMock.scrollState.requestScrollToBottom).toHaveBeenCalledOnce();
     });
 
+    it('allows sending in a new room while a previous room send is still pending', async () => {
+      const firstSend = deferred<{ data: typeof mutationData; error: null }>();
+      mutationMock.mockImplementationOnce(() => firstSend.promise);
+      const rendered = renderMessageComposer({ roomId: 'room_a' }, { exactRoomId: true });
+      const { container } = rendered;
+      const editor = await findEditor(container);
+
+      await typeInEditor(editor, 'slow send');
+      (q(container, 'button[aria-label="Send message"]') as HTMLButtonElement).click();
+
+      await vi.waitFor(() => expect(mutationMock).toHaveBeenCalledOnce());
+
+      await rendered.rerender({ roomId: 'room_b' });
+      await typeInEditor(editor, 'next room send');
+      (q(container, 'button[aria-label="Send message"]') as HTMLButtonElement).click();
+
+      await vi.waitFor(() => expect(mutationMock).toHaveBeenCalledTimes(2));
+      expect(mutationMock.mock.calls[1][1].input).toMatchObject({
+        roomId: 'room_b',
+        body: 'next room send'
+      });
+
+      firstSend.resolve({ data: mutationData, error: null });
+    });
+
     it('retries large mention sends with the confirmation token', async () => {
       mutationMock
         .mockResolvedValueOnce({ data: mentionConfirmationData, error: null })

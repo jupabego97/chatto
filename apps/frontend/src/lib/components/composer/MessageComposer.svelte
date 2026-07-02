@@ -297,6 +297,7 @@
   });
 
   let loading = $state(false);
+  let submissionId = 0;
   let fileInputElement = $state<HTMLInputElement>();
 
   // Input is disabled when user can't post or websocket is disconnected.
@@ -502,6 +503,18 @@
 
   let pendingMentionConfirmation = $state<PendingMentionConfirmation | null>(null);
   let mentionConfirmationLoading = $state(false);
+  let submissionScopeKey = '';
+
+  $effect(() => {
+    const nextScopeKey = `${server.id}:${roomId}:${inThread ?? ''}`;
+    if (submissionScopeKey === nextScopeKey) return;
+
+    submissionScopeKey = nextScopeKey;
+    submissionId++;
+    loading = false;
+    mentionConfirmationLoading = false;
+    pendingMentionConfirmation = null;
+  });
 
   function currentComposerScope(): ComposerScope {
     return {
@@ -668,6 +681,7 @@
     attachments.clear();
     linkPreviews.clear();
 
+    const thisSubmission = ++submissionId;
     loading = true;
 
     try {
@@ -686,7 +700,9 @@
         handlePostSuccess(response, preparedPost);
       }
     } finally {
-      loading = false;
+      if (submissionId === thisSubmission) {
+        loading = false;
+      }
     }
   }
 
@@ -700,6 +716,7 @@
     const eventId = editState.eventId;
     if (!eventId) return;
 
+    const thisSubmission = ++submissionId;
     loading = true;
 
     const input: {
@@ -728,9 +745,11 @@
     } catch (error) {
       if (!isCurrentComposerScope(editScope)) return;
       toast.error(error instanceof Error ? error.message : m['composer.edit_failed']());
+    } finally {
+      if (submissionId === thisSubmission) {
+        loading = false;
+      }
     }
-
-    loading = false;
   }
 
   async function handleSubmit() {
