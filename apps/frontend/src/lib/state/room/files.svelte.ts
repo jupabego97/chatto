@@ -203,6 +203,7 @@ export class RoomFilesStore {
 
   private async refreshUrlsForItems(items: RoomFileItem[]): Promise<void> {
     if (!this.roomId || this.isUnsupported || items.length === 0) return;
+    const thisLoad = this.#loadId;
     const eventIds = Array.from(new SvelteSet(items.map((item) => item.messageEventId)));
     const freshMaps = await Promise.all(
       eventIds.map((eventId) =>
@@ -213,6 +214,7 @@ export class RoomFilesStore {
         })
       )
     );
+    if (thisLoad !== this.#loadId) return;
     const fresh = new SvelteMap<string, RefreshedAttachmentUrls>();
     for (const freshMap of freshMaps) {
       for (const [attachmentId, urls] of freshMap) {

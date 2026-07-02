@@ -259,13 +259,23 @@
   // Dismiss reply notifications when viewing this thread (only when window is focused)
   $effect(() => {
     if (!appState.isFocused) return;
+    const currentServerId = server.id;
     const threadId = threadRootEventId;
     const currentRoomId = roomId;
-    void notificationStore.dismissThreadNotifications(threadId).then((counts) => {
+    const currentNotificationStore = notificationStore;
+    const currentRoomsStore = stores.rooms;
+    void currentNotificationStore.dismissThreadNotifications(threadId).then((counts) => {
+      if (
+        server.id !== currentServerId ||
+        roomId !== currentRoomId ||
+        threadRootEventId !== threadId
+      ) {
+        return;
+      }
       const dismissedForRoom = counts.byRoom[currentRoomId] ?? 0;
       if (dismissedForRoom > 0) {
-        stores.rooms.decrementUnreadNotification(currentRoomId, dismissedForRoom);
-        void stores.rooms.refreshNotificationCounts();
+        currentRoomsStore.decrementUnreadNotification(currentRoomId, dismissedForRoom);
+        void currentRoomsStore.refreshNotificationCounts();
       }
     });
   });
@@ -273,11 +283,13 @@
   async function markThreadAsRead(currentThreadId: string, upToEventId?: string) {
     try {
       const conn = server.connection;
+      const currentServerId = server.id;
+      const currentRoomId = roomId;
       return await createReadStateAPI({
-        serverId: conn.serverId ?? server.id,
+        serverId: conn.serverId ?? currentServerId,
         baseUrl: conn.connectBaseUrl,
         bearerToken: conn.bearerToken
-      }).markThreadAsRead({ roomId, threadRootEventId: currentThreadId, upToEventId });
+      }).markThreadAsRead({ roomId: currentRoomId, threadRootEventId: currentThreadId, upToEventId });
     } catch (err) {
       console.error('Failed to mark thread as read:', err);
       return null;
@@ -294,6 +306,8 @@
   $effect(() => {
     const currentThreadId = threadRootEventId;
     const currentThreadScope = `${server.id}:${roomId}:${currentThreadId}`;
+    const currentServerId = server.id;
+    const currentRoomId = roomId;
     const present = appState.isPresent;
 
     if (!present) {
@@ -319,6 +333,14 @@
     const openedAt = new Date();
     markThreadAsRead(currentThreadId).then((data) => {
       if (!data) return;
+      if (
+        server.id !== currentServerId ||
+        roomId !== currentRoomId ||
+        threadRootEventId !== currentThreadId ||
+        lastFiredThreadScope !== currentThreadScope
+      ) {
+        return;
+      }
       const prevTime = data.previousReadAt;
       unreadAfterTime = prevTime ? new Date(prevTime) : null;
       unreadBeforeTime = openedAt;

@@ -5,11 +5,8 @@ Server-wide and per-room notification level settings for the current user.
 These preferences are server-side and sync across devices.
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { useConnection } from '$lib/state/server/connection.svelte';
-  import { serverRegistry } from '$lib/state/server/registry.svelte';
+  import { useActiveServerScope } from '$lib/state/server/activeServerScope.svelte';
   import { NotificationLevel } from '$lib/render/types';
-  import { getActiveServer } from '$lib/state/activeServer.svelte';
   import { FormSection } from '$lib/ui';
   import { FormError } from '$lib/ui/form';
   import { toast } from '$lib/ui/toast';
@@ -23,9 +20,9 @@ These preferences are server-side and sync across devices.
   import { getViewerStateViaConnect } from '$lib/api-client/viewer';
   import { NotificationLevel as ApiNotificationLevel } from '@chatto/api-types/api/v1/notification_preferences_pb';
 
-  const serverId = getActiveServer();
-  const notificationLevelStore = serverRegistry.getStore(serverId).notificationLevels;
-  const connection = useConnection();
+  const server = useActiveServerScope();
+  const serverId = $derived(server.id);
+  const notificationLevelStore = $derived(server.store.notificationLevels);
 
   let serverLevel = $state<NotificationLevel>(NotificationLevel.Default);
   let serverEffectiveLevel = $state<NotificationLevel>(NotificationLevel.Normal);
@@ -49,11 +46,12 @@ These preferences are server-side and sync across devices.
     effectiveLevel: NotificationLevel;
   };
 
-  onMount(() => {
-    void loadPreferences();
+  $effect(() => {
+    const currentServerId = serverId;
+    void loadPreferences(currentServerId);
   });
 
-  async function loadPreferences() {
+  async function loadPreferences(loadServerId = serverId) {
     loading = true;
     error = '';
 
@@ -64,6 +62,7 @@ These preferences are server-side and sync across devices.
         getViewerStateViaConnect(config),
         createRoomDirectoryAPI(config).listRooms(RoomDirectoryScope.CHANNELS)
       ]);
+      if (serverId !== loadServerId) return;
 
       const mappedServerPref = notificationPreferenceFromAPI(serverPref);
       serverLevel =
@@ -93,9 +92,12 @@ These preferences are server-side and sync across devices.
         notificationLevelStore.setRoomPreference(room.id, room.level, room.effectiveLevel);
       }
     } catch (e) {
+      if (serverId !== loadServerId) return;
       error = e instanceof Error ? e.message : m['settings.notifications.levels.load_failed']();
     } finally {
-      loading = false;
+      if (serverId === loadServerId) {
+        loading = false;
+      }
     }
   }
 
@@ -180,7 +182,7 @@ These preferences are server-side and sync across devices.
   }
 
   function connectConfig() {
-    const conn = connection();
+    const conn = server.connection;
     return {
       serverId,
       baseUrl: conn.connectBaseUrl,

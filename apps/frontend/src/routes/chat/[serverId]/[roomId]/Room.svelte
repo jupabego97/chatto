@@ -245,27 +245,32 @@
     if (!appState.isFocused) return;
 
     const currentRoomId = roomId;
+    const currentServerId = server.id;
     const currentRoomData = room.roomData;
     if (!currentRoomData || currentRoomData.room.id !== currentRoomId) return;
+    const currentRoomsStore = stores.rooms;
+    const currentNotificationStore = notificationStore;
+    const currentIsDM = room.isDM;
     const notificationRevision = notificationStore.notifications.map((n) => n.id).join('\0');
     void notificationRevision;
 
     void (async () => {
-      const results = room.isDM
-        ? [await notificationStore.dismissDMNotifications(currentRoomId)]
+      const results = currentIsDM
+        ? [await currentNotificationStore.dismissDMNotifications(currentRoomId)]
         : await Promise.all([
-            notificationStore.dismissMentionNotifications(currentRoomId),
-            notificationStore.dismissRoomReplyNotifications(currentRoomId),
-            notificationStore.dismissRoomMessageNotifications(currentRoomId)
+            currentNotificationStore.dismissMentionNotifications(currentRoomId),
+            currentNotificationStore.dismissRoomReplyNotifications(currentRoomId),
+            currentNotificationStore.dismissRoomMessageNotifications(currentRoomId)
           ]);
+      if (server.id !== currentServerId || roomId !== currentRoomId) return;
 
       const dismissedForRoom = results.reduce(
         (sum, counts) => sum + (counts.byRoom[currentRoomId] ?? 0),
         0
       );
       if (dismissedForRoom > 0) {
-        stores.rooms.decrementUnreadNotification(currentRoomId, dismissedForRoom);
-        void stores.rooms.refreshNotificationCounts();
+        currentRoomsStore.decrementUnreadNotification(currentRoomId, dismissedForRoom);
+        void currentRoomsStore.refreshNotificationCounts();
       }
     })();
   });

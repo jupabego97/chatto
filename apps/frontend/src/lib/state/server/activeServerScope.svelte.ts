@@ -1,6 +1,6 @@
 import { serverIdToSegment } from '$lib/navigation';
 import { getActiveServer } from '$lib/state/activeServer.svelte';
-import { serverRegistry } from './registry.svelte';
+import { serverRegistry, type RegisteredServer } from './registry.svelte';
 import { useTrackedConnection } from './connection.svelte';
 import type { ServerConnection } from './serverConnection.svelte';
 import type { ServerStateStore } from './store.svelte';
@@ -15,9 +15,15 @@ import type { ServerStateStore } from './store.svelte';
  */
 export function useActiveServerScope() {
 	const id = $derived(getActiveServer());
-	const getConnection = useTrackedConnection(() => id);
-	const connection = $derived(getConnection());
+	let getConnection: (() => ServerConnection) | null = null;
+	try {
+		getConnection = useTrackedConnection(() => id);
+	} catch {
+		// Some active-server UI (for example isolated sidebar tests) only needs
+		// server id/store/segment and is not rendered under a connection provider.
+	}
 	const segment = $derived(serverIdToSegment(id));
+	const registered = $derived(serverRegistry.getServer(id));
 	const store = $derived(serverRegistry.getStore(id));
 
 	return {
@@ -27,8 +33,14 @@ export function useActiveServerScope() {
 		get segment(): string {
 			return segment;
 		},
+		get registered(): RegisteredServer | undefined {
+			return registered;
+		},
 		get connection(): ServerConnection {
-			return connection;
+			if (!getConnection) {
+				throw new Error('Active server connection context is not available');
+			}
+			return getConnection();
 		},
 		get store(): ServerStateStore {
 			return store;

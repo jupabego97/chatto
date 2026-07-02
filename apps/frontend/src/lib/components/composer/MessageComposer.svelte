@@ -474,6 +474,7 @@
   };
 
   type PreparedPost = {
+    serverId: string;
     roomId: string;
     bodyToSend: string;
     filesToSend: File[] | null;
@@ -495,6 +496,10 @@
 
   let pendingMentionConfirmation = $state<PendingMentionConfirmation | null>(null);
   let mentionConfirmationLoading = $state(false);
+
+  function isCurrentPostScope(post: PreparedPost): boolean {
+    return post.serverId === server.id && post.roomId === roomId && post.threadRootEventId === (inThread ?? null);
+  }
 
   async function sendPreparedPost(
     post: PreparedPost,
@@ -546,12 +551,15 @@
   }
 
   function handlePostFailure(error: unknown, post: PreparedPost) {
+    if (!isCurrentPostScope(post)) return;
     toast.error(m['composer.send_failed']());
     console.error('Error creating message:', error);
     restorePreparedPost(post);
   }
 
   function handlePostSuccess(response: SendPreparedPostResponse, post: PreparedPost) {
+    if (!isCurrentPostScope(post)) return;
+
     // Notify parent before scrolling so it can synchronously ingest the
     // returned event and make the target row available.
     onMessageSent?.(response.event);
@@ -584,11 +592,17 @@
   async function confirmMentionSend() {
     const pendingPost = pendingMentionConfirmation;
     if (!pendingPost || mentionConfirmationLoading) return;
+    if (!isCurrentPostScope(pendingPost)) {
+      pendingMentionConfirmation = null;
+      return;
+    }
 
     mentionConfirmationLoading = true;
     try {
       const response = await sendPreparedPost(pendingPost, pendingPost.token);
       pendingMentionConfirmation = null;
+
+      if (!isCurrentPostScope(pendingPost)) return;
 
       if (response.error) {
         handlePostFailure(response.error, pendingPost);
@@ -611,6 +625,7 @@
     if (!hasBody && !filesToSend) return;
 
     const preparedPost: PreparedPost = {
+      serverId: server.id,
       roomId,
       bodyToSend,
       filesToSend,
@@ -634,6 +649,8 @@
 
     try {
       const response = await sendPreparedPost(preparedPost, null);
+
+      if (!isCurrentPostScope(preparedPost)) return;
 
       if (response.mentionConfirmation) {
         pendingMentionConfirmation = { ...preparedPost, ...response.mentionConfirmation };
