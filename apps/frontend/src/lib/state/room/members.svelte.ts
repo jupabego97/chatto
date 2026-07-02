@@ -59,6 +59,17 @@ function eventRoomId(eventData: EventEnvelope['event']): string | null {
   return eventData.roomId;
 }
 
+function connectionKey(source: ServerConnection): string {
+  return `${source.serverId ?? ''}\0${source.connectBaseUrl}\0${source.bearerToken ?? ''}`;
+}
+
+function apiFromConnection(source: ServerConnection): MemberDirectoryAPI {
+  return createMemberDirectoryAPI({
+    baseUrl: source.connectBaseUrl,
+    bearerToken: source.bearerToken
+  });
+}
+
 /**
  * Room member store for the current room.
  *
@@ -78,7 +89,8 @@ export class RoomMembersStore {
   livePresence = new SvelteMap<string, PresenceStatus>();
   presenceVersion = $state(0);
 
-  private readonly api: MemberDirectoryAPI | null;
+  private api: MemberDirectoryAPI | null;
+  private connectionKey: string | null = null;
   private roomId = '';
   #loadId = 0;
 
@@ -88,11 +100,18 @@ export class RoomMembersStore {
     } else if ('listRoomMembers' in source) {
       this.api = source;
     } else {
-      this.api = createMemberDirectoryAPI({
-        baseUrl: source.connectBaseUrl,
-        bearerToken: source.bearerToken
-      });
+      this.connectionKey = connectionKey(source);
+      this.api = apiFromConnection(source);
     }
+  }
+
+  setConnection(source: ServerConnection): void {
+    const nextKey = connectionKey(source);
+    if (this.connectionKey === nextKey) return;
+
+    this.connectionKey = nextKey;
+    this.api = apiFromConnection(source);
+    this.reset();
   }
 
   setRoom(roomId: string): void {

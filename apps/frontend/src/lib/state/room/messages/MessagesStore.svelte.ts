@@ -93,6 +93,10 @@ function roomTimelineFromServerConnection(serverConnection: ServerConnection): R
   });
 }
 
+function connectionKey(serverConnection: ServerConnection): string {
+  return `${serverConnection.serverId ?? ''}\0${serverConnection.connectBaseUrl}\0${serverConnection.bearerToken ?? ''}`;
+}
+
 /**
  * Message store for both the main room timeline and a single thread pane.
  * Room history uses the protobuf ConnectRPC timeline API when available;
@@ -105,7 +109,8 @@ export class MessagesStore {
   isLoadingMore = $state(false);
   hasReachedStart = $state(false);
 
-  private readonly roomTimeline: RoomTimelineAPI;
+  private roomTimeline: RoomTimelineAPI;
+  private connectionKey = '';
   private scope: MessageScope | null = null;
   private threadRootEventId = '';
   private seenIds: SvelteSet<string> = new SvelteSet<string>();
@@ -124,6 +129,7 @@ export class MessagesStore {
     private readonly getCurrentUserId: () => string | null,
     roomTimeline?: RoomTimelineAPI
   ) {
+    this.connectionKey = connectionKey(serverConnection);
     this.roomTimeline = roomTimeline ?? roomTimelineFromServerConnection(serverConnection);
   }
 
@@ -242,6 +248,28 @@ export class MessagesStore {
 
   private previewKey(eventId: string): string {
     return eventCacheKey(this.roomId, eventId);
+  }
+
+  setConnection(serverConnection: ServerConnection): void {
+    const nextKey = connectionKey(serverConnection);
+    if (this.connectionKey === nextKey) return;
+
+    this.connectionKey = nextKey;
+    this.roomTimeline = roomTimelineFromServerConnection(serverConnection);
+    if (this.scope === 'thread') {
+      const thisLoad = this.startLoad();
+      this.resetState();
+      this.isInitialLoading = true;
+      this.fetchThread(thisLoad);
+      return;
+    }
+    if (this.scope === 'room') {
+      this.resetAndFetchLatest();
+    } else {
+      this.startLoad();
+      this.resetState();
+      this.isInitialLoading = true;
+    }
   }
 
   setRoom(roomId: string): void {

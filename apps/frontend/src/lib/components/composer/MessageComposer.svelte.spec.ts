@@ -106,6 +106,18 @@ vi.mock('$lib/state/server/connection.svelte', () => ({
     connectBaseUrl: 'http://localhost/api/connect',
     bearerToken: null,
     serverId: 'test-instance'
+  }),
+  useTrackedConnection: () => () => ({
+    isConnected: true,
+    showConnectionLostBanner: false,
+    client: {
+      query: queryMock,
+      mutation: mutationMock,
+      subscription: vi.fn()
+    },
+    connectBaseUrl: 'http://localhost/api/connect',
+    bearerToken: null,
+    serverId: 'test-instance'
   })
 }));
 
@@ -137,7 +149,7 @@ vi.mock('$lib/state/server/registry.svelte', () => ({
 }));
 
 vi.mock('$lib/state/activeServer.svelte', () => ({
-  getActiveServer: () => () => 'test-instance'
+  getActiveServer: () => 'test-instance'
 }));
 
 vi.mock('$lib/state/room', () => ({

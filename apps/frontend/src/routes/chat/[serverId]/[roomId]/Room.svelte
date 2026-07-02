@@ -21,21 +21,14 @@
     createComposerContext,
     createMentionRoles,
     getRoomMembers,
-    MessagesStore,
-    RoomFilesStore,
-    RoomMembersStore,
-    setRoomMembersStore,
     createRoomPermissions,
     DEFAULT_ROOM_PERMISSIONS,
     type QuoteInsertionContent
   } from '$lib/state/room';
   import { onRoomMessageMutated } from '$lib/state/room/messageMutationEvents';
-  import { useConnection } from '$lib/state/server/connection.svelte';
-  import { serverRegistry } from '$lib/state/server/registry.svelte';
+  import { useActiveServerScope } from '$lib/state/server/activeServerScope.svelte';
   import { getLiveDisplayName } from '$lib/state/userProfiles.svelte';
   import { resolve } from '$app/paths';
-  import { serverIdToSegment } from '$lib/navigation';
-  import { getActiveServer } from '$lib/state/activeServer.svelte';
   import { clearLastRoom, setLastRoom } from '$lib/storage/lastRoom';
   import {
     consumePendingRoomSidebarPanel,
@@ -56,19 +49,23 @@
     roomSidebarPanelForRoom,
     roomSidebarPanelsForRoom
   } from './roomSidebarBehavior';
+  import { RoomStores } from './roomStores.svelte';
   import { RoomSidebarPanelsState } from './roomSidebarPanels.svelte';
   import ThreadPane from './ThreadPane.svelte';
   import type { PendingThreadReplyRequest, ThreadOpenOptions } from './threadOpenOptions';
 
   let { roomId, threadId }: { roomId: string; threadId?: string } = $props();
 
-  const connection = useConnection();
-  const roomFilesStore = new RoomFilesStore(connection());
-  const roomMembersStore = setRoomMembersStore(new RoomMembersStore(connection()));
-  const serverSegment = $derived(serverIdToSegment(getActiveServer()));
-  const stores = serverRegistry.getStore(getActiveServer());
-  const serverInfo = stores.serverInfo;
-  const notificationStore = stores.notifications;
+  const server = useActiveServerScope();
+  const roomScope = $derived(`${server.id}:${roomId}`);
+  const stores = $derived(server.store);
+  const serverInfo = $derived(server.serverInfo);
+  const notificationStore = $derived(server.notifications);
+  const currentUser = $derived(server.currentUser);
+  const roomStores = new RoomStores(server.connection, () => currentUser.user?.id ?? null);
+  const roomFilesStore = roomStores.files;
+  const roomMembersStore = roomStores.members;
+  const roomMessageStore = roomStores.messages;
 
   // Thread navigation functions (URL-driven state)
   let pendingThreadHighlight = $state<string | null>(null);
@@ -87,7 +84,7 @@
       : null;
     goto(
       resolve('/chat/[serverId]/[roomId]/[threadId]', {
-        serverId: serverSegment,
+        serverId: server.segment,
         roomId,
         threadId: threadRootEventId
       })
@@ -95,19 +92,16 @@
   }
 
   function closeThread() {
-    goto(resolve('/chat/[serverId]/[roomId]', { serverId: serverSegment, roomId }));
+    goto(resolve('/chat/[serverId]/[roomId]', { serverId: server.segment, roomId }));
   }
 
   // Create context-based state (must be synchronous, before children render)
   const composerContext = createComposerContext({ scroll: true });
   const mentionRoles = createMentionRoles();
   const replyState = composerContext.replyState;
-  let replyStateRoomId: string | null = null;
+  let replyStateScope: string | null = null;
   const jumpState = composerContext.jumpState;
-  const currentUser = $derived(serverRegistry.getStore(getActiveServer()).currentUser);
-  const roomMessageStore = new MessagesStore(connection(), () => currentUser.user?.id ?? null);
-
-  onDestroy(() => roomMessageStore.dispose());
+  onDestroy(() => roomStores.dispose());
 
   $effect(() =>
     onRoomMessageMutated((detail) => {
@@ -126,18 +120,24 @@
   const room = useRoomData(() => ({ roomId }));
 
   $effect(() => {
-    const currentRoomId = roomId;
-    if (replyStateRoomId === null) {
-      replyStateRoomId = currentRoomId;
+    const currentScope = roomScope;
+    if (replyStateScope === null) {
+      replyStateScope = currentScope;
       return;
     }
-    if (replyStateRoomId === currentRoomId) return;
-    replyStateRoomId = currentRoomId;
+    if (replyStateScope === currentScope) return;
+    replyStateScope = currentScope;
     replyState.cancelReply();
+    jumpState.reset();
+    pendingThreadHighlight = null;
+    pendingThreadQuote = null;
+    pendingThreadReply = null;
+    isDraggingFiles = false;
+    composerApi = null;
   });
 
   $effect(() => {
-    const conn = connection();
+    const conn = server.connection;
     const api = createRoleAPI({
       baseUrl: conn.connectBaseUrl,
       bearerToken: conn.bearerToken
@@ -176,8 +176,7 @@
   const unread = useRoomUnread(() => ({ roomId }));
 
   $effect(() => {
-    roomFilesStore.setRoom(roomId);
-    roomMembersStore.setRoom(roomId);
+    roomStores.sync(server.connection, roomId);
   });
 
   $effect(() => {
@@ -199,8 +198,8 @@
   // back here in an infinite loop.
   $effect.pre(() => {
     if (room.roomData === null) {
-      clearLastRoom(getActiveServer());
-      goto(resolve('/chat/[serverId]', { serverId: serverSegment }), { replaceState: true });
+      clearLastRoom(server.id);
+      goto(resolve('/chat/[serverId]', { serverId: server.segment }), { replaceState: true });
     }
   });
 
@@ -276,7 +275,7 @@
   // the loaded room data to catch up to the current route before writing.
   $effect(() => {
     if (room.roomData?.room.id === roomId) {
-      setLastRoom(getActiveServer(), roomId);
+      setLastRoom(server.id, roomId);
     }
   });
 
@@ -304,14 +303,14 @@
     if (threadId) {
       replaceState(
         resolve('/chat/[serverId]/[roomId]/[threadId]', {
-          serverId: serverSegment,
+          serverId: server.segment,
           roomId,
           threadId
         }),
         {}
       );
     } else {
-      replaceState(resolve('/chat/[serverId]/[roomId]', { serverId: serverSegment, roomId }), {});
+      replaceState(resolve('/chat/[serverId]/[roomId]', { serverId: server.segment, roomId }), {});
     }
     applyHighlight(fromUrl);
   });
@@ -363,8 +362,7 @@
   //   the tab would strand the user's own latest message below the unread
   //   separator.
   useEvent((event) => {
-    roomFilesStore.ingestServerEvent(event);
-    roomMembersStore.ingestServerEvent(event);
+    roomStores.ingestServerEvent(event);
     if (!event.event) return;
 
     if (!appState.isPresent && shouldRevealAwaySeparator(event)) {
@@ -399,7 +397,7 @@
   // Channel rooms can be left unless membership is granted by Universal policy.
   let showLeaveRoom = $derived(!!room.roomData && !room.isDM && !room.roomData.room.isUniversal);
   const roomSidebarPanels = new RoomSidebarPanelsState(
-    () => getActiveServer(),
+    () => server.id,
     () => roomId
   );
   const activeRoomSidebarPanel = $derived(
@@ -419,7 +417,7 @@
   );
 
   $effect(() => {
-    const currentScope = `${getActiveServer()}:${roomId}`;
+    const currentScope = roomScope;
     if (currentScope) roomSidebarPanels.syncCurrentScope();
   });
 
@@ -438,16 +436,16 @@
   }
 
   function handleRoomSidebarPanelStorage(event: StorageEvent): void {
-    const key = serverStorageKey(getActiveServer(), roomSidebarPanelStorageSuffix(roomId));
+    const key = serverStorageKey(server.id, roomSidebarPanelStorageSuffix(roomId));
     if (event.key !== key) return;
     if (event.newValue !== 'call') return;
 
-    consumePendingRoomSidebarPanel(getActiveServer(), roomId);
+    consumePendingRoomSidebarPanel(server.id, roomId);
     openRoomSidebarPanel('call');
   }
 
   $effect(() => {
-    const pendingPanel = consumePendingRoomSidebarPanel(getActiveServer(), roomId);
+    const pendingPanel = consumePendingRoomSidebarPanel(server.id, roomId);
     if (pendingPanel) openRoomSidebarPanel(pendingPanel);
   });
 

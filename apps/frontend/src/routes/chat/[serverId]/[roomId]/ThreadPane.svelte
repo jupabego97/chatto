@@ -4,14 +4,10 @@
   import { createReadStateAPI } from '$lib/api-client/readState';
   import { createThreadAPI } from '$lib/api-client/threads';
   import { useEvent, createTypingIndicator } from '$lib/hooks';
-  import { useConnection } from '$lib/state/server/connection.svelte';
-  import { serverRegistry } from '$lib/state/server/registry.svelte';
-  import { getActiveServer } from '$lib/state/activeServer.svelte';
+  import { useActiveServerScope } from '$lib/state/server/activeServerScope.svelte';
   import { isMessagePostedEvent } from '$lib/render/eventKinds';
   import * as m from '$lib/i18n/messages';
 
-  const stores = serverRegistry.getStore(getActiveServer());
-  const notificationStore = stores.notifications;
   import { appState } from '$lib/state/globals.svelte';
   import {
     getRoomMembers,
@@ -59,11 +55,13 @@
     onReplyConsumed?: () => void;
   } = $props();
 
-  const connection = useConnection();
+  const server = useActiveServerScope();
+  const stores = $derived(server.store);
+  const notificationStore = $derived(server.notifications);
   const members = $derived(getRoomMembers());
-  const currentUser = $derived(serverRegistry.getStore(getActiveServer()).currentUser);
+  const currentUser = $derived(server.currentUser);
 
-  const store = new MessagesStore(connection(), () => currentUser.user?.id ?? null);
+  const store = new MessagesStore(server.connection, () => currentUser.user?.id ?? null);
   onDestroy(() => store.dispose());
 
   $effect(() =>
@@ -131,6 +129,7 @@
   // Reload thread events when the thread prop changes. Silent reconnect +
   // tab-resume catch-ups are owned by the server event bus.
   $effect(() => {
+    store.setConnection(server.connection);
     store.setThread(roomId, threadRootEventId);
   });
 
@@ -231,9 +230,9 @@
     isFollowingThread = !wasFollowing;
 
     try {
-      const conn = connection();
+      const conn = server.connection;
       const api = createThreadAPI({
-        serverId: conn.serverId ?? getActiveServer(),
+        serverId: conn.serverId ?? server.id,
         baseUrl: conn.connectBaseUrl,
         bearerToken: conn.bearerToken
       });
@@ -273,9 +272,9 @@
 
   async function markThreadAsRead(currentThreadId: string, upToEventId?: string) {
     try {
-      const conn = connection();
+      const conn = server.connection;
       return await createReadStateAPI({
-        serverId: conn.serverId ?? getActiveServer(),
+        serverId: conn.serverId ?? server.id,
         baseUrl: conn.connectBaseUrl,
         bearerToken: conn.bearerToken
       }).markThreadAsRead({ roomId, threadRootEventId: currentThreadId, upToEventId });
@@ -289,11 +288,12 @@
   // refocus/tab-reveal) and on thread changes while present. The result
   // drives the unread separator so a refocus shows what arrived during
   // the away period.
-  let lastFiredThreadId = '';
+  let lastFiredThreadScope = '';
   let wasPresentThread = false;
 
   $effect(() => {
     const currentThreadId = threadRootEventId;
+    const currentThreadScope = `${server.id}:${roomId}:${currentThreadId}`;
     const present = appState.isPresent;
 
     if (!present) {
@@ -309,9 +309,9 @@
       return;
     }
 
-    if (wasPresentThread && lastFiredThreadId === currentThreadId) return;
+    if (wasPresentThread && lastFiredThreadScope === currentThreadScope) return;
     wasPresentThread = true;
-    lastFiredThreadId = currentThreadId;
+    lastFiredThreadScope = currentThreadScope;
 
     unreadAfterTime = null;
     unreadBeforeTime = null;
