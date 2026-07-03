@@ -66,6 +66,7 @@
 
   $effect(() =>
     onRoomMessageMutated((detail) => {
+      if (detail.serverId !== server.id) return;
       if (detail.roomId !== roomId) return;
       if (detail.reason === 'message-deleted') {
         store.applyLocalMessageDeletion(detail.eventId);
@@ -202,28 +203,28 @@
   // -- Thread follow state --
   // Subscription events (auto-follow on reply, cross-tab sync) are authoritative.
   // If one fires for this thread before the initial query resolves we must not
-  // let the query's stale viewerIsFollowingThread clobber it. Track per-thread
-  // so that switching to a different thread starts fresh.
+  // let the query's stale viewerIsFollowingThread clobber it. Track by full
+  // URL scope because room/thread ids are only unique within a server.
   let isFollowingThread = $state(false);
-  let _followSeededForThread = '';
-  let _followSubFiredForThread = '';
+  let _followSeededForScope = '';
+  let _followSubFiredForScope = '';
 
   $effect(() => {
-    const threadId = threadRootEventId;
+    const followScope = `${server.id}:${roomId}:${threadRootEventId}`;
 
-    if (threadId !== _followSeededForThread) {
+    if (followScope !== _followSeededForScope) {
       // Only reset if the subscription hasn't already authoritatively set the
       // state for this thread (auto-follow can fire before the initial query
       // resolves).
-      if (_followSubFiredForThread !== threadId) {
+      if (_followSubFiredForScope !== followScope) {
         isFollowingThread = false;
       }
 
       // Wait until data has loaded before reading follow state
       if (!store.isInitialLoading) {
-        _followSeededForThread = threadId;
-        if (_followSubFiredForThread !== threadId) {
-          const rootEvent = threadEvents.find((e) => e.id === threadId);
+        _followSeededForScope = followScope;
+        if (_followSubFiredForScope !== followScope) {
+          const rootEvent = threadEvents.find((e) => e.id === threadRootEventId);
           if (isMessagePostedEvent(rootEvent?.event)) {
             isFollowingThread = rootEvent.event.viewerIsFollowingThread ?? false;
           }
@@ -234,6 +235,7 @@
 
   async function toggleThreadFollow() {
     const wasFollowing = isFollowingThread;
+    const toggleScope = `${server.id}:${roomId}:${threadRootEventId}`;
     isFollowingThread = !wasFollowing;
 
     try {
@@ -249,6 +251,7 @@
         await api.followThread({ roomId, threadRootEventId });
       }
     } catch {
+      if (`${server.id}:${roomId}:${threadRootEventId}` !== toggleScope) return;
       isFollowingThread = wasFollowing;
     }
   }
@@ -256,9 +259,9 @@
   // Sync thread follow state from live events (auto-follow on reply, cross-tab sync).
   $effect(() =>
     onThreadFollowChanged((update) => {
-      if (update.threadRootEventId === threadRootEventId) {
+      if (update.roomId === roomId && update.threadRootEventId === threadRootEventId) {
         isFollowingThread = update.isFollowing;
-        _followSubFiredForThread = update.threadRootEventId;
+        _followSubFiredForScope = `${server.id}:${roomId}:${threadRootEventId}`;
       }
     })
   );
@@ -296,7 +299,11 @@
         serverId: conn.serverId ?? currentServerId,
         baseUrl: conn.connectBaseUrl,
         bearerToken: conn.bearerToken
-      }).markThreadAsRead({ roomId: currentRoomId, threadRootEventId: currentThreadId, upToEventId });
+      }).markThreadAsRead({
+        roomId: currentRoomId,
+        threadRootEventId: currentThreadId,
+        upToEventId
+      });
     } catch (err) {
       console.error('Failed to mark thread as read:', err);
       return null;

@@ -30,10 +30,10 @@
     history.back();
   }
 
-  function getActiveMessageAPI() {
-    const conn = serverConnectionManager.getClient(activeInstanceId);
+  function getMessageAPI(serverId: string) {
+    const conn = serverConnectionManager.getClient(serverId);
     return createMessageAPI({
-      serverId: conn.serverId ?? activeInstanceId,
+      serverId: conn.serverId ?? serverId,
       baseUrl: conn.connectBaseUrl,
       bearerToken: conn.bearerToken
     });
@@ -128,9 +128,10 @@
   }
 
   async function handleDeleteMessage(roomId: string, eventId: string) {
+    const serverId = activeInstanceId;
     deletingMessage = true;
     try {
-      await getActiveMessageAPI().deleteMessage(roomId, eventId);
+      await getMessageAPI(serverId).deleteMessage(roomId, eventId);
     } catch (error) {
       deletingMessage = false;
       toast.error(m['room.message.delete_failed']());
@@ -139,15 +140,16 @@
       return;
     }
     deletingMessage = false;
-    notifyRoomMessageMutated({ roomId, eventId, reason: 'message-deleted' });
+    notifyRoomMessageMutated({ serverId, roomId, eventId, reason: 'message-deleted' });
     toast.success(m['room.message.deleted']());
     closeModal();
   }
 
   async function handleDeleteLinkPreview(roomId: string, eventId: string, previewUrl: string) {
+    const serverId = activeInstanceId;
     deletingLinkPreview = true;
     try {
-      await getActiveMessageAPI().deleteLinkPreview(roomId, eventId, previewUrl);
+      await getMessageAPI(serverId).deleteLinkPreview(roomId, eventId, previewUrl);
     } catch (error) {
       deletingLinkPreview = false;
       toast.error(m['room.link_preview.delete_failed']());
@@ -156,14 +158,15 @@
       return;
     }
     deletingLinkPreview = false;
-    notifyRoomMessageMutated({ roomId, eventId, reason: 'link-preview-deleted' });
+    notifyRoomMessageMutated({ serverId, roomId, eventId, reason: 'link-preview-deleted' });
     closeModal();
   }
 
   async function handleDeleteAttachment(roomId: string, eventId: string, attachmentId: string) {
+    const serverId = activeInstanceId;
     deletingAttachment = true;
     try {
-      await getActiveMessageAPI().deleteAttachment(roomId, eventId, attachmentId);
+      await getMessageAPI(serverId).deleteAttachment(roomId, eventId, attachmentId);
     } catch (error) {
       deletingAttachment = false;
       toast.error(m['room.attachment.delete_failed']());
@@ -172,7 +175,7 @@
       return;
     }
     deletingAttachment = false;
-    notifyRoomMessageMutated({ roomId, eventId, reason: 'attachment-deleted' });
+    notifyRoomMessageMutated({ serverId, roomId, eventId, reason: 'attachment-deleted' });
     closeModal();
   }
 

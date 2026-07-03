@@ -3,10 +3,10 @@ import type { FileWithUrl } from './attachments.svelte';
 
 const draftFilesMap = new SvelteMap<string, FileWithUrl[]>();
 
-export function draftKey(roomId: string, threadRootEventId?: string): string {
+export function draftKey(serverId: string, roomId: string, threadRootEventId?: string): string {
   return threadRootEventId
-    ? `chatto:draft:${roomId}:thread:${threadRootEventId}`
-    : `chatto:draft:${roomId}`;
+    ? `chatto:draft:${serverId}:${roomId}:thread:${threadRootEventId}`
+    : `chatto:draft:${serverId}:${roomId}`;
 }
 
 export class DraftState {

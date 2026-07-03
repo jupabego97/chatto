@@ -135,7 +135,7 @@
     return () => observer.disconnect();
   }
 
-  const DRAFT_KEY = $derived(draftKey(roomId, inThread));
+  const DRAFT_KEY = $derived(draftKey(server.id, roomId, inThread));
   let message = $state('');
 
   // TipTap editor API (received via onReady callback)
@@ -225,10 +225,11 @@
 
   // Load draft from sessionStorage when room changes
   // Using sessionStorage (not localStorage) so drafts are tab-specific
-  let autocompleteResetRoomId = '';
+  let autocompleteResetScope = '';
   $effect(() => {
-    if (autocompleteResetRoomId !== roomId) {
-      autocompleteResetRoomId = roomId;
+    const currentAutocompleteScope = `${server.id}:${roomId}:${inThread ?? ''}`;
+    if (autocompleteResetScope !== currentAutocompleteScope) {
+      autocompleteResetScope = currentAutocompleteScope;
       autocomplete.resetForRoom();
     }
 

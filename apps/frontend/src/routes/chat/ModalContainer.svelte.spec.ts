@@ -448,6 +448,7 @@ describe('ModalContainer message mutation modals', () => {
         expect(listener).toHaveBeenCalledOnce();
       });
       expect((listener.mock.calls[0][0] as CustomEvent).detail).toEqual({
+        serverId: 'origin',
         roomId: 'room-1',
         eventId: 'event-1',
         reason: 'link-preview-deleted'

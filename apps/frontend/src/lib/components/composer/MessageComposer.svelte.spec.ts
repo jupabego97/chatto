@@ -4,6 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import { tick, type ComponentProps } from 'svelte';
 import MessageComposer, { type MessageComposerApi } from './MessageComposer.svelte';
 import { q } from '$lib/test-utils';
+import { activeServerTestState } from '$lib/test-utils/activeServerTestState.svelte';
 import { getToasts, toast } from '$lib/ui/toast';
 import type { QuoteInsertionContent, RoomMember } from '$lib/state/room';
 import { PresenceStatus } from '$lib/render/types';
@@ -94,8 +95,9 @@ const mockInstanceStores = {
   }
 };
 
-vi.mock('$lib/state/server/connection.svelte', () => ({
-  useConnection: () => () => ({
+vi.mock('$lib/state/server/connection.svelte', async () => {
+  const { activeServerTestState } = await import('$lib/test-utils/activeServerTestState.svelte');
+  const getConnection = () => ({
     isConnected: true,
     showConnectionLostBanner: false,
     client: {
@@ -103,23 +105,15 @@ vi.mock('$lib/state/server/connection.svelte', () => ({
       mutation: mutationMock,
       subscription: vi.fn()
     },
-    connectBaseUrl: 'http://localhost/api/connect',
+    connectBaseUrl: `http://${activeServerTestState.id}.example.test/api/connect`,
     bearerToken: null,
-    serverId: 'test-instance'
-  }),
-  useTrackedConnection: () => () => ({
-    isConnected: true,
-    showConnectionLostBanner: false,
-    client: {
-      query: queryMock,
-      mutation: mutationMock,
-      subscription: vi.fn()
-    },
-    connectBaseUrl: 'http://localhost/api/connect',
-    bearerToken: null,
-    serverId: 'test-instance'
-  })
-}));
+    serverId: activeServerTestState.id
+  });
+  return {
+    useConnection: () => getConnection,
+    useTrackedConnection: () => getConnection
+  };
+});
 
 vi.mock('$lib/api-client/messages', () => ({
   createMessageAPI: () => ({
@@ -138,19 +132,28 @@ vi.mock('$lib/attachments/prepareFiles', () => ({
   prepareFiles: prepareFilesMock
 }));
 
-vi.mock('$lib/state/server/registry.svelte', () => ({
-  serverRegistry: {
-    getStore: () => mockInstanceStores,
-    getServer: () => ({ id: 'test-instance', url: 'http://localhost' }),
-    isOriginServer: () => true,
-    originServer: { id: 'test-instance', url: 'http://localhost' },
-    servers: [{ id: 'test-instance', url: 'http://localhost' }]
-  }
-}));
+vi.mock('$lib/state/server/registry.svelte', async () => {
+  const { activeServerTestState } = await import('$lib/test-utils/activeServerTestState.svelte');
+  return {
+    serverRegistry: {
+      getStore: () => mockInstanceStores,
+      getServer: () => ({
+        id: activeServerTestState.id,
+        url: `http://${activeServerTestState.id}.example.test`
+      }),
+      isOriginServer: () => true,
+      originServer: { id: 'test-instance', url: 'http://localhost' },
+      servers: [{ id: 'test-instance', url: 'http://localhost' }]
+    }
+  };
+});
 
-vi.mock('$lib/state/activeServer.svelte', () => ({
-  getActiveServer: () => 'test-instance'
-}));
+vi.mock('$lib/state/activeServer.svelte', async () => {
+  const { activeServerTestState } = await import('$lib/test-utils/activeServerTestState.svelte');
+  return {
+    getActiveServer: () => activeServerTestState.id
+  };
+});
 
 vi.mock('$lib/state/room', () => ({
   getRoomMembers: () => roomStateMock.members,
@@ -338,6 +341,7 @@ function selectFirstAttachment(input: HTMLInputElement, file = imageFile()) {
 
 describe('MessageComposer', () => {
   beforeEach(() => {
+    activeServerTestState.id = 'test-instance';
     window.getSelection()?.removeAllRanges();
     mockInstanceStores.serverInfo.videoProcessingEnabled = false;
     mockInstanceStores.serverInfo.maxUploadSize = 25 * 1024 * 1024;
@@ -713,7 +717,7 @@ describe('MessageComposer', () => {
   describe('draft lifecycle', () => {
     it('renders saved markdown drafts as rich editor content', async () => {
       sessionStorage.setItem(
-        'chatto:draft:room_markdown_draft',
+        'chatto:draft:test-instance:room_markdown_draft',
         '**bold**\n\n```ts\nconst answer = 42;\n```'
       );
 
@@ -730,7 +734,7 @@ describe('MessageComposer', () => {
     });
 
     it('loads and persists a room text draft in sessionStorage', async () => {
-      sessionStorage.setItem('chatto:draft:room_draft', 'saved draft');
+      sessionStorage.setItem('chatto:draft:test-instance:room_draft', 'saved draft');
 
       const { container } = renderMessageComposer({ roomId: 'room_draft' }, { exactRoomId: true });
       const editor = await findEditor(container);
@@ -740,14 +744,37 @@ describe('MessageComposer', () => {
       await typeInEditor(editor, 'saved draft + more');
 
       await vi.waitFor(() =>
-        expect(sessionStorage.getItem('chatto:draft:room_draft')).toBe('saved draft + more')
+        expect(sessionStorage.getItem('chatto:draft:test-instance:room_draft')).toBe(
+          'saved draft + more'
+        )
       );
+    });
+
+    it('keeps same-room-id drafts separate across active servers without remounting', async () => {
+      activeServerTestState.id = 'server-a';
+      sessionStorage.setItem('chatto:draft:server-b:room_same', 'server b draft');
+
+      const rendered = renderMessageComposer({ roomId: 'room_same' }, { exactRoomId: true });
+      const editor = await findEditor(rendered.container);
+
+      await expect.element(editor).toHaveTextContent('');
+      await typeInEditor(editor, 'server a draft');
+      await vi.waitFor(() =>
+        expect(sessionStorage.getItem('chatto:draft:server-a:room_same')).toBe('server a draft')
+      );
+
+      activeServerTestState.id = 'server-b';
+      await tick();
+      await rendered.rerender({ roomId: 'room_same' });
+
+      await expect.element(editor).toHaveTextContent('server b draft');
+      expect(sessionStorage.getItem('chatto:draft:server-a:room_same')).toBe('server a draft');
     });
 
     it('preserves literal HTML-looking text when restoring a draft', async () => {
       const body = '<script>alert(1)</script> & <b>bold?</b>';
       const editedBody = `${body}!`;
-      sessionStorage.setItem('chatto:draft:room_html_draft', body);
+      sessionStorage.setItem('chatto:draft:test-instance:room_html_draft', body);
 
       const { container } = renderMessageComposer(
         { roomId: 'room_html_draft' },
@@ -760,14 +787,16 @@ describe('MessageComposer', () => {
       document.execCommand('insertText', false, '!');
 
       await vi.waitFor(() =>
-        expect(sessionStorage.getItem('chatto:draft:room_html_draft')).toBe(editedBody)
+        expect(sessionStorage.getItem('chatto:draft:test-instance:room_html_draft')).toBe(
+          editedBody
+        )
       );
     });
 
     it('preserves literal entity-looking text when restoring a draft', async () => {
       const body = 'AT&amp;T &gt; MCI';
       const editedBody = `${body}!`;
-      sessionStorage.setItem('chatto:draft:room_entity_draft', body);
+      sessionStorage.setItem('chatto:draft:test-instance:room_entity_draft', body);
 
       const { container } = renderMessageComposer(
         { roomId: 'room_entity_draft' },
@@ -780,14 +809,16 @@ describe('MessageComposer', () => {
       document.execCommand('insertText', false, '!');
 
       await vi.waitFor(() =>
-        expect(sessionStorage.getItem('chatto:draft:room_entity_draft')).toBe(editedBody)
+        expect(sessionStorage.getItem('chatto:draft:test-instance:room_entity_draft')).toBe(
+          editedBody
+        )
       );
     });
 
     it('preserves literal less-than entities when restoring a draft', async () => {
       const body = '&lt;x&gt;';
       const editedBody = `${body}!`;
-      sessionStorage.setItem('chatto:draft:room_less_than_entity_draft', body);
+      sessionStorage.setItem('chatto:draft:test-instance:room_less_than_entity_draft', body);
 
       const { container } = renderMessageComposer(
         { roomId: 'room_less_than_entity_draft' },
@@ -800,14 +831,16 @@ describe('MessageComposer', () => {
       document.execCommand('insertText', false, '!');
 
       await vi.waitFor(() =>
-        expect(sessionStorage.getItem('chatto:draft:room_less_than_entity_draft')).toBe(editedBody)
+        expect(
+          sessionStorage.getItem('chatto:draft:test-instance:room_less_than_entity_draft')
+        ).toBe(editedBody)
       );
     });
 
     it('preserves ampersands in restored markdown link URLs', async () => {
       const body = '[search](https://example.com/?a=1&b=2)';
       const editedBody = '[search](https://example.com/?a=1&b=3)';
-      sessionStorage.setItem('chatto:draft:room_link_draft', body);
+      sessionStorage.setItem('chatto:draft:test-instance:room_link_draft', body);
 
       const { container } = renderMessageComposer(
         { roomId: 'room_link_draft' },
@@ -826,12 +859,14 @@ describe('MessageComposer', () => {
       await changeInputValue(hrefInput, 'https://example.com/?a=1&b=3');
 
       await vi.waitFor(() =>
-        expect(sessionStorage.getItem('chatto:draft:room_link_draft')).toBe(editedBody)
+        expect(sessionStorage.getItem('chatto:draft:test-instance:room_link_draft')).toBe(
+          editedBody
+        )
       );
     });
 
     it('preserves literal HTML-looking text in restored indented code blocks', async () => {
-      sessionStorage.setItem('chatto:draft:room_indented_code_draft', '    <b>x</b>');
+      sessionStorage.setItem('chatto:draft:test-instance:room_indented_code_draft', '    <b>x</b>');
 
       const { container } = renderMessageComposer(
         { roomId: 'room_indented_code_draft' },
@@ -846,7 +881,8 @@ describe('MessageComposer', () => {
       document.execCommand('insertText', false, '!');
 
       await vi.waitFor(() => {
-        const draft = sessionStorage.getItem('chatto:draft:room_indented_code_draft') ?? '';
+        const draft =
+          sessionStorage.getItem('chatto:draft:test-instance:room_indented_code_draft') ?? '';
         expect(draft).toContain('<b>x</b>');
         expect(draft).not.toContain('&lt;b>x&lt;/b>');
       });
@@ -854,7 +890,7 @@ describe('MessageComposer', () => {
 
     it('escapes indented paragraph continuation lines as normal markdown text', async () => {
       const body = 'before\n    <b>x</b>';
-      sessionStorage.setItem('chatto:draft:room_indented_continuation_draft', body);
+      sessionStorage.setItem('chatto:draft:test-instance:room_indented_continuation_draft', body);
 
       const { container } = renderMessageComposer(
         { roomId: 'room_indented_continuation_draft' },
@@ -868,7 +904,9 @@ describe('MessageComposer', () => {
       document.execCommand('insertText', false, '!');
 
       await vi.waitFor(() => {
-        const draft = sessionStorage.getItem('chatto:draft:room_indented_continuation_draft') ?? '';
+        const draft =
+          sessionStorage.getItem('chatto:draft:test-instance:room_indented_continuation_draft') ??
+          '';
         expect(draft).toContain('    <b>x</b>!');
         expect(draft).not.toContain('**x**');
       });
@@ -877,7 +915,7 @@ describe('MessageComposer', () => {
     it('preserves literal HTML-looking text after unmatched backticks', async () => {
       const body = '` <b>literal</b>';
       const editedBody = `${body}!`;
-      sessionStorage.setItem('chatto:draft:room_unmatched_backtick_draft', body);
+      sessionStorage.setItem('chatto:draft:test-instance:room_unmatched_backtick_draft', body);
 
       const { container } = renderMessageComposer(
         { roomId: 'room_unmatched_backtick_draft' },
@@ -890,15 +928,15 @@ describe('MessageComposer', () => {
       document.execCommand('insertText', false, '!');
 
       await vi.waitFor(() =>
-        expect(sessionStorage.getItem('chatto:draft:room_unmatched_backtick_draft')).toBe(
-          editedBody
-        )
+        expect(
+          sessionStorage.getItem('chatto:draft:test-instance:room_unmatched_backtick_draft')
+        ).toBe(editedBody)
       );
     });
 
     it('does not escape code after a non-closing fence marker line', async () => {
       const body = '```md\n``` not a closing fence\n<b>code</b>\n```';
-      sessionStorage.setItem('chatto:draft:room_non_closing_fence_draft', body);
+      sessionStorage.setItem('chatto:draft:test-instance:room_non_closing_fence_draft', body);
 
       const { container } = renderMessageComposer(
         { roomId: 'room_non_closing_fence_draft' },
@@ -915,7 +953,7 @@ describe('MessageComposer', () => {
 
     it('does not escape code inside blockquoted fenced code blocks', async () => {
       const body = '> ```\n> <b>x</b>\n> ```';
-      sessionStorage.setItem('chatto:draft:room_blockquoted_fence_draft', body);
+      sessionStorage.setItem('chatto:draft:test-instance:room_blockquoted_fence_draft', body);
 
       const { container } = renderMessageComposer(
         { roomId: 'room_blockquoted_fence_draft' },
@@ -930,7 +968,7 @@ describe('MessageComposer', () => {
 
     it('does not escape multiline inline code spans', async () => {
       const body = '`<b>\n</b>`';
-      sessionStorage.setItem('chatto:draft:room_multiline_inline_code_draft', body);
+      sessionStorage.setItem('chatto:draft:test-instance:room_multiline_inline_code_draft', body);
 
       const { container } = renderMessageComposer(
         { roomId: 'room_multiline_inline_code_draft' },
@@ -945,7 +983,7 @@ describe('MessageComposer', () => {
     it('does not treat unmatched closing link syntax as a markdown link destination', async () => {
       const body = 'not a link](<b>x</b>)';
       const editedBody = `${body}!`;
-      sessionStorage.setItem('chatto:draft:room_fake_link_draft', body);
+      sessionStorage.setItem('chatto:draft:test-instance:room_fake_link_draft', body);
 
       const { container } = renderMessageComposer(
         { roomId: 'room_fake_link_draft' },
@@ -959,13 +997,15 @@ describe('MessageComposer', () => {
       document.execCommand('insertText', false, '!');
 
       await vi.waitFor(() =>
-        expect(sessionStorage.getItem('chatto:draft:room_fake_link_draft')).toBe(editedBody)
+        expect(sessionStorage.getItem('chatto:draft:test-instance:room_fake_link_draft')).toBe(
+          editedBody
+        )
       );
     });
 
     it('restores markdown autolinks with ampersands intact', async () => {
       const body = '<https://example.com/?a=1&b=2>';
-      sessionStorage.setItem('chatto:draft:room_autolink_text_draft', body);
+      sessionStorage.setItem('chatto:draft:test-instance:room_autolink_text_draft', body);
 
       const { container } = renderMessageComposer(
         { roomId: 'room_autolink_text_draft' },
@@ -979,8 +1019,11 @@ describe('MessageComposer', () => {
     });
 
     it('uses a separate thread draft key', async () => {
-      sessionStorage.setItem('chatto:draft:room_draft', 'room draft');
-      sessionStorage.setItem('chatto:draft:room_draft:thread:msg_root', 'thread draft');
+      sessionStorage.setItem('chatto:draft:test-instance:room_draft', 'room draft');
+      sessionStorage.setItem(
+        'chatto:draft:test-instance:room_draft:thread:msg_root',
+        'thread draft'
+      );
 
       const { container } = renderMessageComposer(
         { roomId: 'room_draft', inThread: 'msg_root' },
@@ -990,7 +1033,7 @@ describe('MessageComposer', () => {
       await expect
         .element(await findEditor(container, 'thread-reply-input'))
         .toHaveTextContent('thread draft');
-      expect(sessionStorage.getItem('chatto:draft:room_draft')).toBe('room draft');
+      expect(sessionStorage.getItem('chatto:draft:test-instance:room_draft')).toBe('room draft');
     });
 
     it('clears the active text draft after a successful send', async () => {
@@ -999,13 +1042,17 @@ describe('MessageComposer', () => {
 
       await typeInEditor(editor, 'send and clear draft');
       await vi.waitFor(() =>
-        expect(sessionStorage.getItem(`chatto:draft:${roomId}`)).toBe('send and clear draft')
+        expect(sessionStorage.getItem(`chatto:draft:test-instance:${roomId}`)).toBe(
+          'send and clear draft'
+        )
       );
 
       (q(container, 'button[aria-label="Send message"]') as HTMLButtonElement).click();
 
       await vi.waitFor(() => expect(mutationMock).toHaveBeenCalledOnce());
-      await vi.waitFor(() => expect(sessionStorage.getItem(`chatto:draft:${roomId}`)).toBeNull());
+      await vi.waitFor(() =>
+        expect(sessionStorage.getItem(`chatto:draft:test-instance:${roomId}`)).toBeNull()
+      );
     });
   });
 

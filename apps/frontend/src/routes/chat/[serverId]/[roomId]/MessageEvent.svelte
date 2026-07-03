@@ -333,8 +333,10 @@
 
   async function toggleThreadFollow(e: MouseEvent) {
     e.stopPropagation();
+    if (!event) return;
     const wasFollowing = isFollowingThread;
     const nextFollowing = !wasFollowing;
+    const toggleScope = `${server.id}:${roomId}:${event.id}`;
     setThreadFollowState(nextFollowing);
 
     try {
@@ -351,6 +353,7 @@
       }
       setThreadFollowState(nextFollowing);
     } catch {
+      if (!event || `${server.id}:${roomId}:${event.id}` !== toggleScope) return;
       setThreadFollowState(wasFollowing);
     }
   }
@@ -946,11 +949,7 @@
   <!-- Emoji picker (ContextMenu handles desktop popup vs mobile BottomSheet) -->
   {#if emojiPickerPos && !isDeleted}
     <ContextMenu position={emojiPickerPos} onclose={closeEmojiPicker}>
-      <EmojiPicker
-        serverId={server.id}
-        onSelect={handleEmojiSelect}
-        onClose={closeEmojiPicker}
-      />
+      <EmojiPicker serverId={server.id} onSelect={handleEmojiSelect} onClose={closeEmojiPicker} />
     </ContextMenu>
   {/if}
 
