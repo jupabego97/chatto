@@ -135,6 +135,38 @@ describe('RoomFilesStore', () => {
     });
   });
 
+  it('switches room and connection atomically without requesting the old room on the new server', async () => {
+    const firstApi = {
+      listRoomAttachments: vi.fn(async () => ({
+        ...emptyPage(),
+        items: [fileItem('old-room')]
+      })),
+      refreshMessageAttachmentUrls: vi.fn()
+    };
+    const secondApi = {
+      listRoomAttachments: vi.fn(async () => ({
+        ...emptyPage(),
+        items: [fileItem('new-room')]
+      })),
+      refreshMessageAttachmentUrls: vi.fn()
+    };
+    attachmentMocks.apis.push(firstApi, secondApi);
+    const store = new RoomFilesStore(serverConnection('server-1'));
+
+    store.setRoom('room-old');
+    await vi.waitFor(() => expect(firstApi.listRoomAttachments).toHaveBeenCalledOnce());
+    firstApi.listRoomAttachments.mockClear();
+
+    store.setRoomScope(serverConnection('server-2'), 'room-new');
+    await vi.waitFor(() => expect(secondApi.listRoomAttachments).toHaveBeenCalledOnce());
+
+    expect(firstApi.listRoomAttachments).not.toHaveBeenCalled();
+    expect(secondApi.listRoomAttachments).toHaveBeenCalledWith(
+      expect.objectContaining({ roomId: 'room-new' })
+    );
+    expect(store.items.map((item) => item.attachment.id)).toEqual(['new-room']);
+  });
+
   it('does not let stale loadMore calls clear a newer pagination loading state', async () => {
     const oldLoadMore = deferred<ReturnType<typeof emptyPage>>();
     const newLoadMore = deferred<ReturnType<typeof emptyPage>>();

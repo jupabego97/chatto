@@ -33,6 +33,14 @@ function isLegacyAsyncResult(value: unknown): value is { data: unknown; error: u
   return typeof value === 'object' && value !== null && ('data' in value || 'error' in value);
 }
 
+function serverConnection(serverId = 'server-1'): ServerConnection {
+  return {
+    serverId,
+    connectBaseUrl: `https://${serverId}.example.test/api/connect`,
+    bearerToken: `${serverId}-token`
+  } as ServerConnection;
+}
+
 async function settle() {
   for (let i = 0; i < 5; i++) {
     await Promise.resolve();
@@ -64,6 +72,21 @@ function threadMessageEvent(id: string, threadRootEventId: string | null = null)
       threadParticipants: [],
       viewerIsFollowingThread: null,
       reactions: []
+    }
+  };
+}
+
+function roomMessageEvent(
+  id: string,
+  roomId: string,
+  threadRootEventId: string | null = null
+) {
+  const event = threadMessageEvent(id, threadRootEventId);
+  return {
+    ...event,
+    event: {
+      ...event.event,
+      roomId
     }
   };
 }
@@ -323,6 +346,84 @@ describe('MessagesStore — room lifecycle ownership', () => {
     expect(fake.queryMock).not.toHaveBeenCalled();
     expect(store.rootEvents.map((event) => event.id)).toEqual(['m1']);
     expect(store.isInitialLoading).toBe(false);
+    store.dispose();
+  });
+
+  it('switches room and connection atomically without requesting the old room on the new server', async () => {
+    const firstTimeline = fakeTimelineAPI({
+      getRoomEvents: vi.fn(async () => ({
+        ...emptyPage(),
+        events: [roomMessageEvent('old-room', 'room-old') as never]
+      }))
+    });
+    const secondTimeline = fakeTimelineAPI({
+      getRoomEvents: vi.fn(async () => ({
+        ...emptyPage(),
+        events: [roomMessageEvent('new-room', 'room-new') as never]
+      }))
+    });
+    const createTimeline = vi.fn((connection: ServerConnection) =>
+      connection.serverId === 'server-2' ? secondTimeline : firstTimeline
+    );
+    const store = new MessagesStore(
+      serverConnection('server-1'),
+      () => null,
+      firstTimeline,
+      createTimeline
+    );
+
+    store.setRoom('room-old');
+    await settle();
+    vi.mocked(firstTimeline.getRoomEvents).mockClear();
+
+    store.setRoomScope(serverConnection('server-2'), 'room-new');
+    await settle();
+
+    expect(firstTimeline.getRoomEvents).not.toHaveBeenCalled();
+    expect(secondTimeline.getRoomEvents).toHaveBeenCalledOnce();
+    expect(secondTimeline.getRoomEvents).toHaveBeenCalledWith({ roomId: 'room-new', limit: 50 });
+    expect(store.rootEvents.map((event) => event.id)).toEqual(['new-room']);
+    store.dispose();
+  });
+
+  it('switches thread and connection atomically without requesting the old thread on the new server', async () => {
+    const firstTimeline = fakeTimelineAPI({
+      getThreadEvents: vi.fn(async () => ({
+        ...emptyPage(),
+        events: [roomMessageEvent('old-thread', 'room-old', 'thread-old') as never]
+      }))
+    });
+    const secondTimeline = fakeTimelineAPI({
+      getThreadEvents: vi.fn(async () => ({
+        ...emptyPage(),
+        events: [roomMessageEvent('new-thread', 'room-new', 'thread-new') as never]
+      }))
+    });
+    const createTimeline = vi.fn((connection: ServerConnection) =>
+      connection.serverId === 'server-2' ? secondTimeline : firstTimeline
+    );
+    const store = new MessagesStore(
+      serverConnection('server-1'),
+      () => null,
+      firstTimeline,
+      createTimeline
+    );
+
+    store.setThread('room-old', 'thread-old');
+    await settle();
+    vi.mocked(firstTimeline.getThreadEvents).mockClear();
+
+    store.setThreadScope(serverConnection('server-2'), 'room-new', 'thread-new');
+    await settle();
+
+    expect(firstTimeline.getThreadEvents).not.toHaveBeenCalled();
+    expect(secondTimeline.getThreadEvents).toHaveBeenCalledOnce();
+    expect(secondTimeline.getThreadEvents).toHaveBeenCalledWith({
+      roomId: 'room-new',
+      threadRootEventId: 'thread-new',
+      limit: 50
+    });
+    expect(store.threadEvents.map((event) => event.id)).toEqual(['new-thread']);
     store.dispose();
   });
 

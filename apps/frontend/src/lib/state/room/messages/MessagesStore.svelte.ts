@@ -119,6 +119,7 @@ export class MessagesStore {
   private roomId = '';
   private oldestCursor: string | undefined;
   private newestCursor: string | undefined;
+  private readonly createTimeline: (serverConnection: ServerConnection) => RoomTimelineAPI;
 
   /** Increments on every load kickoff. Async callbacks compare against
    *  it via {@link isStale} to discard results from superseded loads. */
@@ -127,10 +128,13 @@ export class MessagesStore {
   constructor(
     serverConnection: ServerConnection,
     private readonly getCurrentUserId: () => string | null,
-    roomTimeline?: RoomTimelineAPI
+    roomTimeline?: RoomTimelineAPI,
+    createTimeline: (serverConnection: ServerConnection) => RoomTimelineAPI =
+      roomTimelineFromServerConnection
   ) {
+    this.createTimeline = createTimeline;
     this.connectionKey = connectionKey(serverConnection);
-    this.roomTimeline = roomTimeline ?? roomTimelineFromServerConnection(serverConnection);
+    this.roomTimeline = roomTimeline ?? this.createTimeline(serverConnection);
   }
 
   /** Tear down lifecycle listeners. Idempotent. */
@@ -262,7 +266,7 @@ export class MessagesStore {
     if (this.connectionKey === nextKey) return;
 
     this.connectionKey = nextKey;
-    this.roomTimeline = roomTimelineFromServerConnection(serverConnection);
+    this.roomTimeline = this.createTimeline(serverConnection);
     if (this.scope === 'thread') {
       const thisLoad = this.startLoad();
       this.resetState();
@@ -288,6 +292,20 @@ export class MessagesStore {
     this.resetAndFetchLatest();
   }
 
+  setRoomScope(serverConnection: ServerConnection, roomId: string): void {
+    const nextKey = connectionKey(serverConnection);
+    if (this.scope === 'room' && this.roomId === roomId && this.connectionKey === nextKey) return;
+
+    if (this.connectionKey !== nextKey) {
+      this.connectionKey = nextKey;
+      this.roomTimeline = this.createTimeline(serverConnection);
+    }
+    this.scope = 'room';
+    this.roomId = roomId;
+    this.threadRootEventId = '';
+    this.resetAndFetchLatest();
+  }
+
   setThread(roomId: string, threadRootEventId: string): void {
     if (
       this.scope === 'thread' &&
@@ -297,6 +315,35 @@ export class MessagesStore {
       return;
     }
 
+    this.scope = 'thread';
+    this.roomId = roomId;
+    this.threadRootEventId = threadRootEventId;
+
+    const thisLoad = this.startLoad();
+    this.resetState();
+    this.isInitialLoading = true;
+    this.fetchThread(thisLoad);
+  }
+
+  setThreadScope(
+    serverConnection: ServerConnection,
+    roomId: string,
+    threadRootEventId: string
+  ): void {
+    const nextKey = connectionKey(serverConnection);
+    if (
+      this.scope === 'thread' &&
+      this.roomId === roomId &&
+      this.threadRootEventId === threadRootEventId &&
+      this.connectionKey === nextKey
+    ) {
+      return;
+    }
+
+    if (this.connectionKey !== nextKey) {
+      this.connectionKey = nextKey;
+      this.roomTimeline = this.createTimeline(serverConnection);
+    }
     this.scope = 'thread';
     this.roomId = roomId;
     this.threadRootEventId = threadRootEventId;

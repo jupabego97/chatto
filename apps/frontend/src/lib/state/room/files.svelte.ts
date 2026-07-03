@@ -62,6 +62,14 @@ function connectionKey(serverConnection: ServerConnection): string {
   return `${serverConnection.serverId ?? ''}\0${serverConnection.connectBaseUrl}\0${serverConnection.bearerToken ?? ''}`;
 }
 
+function attachmentAPIFromConnection(serverConnection: ServerConnection): AttachmentAPI {
+  return createAttachmentAPI({
+    serverId: serverConnection.serverId,
+    baseUrl: serverConnection.connectBaseUrl,
+    bearerToken: serverConnection.bearerToken
+  });
+}
+
 export class RoomFilesStore {
   items = $state.raw<RoomFileItem[]>([]);
   totalCount = $state(0);
@@ -78,11 +86,7 @@ export class RoomFilesStore {
 
   constructor(serverConnection: ServerConnection) {
     this.connectionKey = connectionKey(serverConnection);
-    this.attachmentAPI = createAttachmentAPI({
-      serverId: serverConnection.serverId,
-      baseUrl: serverConnection.connectBaseUrl,
-      bearerToken: serverConnection.bearerToken
-    });
+    this.attachmentAPI = attachmentAPIFromConnection(serverConnection);
   }
 
   setConnection(serverConnection: ServerConnection): void {
@@ -90,17 +94,26 @@ export class RoomFilesStore {
     if (this.connectionKey === nextKey) return;
 
     this.connectionKey = nextKey;
-    this.attachmentAPI = createAttachmentAPI({
-      serverId: serverConnection.serverId,
-      baseUrl: serverConnection.connectBaseUrl,
-      bearerToken: serverConnection.bearerToken
-    });
+    this.attachmentAPI = attachmentAPIFromConnection(serverConnection);
     this.reset();
     if (this.roomId) void this.loadInitial();
   }
 
   setRoom(roomId: string): void {
     if (this.roomId === roomId) return;
+    this.roomId = roomId;
+    this.reset();
+    void this.loadInitial();
+  }
+
+  setRoomScope(serverConnection: ServerConnection, roomId: string): void {
+    const nextKey = connectionKey(serverConnection);
+    if (this.connectionKey === nextKey && this.roomId === roomId) return;
+
+    if (this.connectionKey !== nextKey) {
+      this.connectionKey = nextKey;
+      this.attachmentAPI = attachmentAPIFromConnection(serverConnection);
+    }
     this.roomId = roomId;
     this.reset();
     void this.loadInitial();

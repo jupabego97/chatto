@@ -120,6 +120,18 @@ export class RoomMembersStore {
     this.reset();
   }
 
+  setRoomScope(source: ServerConnection, roomId: string): void {
+    const nextKey = connectionKey(source);
+    if (this.connectionKey === nextKey && this.roomId === roomId) return;
+
+    if (this.connectionKey !== nextKey) {
+      this.connectionKey = nextKey;
+      this.api = apiFromConnection(source);
+    }
+    this.roomId = roomId;
+    this.reset();
+  }
+
   get filteredMembers(): RoomMember[] {
     return this.filterLoadedMembers(this.activeSearch);
   }

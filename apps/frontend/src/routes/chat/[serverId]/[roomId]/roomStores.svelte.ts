@@ -23,12 +23,9 @@ export class RoomStores {
 	}
 
 	sync(connection: ServerConnection, roomId: string): void {
-		this.messages.setConnection(connection);
-		this.files.setConnection(connection);
-		this.members.setConnection(connection);
-		this.messages.setRoom(roomId);
-		this.files.setRoom(roomId);
-		this.members.setRoom(roomId);
+		this.messages.setRoomScope(connection, roomId);
+		this.files.setRoomScope(connection, roomId);
+		this.members.setRoomScope(connection, roomId);
 	}
 
 	ingestServerEvent(event: EventEnvelope): void {

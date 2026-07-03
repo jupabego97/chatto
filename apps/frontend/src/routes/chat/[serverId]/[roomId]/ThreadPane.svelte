@@ -137,8 +137,7 @@
       composerApi = null;
     }
     composerScope = currentScope;
-    store.setConnection(server.connection);
-    store.setThread(roomId, threadRootEventId);
+    store.setThreadScope(server.connection, roomId, threadRootEventId);
   });
 
   // Jump to a specific message when highlightEventId prop is set
