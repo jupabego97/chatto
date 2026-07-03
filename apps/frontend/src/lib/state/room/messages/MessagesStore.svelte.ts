@@ -261,6 +261,11 @@ export class MessagesStore {
     return eventCacheKey(this.roomId, eventId);
   }
 
+  /**
+   * Low-level connection swap for callers that are not changing room/thread.
+   * Route owners that change server and room/thread together should use
+   * `setRoomScope` / `setThreadScope` so no request observes a mixed scope.
+   */
   setConnection(serverConnection: ServerConnection): void {
     const nextKey = connectionKey(serverConnection);
     if (this.connectionKey === nextKey) return;
@@ -283,6 +288,10 @@ export class MessagesStore {
     }
   }
 
+  /**
+   * Low-level room swap for callers that are not changing server connection.
+   * Prefer `setRoomScope` when applying URL-derived server+room scope.
+   */
   setRoom(roomId: string): void {
     if (this.scope === 'room' && this.roomId === roomId) return;
 
@@ -306,6 +315,10 @@ export class MessagesStore {
     this.resetAndFetchLatest();
   }
 
+  /**
+   * Low-level thread swap for callers that are not changing server connection.
+   * Prefer `setThreadScope` when applying URL-derived server+thread scope.
+   */
   setThread(roomId: string, threadRootEventId: string): void {
     if (
       this.scope === 'thread' &&

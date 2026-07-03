@@ -105,6 +105,11 @@ export class RoomMembersStore {
     }
   }
 
+  /**
+   * Low-level connection swap for callers that are not changing room.
+   * Route owners should use `setRoomScope` when the URL server and room move
+   * together so all room-scoped stores share the same lifecycle shape.
+   */
   setConnection(source: ServerConnection): void {
     const nextKey = connectionKey(source);
     if (this.connectionKey === nextKey) return;
@@ -114,6 +119,10 @@ export class RoomMembersStore {
     this.reset();
   }
 
+  /**
+   * Low-level room swap for callers that are not changing server connection.
+   * Prefer `setRoomScope` when applying URL-derived server+room scope.
+   */
   setRoom(roomId: string): void {
     if (this.roomId === roomId) return;
     this.roomId = roomId;

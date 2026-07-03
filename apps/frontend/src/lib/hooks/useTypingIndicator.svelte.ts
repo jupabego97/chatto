@@ -90,12 +90,13 @@ export function createTypingIndicator(getConfig: () => TypingIndicatorConfig) {
   // changes now that Room.svelte no longer remounts on server switches.
   $effect(() => {
     void server.id;
-    return untrack(() => {
+    const unsubscribe = onTypingEvent(handleTypingEvent);
+    untrack(() => {
       typingUsers.clear();
       lastSentAt = 0;
       state.version++;
-      return onTypingEvent(handleTypingEvent);
     });
+    return unsubscribe;
   });
 
   // Sync config reactively — getConfig() is called inside the $effect,

@@ -89,6 +89,11 @@ export class RoomFilesStore {
     this.attachmentAPI = attachmentAPIFromConnection(serverConnection);
   }
 
+  /**
+   * Low-level connection swap for callers that are not changing room.
+   * Route owners should use `setRoomScope` when the URL server and room move
+   * together, otherwise a reload can observe a mixed server/room scope.
+   */
   setConnection(serverConnection: ServerConnection): void {
     const nextKey = connectionKey(serverConnection);
     if (this.connectionKey === nextKey) return;
@@ -99,6 +104,10 @@ export class RoomFilesStore {
     if (this.roomId) void this.loadInitial();
   }
 
+  /**
+   * Low-level room swap for callers that are not changing server connection.
+   * Prefer `setRoomScope` when applying URL-derived server+room scope.
+   */
   setRoom(roomId: string): void {
     if (this.roomId === roomId) return;
     this.roomId = roomId;
