@@ -20,7 +20,7 @@ Both questions touched the design of the OIDC integration when it was built; bot
 Chatto uses external providers to *identify* a user — establish that "this DID/subject/email belongs to this person and we can trust the assertion." Once identification is complete, provider credentials are dropped from Chatto-controlled storage:
 
 - OIDC and Goth-backed OAuth providers: access tokens and ID tokens are consumed for identity claims or provider-specific email verification, then discarded. No long-lived storage.
-- ATProto: the OAuth session created during sign-in is consumed for DID verification and optional email/profile hints, then deleted from Chatto's local session store. Tokens are not persisted. The PDS-side authorization grant is not revoked on ordinary sign-in, so the PDS may remember consent for future user-initiated sign-ins.
+- ATProto: the OAuth session created during sign-in is consumed for DID verification and optional email/profile hints, then deleted from Chatto's local session store. Tokens are not persisted. The PDS-side authorization grant is not revoked on ordinary sign-in, but public/loopback clients may still be asked for consent on every sign-in by the PDS.
 
 Chatto does not act on the user's behalf against the external provider. Any future "post to your PDS" or "sync your OIDC profile" feature would be a deliberate, separately-considered addition — not a side-effect of having tokens lying around from the sign-in flow.
 

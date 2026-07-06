@@ -22,11 +22,12 @@ import (
 //
 // In the current sign-in flow, session entries are written and deleted within
 // milliseconds after the callback has read the account email. Chatto deletes
-// its local token copy but leaves the PDS-side authorization grant active so
-// future user-initiated sign-ins can avoid repeated consent prompts. The store
-// nevertheless exists to make sign-in survive a multi-replica deployment where
-// the callback may land on a different replica than the one that started the
-// flow. See ADR-036 (runtime-state boundary) and FDR-029 for context.
+// its local token copy but does not revoke the PDS-side authorization grant.
+// Public/loopback ATProto clients may still be asked for consent on every
+// sign-in by the PDS. The store nevertheless exists to make sign-in survive a
+// multi-replica deployment where the callback may land on a different replica
+// than the one that started the flow. See ADR-036 (runtime-state boundary) and
+// FDR-029 for context.
 //
 // Session entries contain plaintext access tokens, refresh tokens, and a
 // DPoP private key. This matches the in-memory exposure of the previous
