@@ -455,14 +455,14 @@ var authProviderDefaultLabels = map[string]string{
 // changed after users link identities through it.
 type AuthProviderConfig struct {
 	ID              string            `toml:"id" comment:"Stable provider ID used in callback URLs and external identity links. Do not change after users link accounts."`
-	Type            string            `toml:"type" comment:"Provider type: oidc, github, gitlab, google, or discord."`
+	Type            string            `toml:"type" comment:"Provider type: oidc, github, gitlab, google, discord, or atproto."`
 	Label           string            `toml:"label,commented" comment:"Button label shown on the login page. Defaults to the provider type's display name."`
-	ClientID        string            `toml:"client_id" comment:"OAuth/OIDC client ID."`
-	ClientSecret    string            `toml:"client_secret" comment:"OAuth/OIDC client secret. NEVER SHARE THIS!"`
+	ClientID        string            `toml:"client_id,commented" comment:"OAuth/OIDC client ID. Not used for type = 'atproto'."`
+	ClientSecret    string            `toml:"client_secret,commented" comment:"OAuth/OIDC client secret. NEVER SHARE THIS! Not used for type = 'atproto'."`
 	IssuerURL       string            `toml:"issuer_url,commented" comment:"OIDC issuer URL. Required when type = 'oidc'."`
 	Scopes          []string          `toml:"scopes,commented" comment:"Optional OAuth scopes. Defaults are provider-specific."`
-	RequestEmail    *bool             `toml:"request_email,commented" comment:"Whether to request email scopes for providers that support it. Default: false. Chatto still matches by provider subject without an email claim."`
-	AutoProvision   *bool             `toml:"auto_provision,commented" comment:"Whether unlinked external identities may create a new passwordless account after explicit confirmation. Default: false. The linked provider identity counts as a verified sign-in factor."`
+	RequestEmail    *bool             `toml:"request_email,commented" comment:"Whether to request email scopes for providers that support it. Default: false for OAuth/OIDC providers, true for AT Protocol. Chatto still matches by provider subject without an email claim."`
+	AutoProvision   *bool             `toml:"auto_provision,commented" comment:"Whether unlinked external identities may create a new passwordless account after explicit confirmation. Default: false for OAuth/OIDC providers, true for AT Protocol. The linked provider identity counts as a verified sign-in factor."`
 	ProviderOptions map[string]string `toml:"provider_options,commented" comment:"Provider-specific options reserved for future use."`
 }
 
@@ -479,6 +479,9 @@ func (c AuthProviderConfig) LabelOrDefault() string {
 
 func (c AuthProviderConfig) RequestEmailOrDefault() bool {
 	if c.RequestEmail == nil {
+		if c.Type == AuthProviderTypeATProto {
+			return true
+		}
 		return false
 	}
 	return *c.RequestEmail
@@ -486,6 +489,9 @@ func (c AuthProviderConfig) RequestEmailOrDefault() bool {
 
 func (c AuthProviderConfig) AutoProvisionOrDefault() bool {
 	if c.AutoProvision == nil {
+		if c.Type == AuthProviderTypeATProto {
+			return true
+		}
 		return false
 	}
 	return *c.AutoProvision
@@ -497,33 +503,12 @@ func IsAllowedAuthProviderType(providerType string) bool {
 		AuthProviderTypeGitHub,
 		AuthProviderTypeGitLab,
 		AuthProviderTypeGoogle,
-		AuthProviderTypeDiscord:
+		AuthProviderTypeDiscord,
+		AuthProviderTypeATProto:
 		return true
 	default:
 		return false
 	}
-}
-
-// ATProtoConfig contains settings for "Sign in with AT Protocol" (e.g. Bluesky).
-// Unlike OIDC, no per-deployment registration is required: each Chatto server
-// is its own OAuth client, and the client identifier is the URL of the
-// dynamically-served client metadata document.
-type ATProtoConfig struct {
-	Enabled bool   `toml:"enabled" env:"CHATTO_AUTH_ATPROTO_ENABLED" comment:"Enable 'Sign in with AT Protocol' (e.g. Bluesky). No per-deployment OAuth client registration is required — Chatto serves its own client metadata at /auth/atproto/client-metadata.json."`
-	Label   string `toml:"label,commented" env:"CHATTO_AUTH_ATPROTO_LABEL" comment:"Button label shown on the login page. Default: 'Sign in with AT Protocol'."`
-}
-
-// LabelOrDefault returns the configured label, or a sensible default.
-func (c *ATProtoConfig) LabelOrDefault() string {
-	if c.Label == "" {
-		return "Sign in with AT Protocol"
-	}
-	return c.Label
-}
-
-// IsConfigured returns true if ATProto sign-in is enabled.
-func (c *ATProtoConfig) IsConfigured() bool {
-	return c.Enabled
 }
 
 type AuthConfig struct {
@@ -531,7 +516,6 @@ type AuthConfig struct {
 	TokenTTL           Duration             `toml:"token_ttl,commented" env:"CHATTO_AUTH_TOKEN_TTL" comment:"TTL for bearer auth tokens. Supports human-readable durations like '90d', '2160h'. Default: 90d."`
 	EmailOTP           EmailOTPConfig       `toml:"email_otp,commented" comment:"Email OTP guardrails for registration and email verification."`
 	Providers          []AuthProviderConfig `toml:"providers" comment:"External login providers. Configure as repeated [[auth.providers]] tables."`
-	ATProto            ATProtoConfig        `toml:"atproto,commented" comment:"AT Protocol (Bluesky) sign-in configuration."`
 }
 
 // EmailOTPConfig controls registration and email-verification one-time-password guardrails.
@@ -609,14 +593,17 @@ func (c *AuthConfig) PublicProviders() []AuthProviderConfig {
 			Label: provider.LabelOrDefault(),
 		})
 	}
-	if c.ATProto.IsConfigured() {
-		providers = append(providers, AuthProviderConfig{
-			ID:    AuthProviderTypeATProto,
-			Type:  AuthProviderTypeATProto,
-			Label: c.ATProto.LabelOrDefault(),
-		})
-	}
 	return providers
+}
+
+// ATProtoProvider returns the configured AT Protocol provider, if any.
+func (c *AuthConfig) ATProtoProvider() (AuthProviderConfig, bool) {
+	for _, provider := range c.Providers {
+		if provider.Type == AuthProviderTypeATProto {
+			return provider, true
+		}
+	}
+	return AuthProviderConfig{}, false
 }
 
 type EmbeddedNATSConfig struct {
@@ -1099,13 +1086,28 @@ func (c *ChattoConfig) Validate() error {
 			seenProviderIDs[provider.ID] = struct{}{}
 		}
 		if !IsAllowedAuthProviderType(provider.Type) {
-			errs = append(errs, prefix+".type must be one of: oidc, github, gitlab, google, discord")
+			errs = append(errs, prefix+".type must be one of: oidc, github, gitlab, google, discord, atproto")
 		}
-		if provider.ClientID == "" {
-			errs = append(errs, prefix+".client_id is required")
-		}
-		if provider.ClientSecret == "" {
-			errs = append(errs, prefix+".client_secret is required")
+		if provider.Type == AuthProviderTypeATProto {
+			if provider.ID != AuthProviderTypeATProto {
+				errs = append(errs, prefix+".id must be \"atproto\" when type = 'atproto'")
+			}
+			if provider.ClientID != "" {
+				errs = append(errs, prefix+".client_id must be omitted when type = 'atproto'")
+			}
+			if provider.ClientSecret != "" {
+				errs = append(errs, prefix+".client_secret must be omitted when type = 'atproto'")
+			}
+			if provider.IssuerURL != "" {
+				errs = append(errs, prefix+".issuer_url must be omitted when type = 'atproto'")
+			}
+		} else {
+			if provider.ClientID == "" {
+				errs = append(errs, prefix+".client_id is required")
+			}
+			if provider.ClientSecret == "" {
+				errs = append(errs, prefix+".client_secret is required")
+			}
 		}
 		if provider.Type == AuthProviderTypeOpenIDConnect && provider.IssuerURL == "" {
 			errs = append(errs, prefix+".issuer_url is required when type = 'oidc'")

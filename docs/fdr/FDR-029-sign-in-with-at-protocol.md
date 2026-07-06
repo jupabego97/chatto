@@ -9,7 +9,7 @@ Users can sign in to Chatto using their AT Protocol identity — a DID issued by
 
 ## Behavior
 
-- The login page shows a **Sign in with AT Protocol** form whenever the server has `[auth.atproto] enabled = true`. The form takes a single input — an ATProto handle (e.g. `alice.bsky.social`, `hendrik.mans.de`) — and a Continue button. A leading `@` is tolerated.
+- The login page shows a **Sign in with AT Protocol** form whenever the server has a `[[auth.providers]]` entry with `id = "atproto"` and `type = "atproto"`. The form takes a single input — an ATProto handle (e.g. `alice.bsky.social`, `hendrik.mans.de`) — and a Continue button. A leading `@` is tolerated.
 - Submitting the form redirects the browser to the user's PDS for the standard OAuth approval screen. After approval, the PDS redirects back to Chatto's callback endpoint.
 - **First sign-in creates a pending external-identity account flow.** The user's DID is recorded as the stable identifier, and Chatto asks the user to confirm the account login through the shared SSO confirmation screen before creating the account. The handle is used as the login hint (so `alice.bsky.social` is proposed as login `alice.bsky.social`); shared account-creation validation handles collision feedback.
 - **First sign-in also seeds profile data.** Chatto reads the `app.bsky.actor.profile` record from the user's PDS and passes its display name and avatar as account-creation hints. The profile data is owned locally thereafter — Chatto does not re-sync from the PDS on later sign-ins.

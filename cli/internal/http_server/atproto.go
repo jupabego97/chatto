@@ -17,23 +17,23 @@ import (
 	"hmans.de/chatto/internal/config"
 )
 
-const atprotoProviderIssuer = config.AuthProviderTypeATProto
-
 // atprotoHandler bundles the indigo OAuth client and the helpers used by the
 // HTTP routes. One instance per HTTPServer.
 type atprotoHandler struct {
 	s         *HTTPServer
+	provider  config.AuthProviderConfig
 	app       *oauth.ClientApp
 	clientURI string // public origin used in client metadata
 	scopes    []string
 }
 
 func (s *HTTPServer) setupATProtoRoutes() {
-	if !s.config.Auth.ATProto.IsConfigured() {
+	provider, ok := s.config.Auth.ATProtoProvider()
+	if !ok {
 		return
 	}
 
-	h, err := newATProtoHandler(s)
+	h, err := newATProtoHandler(s, provider)
 	if err != nil {
 		log.Error("Failed to initialize ATProto OAuth client", "error", err)
 		return
@@ -50,17 +50,23 @@ func (s *HTTPServer) setupATProtoRoutes() {
 	auth.GET("atproto/callback", h.handleCallback)
 }
 
-func newATProtoHandler(s *HTTPServer) (*atprotoHandler, error) {
+func newATProtoHandler(s *HTTPServer, provider config.AuthProviderConfig) (*atprotoHandler, error) {
 	publicURL := strings.TrimRight(s.config.Webserver.URL, "/")
 	if publicURL == "" {
 		return nil, errors.New("webserver.url must be set to enable AT Protocol sign-in")
 	}
 
-	// account:email is requested so the shared external-identity account
-	// creation path can seed the verified-email list and trigger
-	// owners.emails owner auto-promotion. Users can decline this scope on
-	// the PDS consent screen and still complete sign-in.
-	scopes := []string{"atproto", "account:email"}
+	// account:email is requested by default so the shared external-identity
+	// account creation path can seed the verified-email list and trigger
+	// owners.emails owner auto-promotion. Users can decline this scope on the
+	// PDS consent screen and still complete sign-in.
+	scopes := provider.Scopes
+	if len(scopes) == 0 {
+		scopes = []string{"atproto"}
+		if provider.RequestEmailOrDefault() {
+			scopes = append(scopes, "account:email")
+		}
+	}
 
 	var cfg oauth.ClientConfig
 	if isLocalhostURL(publicURL) {
@@ -89,6 +95,7 @@ func newATProtoHandler(s *HTTPServer) (*atprotoHandler, error) {
 
 	return &atprotoHandler{
 		s:         s,
+		provider:  provider,
 		app:       app,
 		clientURI: publicURL,
 		scopes:    scopes,
@@ -171,7 +178,7 @@ func (h *atprotoHandler) handleStartFlow(c *gin.Context) {
 	linkStartRedirect := ""
 	if intent == "link" {
 		start, err := h.s.core.ConsumePendingExternalIdentityLinkStart(ctx, c.Query("link_start"))
-		if err != nil || start.ProviderID != config.AuthProviderTypeATProto {
+		if err != nil || start.ProviderID != h.provider.ID {
 			if err != nil {
 				log.Warn("ATProto link start token failed", "error", err)
 			} else {
@@ -180,14 +187,14 @@ func (h *atprotoHandler) handleStartFlow(c *gin.Context) {
 			c.Redirect(http.StatusTemporaryRedirect, "/login?error=provider_failed")
 			return
 		}
-		session.Set(providerSessionKey(config.AuthProviderTypeATProto, "intent"), "link")
-		session.Set(providerSessionKey(config.AuthProviderTypeATProto, "link_user_id"), start.BoundUserID)
+		session.Set(providerSessionKey(h.provider.ID, "intent"), "link")
+		session.Set(providerSessionKey(h.provider.ID, "link_user_id"), start.BoundUserID)
 		if isValidInternalRedirect(start.RedirectPath) {
 			linkStartRedirect = start.RedirectPath
 		}
 	} else {
-		session.Set(providerSessionKey(config.AuthProviderTypeATProto, "intent"), "login")
-		session.Delete(providerSessionKey(config.AuthProviderTypeATProto, "link_user_id"))
+		session.Set(providerSessionKey(h.provider.ID, "intent"), "login")
+		session.Delete(providerSessionKey(h.provider.ID, "link_user_id"))
 	}
 
 	if linkStartRedirect != "" {
@@ -250,7 +257,7 @@ func (h *atprotoHandler) handleCallback(c *gin.Context) {
 	profile := h.fetchProfileHints(ctx, did, sessData.HostURL)
 
 	identity := resolvedProviderIdentity{
-		issuer:          atprotoProviderIssuer,
+		issuer:          providerConfig.ID,
 		subject:         did,
 		verifiedEmail:   verifiedEmail,
 		avatarURL:       profile.avatarURL,
@@ -298,13 +305,7 @@ func (h *atprotoHandler) handleCallback(c *gin.Context) {
 }
 
 func (h *atprotoHandler) providerConfig() config.AuthProviderConfig {
-	autoProvision := true
-	return config.AuthProviderConfig{
-		ID:            config.AuthProviderTypeATProto,
-		Type:          config.AuthProviderTypeATProto,
-		Label:         h.s.config.Auth.ATProto.LabelOrDefault(),
-		AutoProvision: &autoProvision,
-	}
+	return h.provider
 }
 
 // fetchVerifiedEmail asks the user's PDS for their account email. If it is

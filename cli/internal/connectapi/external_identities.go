@@ -219,9 +219,6 @@ func (a *API) providerLabels() map[string]string {
 	for _, provider := range a.config.Auth.Providers {
 		labels[provider.ID] = provider.LabelOrDefault()
 	}
-	if a.config.Auth.ATProto.IsConfigured() {
-		labels[config.AuthProviderTypeATProto] = a.config.Auth.ATProto.LabelOrDefault()
-	}
 	return labels
 }
 
@@ -240,6 +237,9 @@ func (a *API) externalIdentityLinkStartURL(ctx context.Context, providerID, toke
 		baseURL = strings.TrimRight(a.config.Webserver.URL, "/")
 	}
 	path := "/auth/providers/" + url.PathEscape(providerID)
+	if provider, ok := a.authProvider(providerID); ok && provider.Type == config.AuthProviderTypeATProto {
+		path = "/auth/atproto"
+	}
 	values := url.Values{}
 	values.Set("intent", "link")
 	values.Set("link_start", token)
