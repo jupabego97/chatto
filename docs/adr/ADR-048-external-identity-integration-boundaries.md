@@ -17,10 +17,10 @@ Both questions touched the design of the OIDC integration when it was built; bot
 
 ### 1. External identity providers are authentication-only
 
-Chatto uses external providers to *identify* a user — establish that "this DID/subject/email belongs to this person and we can trust the assertion." Once identification is complete, the provider's credentials are dropped:
+Chatto uses external providers to *identify* a user — establish that "this DID/subject/email belongs to this person and we can trust the assertion." Once identification is complete, provider credentials are dropped from Chatto-controlled storage:
 
 - OIDC and Goth-backed OAuth providers: access tokens and ID tokens are consumed for identity claims or provider-specific email verification, then discarded. No long-lived storage.
-- ATProto: the OAuth session created during sign-in is explicitly revoked (`oauth.Logout`) at the end of the callback handler. Tokens are not persisted.
+- ATProto: the OAuth session created during sign-in is consumed for DID verification and optional email/profile hints, then deleted from Chatto's local session store. Tokens are not persisted. The PDS-side authorization grant is not revoked on ordinary sign-in, so the PDS may remember consent for future user-initiated sign-ins.
 
 Chatto does not act on the user's behalf against the external provider. Any future "post to your PDS" or "sync your OIDC profile" feature would be a deliberate, separately-considered addition — not a side-effect of having tokens lying around from the sign-in flow.
 
@@ -39,9 +39,10 @@ When a provider offers both a protocol-level endpoint and a vendor-hosted conven
 
 ## Consequences
 
-- **Smaller attack surface.** No long-lived provider credentials means no key rotation, no refresh-token leakage, no "what's in our KV that an attacker could resell."
+- **Smaller attack surface.** No long-lived provider credentials in Chatto means no key rotation, no refresh-token leakage, no "what's in our KV that an attacker could resell."
 - **Provider integrations are interchangeable.** Adding a new identity provider only requires that it can produce a verified identifier. No need to design around "and we'll also hold a write token."
 - **"Act on behalf" features become explicit projects.** If someday Chatto wants to post a status to a user's Bluesky feed when they go on-call, that requires a separate consent flow, separate scoped storage, and a separate ADR. The default sign-in doesn't quietly accumulate the necessary tokens.
+- **Provider-side grants may outlive Chatto sessions.** ATProto users can revoke Chatto from their PDS account settings if they want the next sign-in to show consent again. Chatto account disconnect only removes the local identity link unless a future integration deliberately stores revocable provider credentials.
 - **One or two extra HTTP calls per sign-in.** Fetching the bsky profile from a user's PDS instead of bsky's AppView is one GET; fetching the avatar blob is another. Negligible cost, paid once per user per sign-in.
 - **No vendor-CDN amortization for assets.** We re-host avatars in our own asset pipeline rather than hot-linking to `cdn.bsky.app`. The asset pipeline already handles this for every other avatar source; no new infrastructure needed.
 - **Federation-shaped features stay accessible.** A non-Bluesky ATProto user (or a user who migrated their PDS) Just Works because we never assumed Bluesky's hosted services were the source.

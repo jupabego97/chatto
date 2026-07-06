@@ -251,8 +251,8 @@ func (h *atprotoHandler) handleCallback(c *gin.Context) {
 	}
 
 	verifiedEmail := h.fetchVerifiedEmail(ctx, sessData)
-	if err := h.app.Logout(ctx, sessData.AccountDID, sessData.SessionID); err != nil {
-		log.Warn("ATProto session revocation failed", "did", did, "error", err)
+	if err := deleteLocalATProtoSession(ctx, h.app.Store, sessData); err != nil {
+		log.Warn("ATProto local session cleanup failed", "did", did, "error", err)
 	}
 	profile := h.fetchProfileHints(ctx, did, sessData.HostURL)
 
@@ -306,6 +306,10 @@ func (h *atprotoHandler) handleCallback(c *gin.Context) {
 
 func (h *atprotoHandler) providerConfig() config.AuthProviderConfig {
 	return h.provider
+}
+
+func deleteLocalATProtoSession(ctx context.Context, store oauth.ClientAuthStore, sessData *oauth.ClientSessionData) error {
+	return store.DeleteSession(ctx, sessData.AccountDID, sessData.SessionID)
 }
 
 // fetchVerifiedEmail asks the user's PDS for their account email. If it is

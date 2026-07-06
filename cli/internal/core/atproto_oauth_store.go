@@ -21,11 +21,12 @@ import (
 //   atproto.session.{sha256(did+sid)}     - post-callback session, 10-min TTL
 //
 // In the current sign-in flow, session entries are written and deleted within
-// milliseconds (the callback handler revokes immediately once the user's DID
-// is known). The store nevertheless exists to make sign-in survive a server
-// multi-replica deployment where the callback may land on a different replica
-// than the one that started the flow. See ADR-036 (runtime-state boundary) and
-// FDR-029 for context.
+// milliseconds after the callback has read the account email. Chatto deletes
+// its local token copy but leaves the PDS-side authorization grant active so
+// future user-initiated sign-ins can avoid repeated consent prompts. The store
+// nevertheless exists to make sign-in survive a multi-replica deployment where
+// the callback may land on a different replica than the one that started the
+// flow. See ADR-036 (runtime-state boundary) and FDR-029 for context.
 //
 // Session entries contain plaintext access tokens, refresh tokens, and a
 // DPoP private key. This matches the in-memory exposure of the previous
@@ -47,7 +48,7 @@ const (
 
 	// atprotoSessionTTL bounds the exposure window for ATProto access tokens,
 	// refresh tokens, and DPoP key material if a callback crashes before the
-	// handler can revoke and delete the session.
+	// handler can delete the local session copy.
 	atprotoSessionTTL = 10 * time.Minute
 )
 
@@ -109,8 +110,8 @@ func (c *ChattoCore) DeleteATProtoAuthRequest(ctx context.Context, state string)
 }
 
 // SaveATProtoSession persists a post-callback ATProto OAuth session. The
-// callback handler revokes and deletes this immediately after reading the
-// account email; the per-key TTL keeps crash leftovers short-lived.
+// callback handler deletes this immediately after reading the account email;
+// the per-key TTL keeps crash leftovers short-lived.
 func (c *ChattoCore) SaveATProtoSession(ctx context.Context, sess *atprotov1.ATProtoSession) error {
 	if sess == nil || sess.AccountDid == "" || sess.SessionId == "" {
 		return errors.New("ATProto session: account_did and session_id are required")

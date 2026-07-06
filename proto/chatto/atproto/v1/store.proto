@@ -30,12 +30,13 @@ message ATProtoAuthRequest {
 
 // ATProtoSession persists an authenticated OAuth session post-callback.
 // Stored at `atproto.session.{sha256(did + ":" + session_id)}` in the
-// MEMORY_CACHE KV bucket. In the current sign-in flow, sessions are revoked
-// (and the entry deleted) within milliseconds of being written; the KV
-// store exists primarily so the auth-request flow survives a server restart
-// or multi-replica callback. Any future feature that retains sessions
-// beyond identification should wrap the secret fields via the KMS service
-// (ADR-007 territory) rather than relying on plaintext KV.
+// MEMORY_CACHE KV bucket. In the current sign-in flow, the local entry is
+// deleted within milliseconds of being written, after the callback has fetched
+// the optional account email. Chatto does not retain the tokens, but also does
+// not revoke the PDS-side grant; that lets future user-initiated sign-ins avoid
+// repeated consent prompts. Any future feature that retains sessions beyond
+// identification should wrap the secret fields via the KMS service (ADR-007
+// territory) rather than relying on plaintext KV.
 //
 // Field names mirror the indigo `oauth.ClientSessionData` struct one-to-one.
 message ATProtoSession {

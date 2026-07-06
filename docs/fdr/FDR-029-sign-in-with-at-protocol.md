@@ -16,7 +16,7 @@ Users can sign in to Chatto using their AT Protocol identity — a DID issued by
 - **Users without a Bluesky profile degrade gracefully.** A handle that has never used the `app.bsky.actor.profile` lexicon (e.g. a Frontpage-only user) signs in successfully; their Chatto display name defaults to their handle and they get the standard initial-letter avatar placeholder.
 - **Subsequent sign-ins match by DID, not handle.** Handles can change at the protocol level; the DID is stable. The user's handle is re-resolved on each sign-in for display purposes but isn't used to identify them.
 - **Email is requested but optional.** The sign-in flow asks for the `account:email` scope alongside the base `atproto` scope. If the user grants it on the PDS consent screen and their PDS-side email is confirmed, the address is added to the Chatto account as a verified email — which also triggers `owners.emails` owner auto-promotion through the shared verified-email hook. If the user declines the scope, sign-in still succeeds; the user simply lands without an email and can add one later through email management.
-- **No ATProto credentials are retained.** Once the callback has identified the user, Chatto revokes the OAuth session immediately. Chatto does not store ATProto tokens and cannot act on the user's behalf against their PDS.
+- **No ATProto credentials are retained.** Once the callback has identified the user and fetched optional profile/email hints, Chatto deletes its local OAuth session copy. Chatto does not store ATProto tokens and cannot act on the user's behalf against their PDS. The PDS-side authorization grant is left active so future user-initiated sign-ins can avoid repeated consent prompts.
 - **The resulting Chatto session is identical to any other.** Cookie + bearer token issued per FDR-023; from this point on the sign-in path is invisible to the rest of the application.
 
 ## Design Decisions
@@ -47,9 +47,9 @@ Users can sign in to Chatto using their AT Protocol identity — a DID issued by
 
 ### 5. No ATProto tokens persist past sign-in
 
-**Decision:** Revoke the OAuth session at the end of the callback. Store nothing.
-**Why:** Phase 1 has no "act on the user's PDS" feature, so the tokens are pure attack surface. See ADR-048 for the general principle covering all external identity providers.
-**Tradeoff:** Any future feature that needs to write to a user's PDS will have to do its own separate OAuth flow with its own scopes. Considered correct — those use cases deserve their own consent moment anyway.
+**Decision:** Delete Chatto's local OAuth session copy at the end of the callback, but do not revoke the PDS-side authorization grant.
+**Why:** Phase 1 has no "act on the user's PDS" feature, so retaining access tokens, refresh tokens, or DPoP key material is pure attack surface. Leaving the provider grant active lets the user's PDS remember consent and usually skip the authorization screen on later user-initiated sign-ins. See ADR-048 for the general principle covering external identity providers.
+**Tradeoff:** Disconnecting the Chatto identity link is local to Chatto; it does not revoke the OAuth grant listed at the user's PDS. Users who want to fully reset provider consent must revoke Chatto from their PDS account settings. Any future feature that needs to write to a user's PDS will have to do its own separate OAuth flow with its own scopes.
 
 ### 6. ATProto sign-in only works at publicly-reachable or loopback URLs
 
