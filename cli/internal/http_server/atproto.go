@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/bluesky-social/indigo/atproto/auth/oauth"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/charmbracelet/log"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -20,11 +21,13 @@ import (
 // atprotoHandler bundles the indigo OAuth client and the helpers used by the
 // HTTP routes. One instance per HTTPServer.
 type atprotoHandler struct {
-	s         *HTTPServer
-	provider  config.AuthProviderConfig
-	app       *oauth.ClientApp
-	clientURI string // public origin used in client metadata
-	scopes    []string
+	s           *HTTPServer
+	provider    config.AuthProviderConfig
+	app         *oauth.ClientApp
+	clientURI   string // public origin used in client metadata
+	callbackURL string
+	loopback    bool
+	scopes      []string
 }
 
 func (s *HTTPServer) setupATProtoRoutes() {
@@ -69,6 +72,8 @@ func newATProtoHandler(s *HTTPServer, provider config.AuthProviderConfig) (*atpr
 	}
 
 	var cfg oauth.ClientConfig
+	var callbackURL string
+	loopback := false
 	if isLocalhostURL(publicURL) {
 		// Loopback dev mode: ATProto OAuth allows a special client_id form
 		// (http://localhost?redirect_uri=...&scope=...) so we don't need to
@@ -76,10 +81,11 @@ func newATProtoHandler(s *HTTPServer, provider config.AuthProviderConfig) (*atpr
 		// the redirect URI host to be 127.0.0.1 (or [::1]) — not "localhost"
 		// — so normalize before constructing the callback URL.
 		publicURL = normalizeLoopbackHost(publicURL)
-		callbackURL := publicURL + "/auth/atproto/callback"
+		callbackURL = publicURL + "/auth/atproto/callback"
 		cfg = oauth.NewLocalhostConfig(callbackURL, scopes)
+		loopback = true
 	} else {
-		callbackURL := publicURL + "/auth/atproto/callback"
+		callbackURL = publicURL + "/auth/atproto/callback"
 		cfg = oauth.NewPublicConfig(
 			publicURL+"/auth/atproto/client-metadata.json",
 			callbackURL,
@@ -94,11 +100,13 @@ func newATProtoHandler(s *HTTPServer, provider config.AuthProviderConfig) (*atpr
 	app := oauth.NewClientApp(&cfg, newATProtoOAuthStore(s.core))
 
 	return &atprotoHandler{
-		s:         s,
-		provider:  provider,
-		app:       app,
-		clientURI: publicURL,
-		scopes:    scopes,
+		s:           s,
+		provider:    provider,
+		app:         app,
+		clientURI:   publicURL,
+		callbackURL: callbackURL,
+		loopback:    loopback,
+		scopes:      scopes,
 	}, nil
 }
 
@@ -208,10 +216,17 @@ func (h *atprotoHandler) handleStartFlow(c *gin.Context) {
 		return
 	}
 
-	redirectURL, err := h.app.StartAuthFlow(ctx, identifier)
+	scopes, err := h.scopesForStart(ctx, identifier, intent)
 	if err != nil {
-		log.Warn("ATProto StartAuthFlow failed", "identifier", identifier, "error", err)
-		c.Redirect(http.StatusTemporaryRedirect, "/login?error=atproto_resolve&error_description="+url.QueryEscape(err.Error()))
+		log.Warn("ATProto scope selection failed", "error", err)
+		c.Redirect(http.StatusTemporaryRedirect, "/login?error=atproto_resolve")
+		return
+	}
+
+	redirectURL, err := h.clientAppForScopes(scopes).StartAuthFlow(ctx, identifier)
+	if err != nil {
+		log.Warn("ATProto StartAuthFlow failed")
+		c.Redirect(http.StatusTemporaryRedirect, "/login?error=atproto_resolve")
 		return
 	}
 
@@ -225,7 +240,8 @@ func (h *atprotoHandler) handleCallback(c *gin.Context) {
 	ctx := c.Request.Context()
 	session := sessions.Default(c)
 
-	sessData, err := h.app.ProcessCallback(ctx, c.Request.URL.Query())
+	callbackApp := h.callbackClientApp(ctx, c.Query("state"))
+	sessData, err := callbackApp.ProcessCallback(ctx, c.Request.URL.Query())
 	if err != nil {
 		log.Warn("ATProto callback failed", "error", err)
 		c.Redirect(http.StatusTemporaryRedirect, "/login?error=atproto_callback&error_description="+url.QueryEscape(err.Error()))
@@ -247,12 +263,12 @@ func (h *atprotoHandler) handleCallback(c *gin.Context) {
 	if ident, err := h.app.Dir.LookupDID(ctx, sessData.AccountDID); err == nil {
 		handle = ident.Handle.String()
 	} else {
-		log.Warn("ATProto handle lookup failed", "did", did, "error", err)
+		log.Warn("ATProto handle lookup failed", "error", err)
 	}
 
 	verifiedEmail := h.fetchVerifiedEmail(ctx, sessData)
-	if err := deleteLocalATProtoSession(ctx, h.app.Store, sessData); err != nil {
-		log.Warn("ATProto local session cleanup failed", "did", did, "error", err)
+	if err := deleteLocalATProtoSession(ctx, callbackApp.Store, sessData); err != nil {
+		log.Warn("ATProto local session cleanup failed", "error", err)
 	}
 	profile := h.fetchProfileHints(ctx, did, sessData.HostURL)
 
@@ -267,12 +283,12 @@ func (h *atprotoHandler) handleCallback(c *gin.Context) {
 
 	user, err := h.s.core.GetUserByExternalIdentity(ctx, identity.issuer, identity.subject)
 	if err != nil {
-		log.Error("ATProto user lookup failed", "did", did, "error", err)
+		log.Error("ATProto user lookup failed", "error", err)
 		c.Redirect(http.StatusTemporaryRedirect, "/login?error=atproto_callback")
 		return
 	}
 	if user == nil {
-		log.Info("ATProto login has no linked account", "did", did, "handle", handle)
+		log.Info("ATProto login has no linked account")
 		h.s.redirectPendingExternalIdentity(c, session, providerConfig, identity, intent, linkUserID)
 		return
 	}
@@ -286,7 +302,7 @@ func (h *atprotoHandler) handleCallback(c *gin.Context) {
 		return
 	}
 
-	log.Info("ATProto sign-in successful", "userId", user.Id, "did", did, "handle", handle)
+	log.Info("ATProto sign-in successful", "userId", user.Id)
 
 	if identity.avatarURL != "" {
 		existingAvatar, _ := h.s.core.GetUserAvatar(ctx, user.Id)
@@ -306,6 +322,74 @@ func (h *atprotoHandler) handleCallback(c *gin.Context) {
 
 func (h *atprotoHandler) providerConfig() config.AuthProviderConfig {
 	return h.provider
+}
+
+func (h *atprotoHandler) scopesForStart(ctx context.Context, identifier, intent string) ([]string, error) {
+	if !slices.Contains(h.scopes, "account:email") {
+		return h.scopes, nil
+	}
+	if intent == "link" {
+		return scopesWithout(h.scopes, "account:email"), nil
+	}
+	if strings.HasPrefix(identifier, "https://") {
+		return h.scopes, nil
+	}
+
+	atid, err := syntax.ParseAtIdentifier(identifier)
+	if err != nil {
+		return nil, fmt.Errorf("not a valid account identifier: %w", err)
+	}
+	ident, err := h.app.Dir.Lookup(ctx, atid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve account identifier: %w", err)
+	}
+	did := ident.DID.String()
+	user, err := h.s.core.GetUserByExternalIdentity(ctx, h.provider.ID, did)
+	if err != nil {
+		return nil, fmt.Errorf("lookup ATProto external identity: %w", err)
+	}
+	if user != nil {
+		return scopesWithout(h.scopes, "account:email"), nil
+	}
+	return h.scopes, nil
+}
+
+func (h *atprotoHandler) callbackClientApp(ctx context.Context, state string) *oauth.ClientApp {
+	if state == "" {
+		return h.app
+	}
+	info, err := h.app.Store.GetAuthRequestInfo(ctx, state)
+	if err != nil || len(info.Scopes) == 0 {
+		return h.app
+	}
+	return h.clientAppForScopes(info.Scopes)
+}
+
+func (h *atprotoHandler) clientAppForScopes(scopes []string) *oauth.ClientApp {
+	if slices.Equal(scopes, h.app.Config.Scopes) {
+		return h.app
+	}
+
+	var cfg oauth.ClientConfig
+	if h.loopback {
+		cfg = oauth.NewLocalhostConfig(h.callbackURL, scopes)
+	} else {
+		cfg = oauth.NewPublicConfig(h.app.Config.ClientID, h.callbackURL, scopes)
+	}
+	cfg.UserAgent = h.app.Config.UserAgent
+	cfg.PrivateKey = h.app.Config.PrivateKey
+	cfg.KeyID = h.app.Config.KeyID
+	return oauth.NewClientApp(&cfg, h.app.Store)
+}
+
+func scopesWithout(scopes []string, remove string) []string {
+	out := make([]string, 0, len(scopes))
+	for _, scope := range scopes {
+		if scope != remove {
+			out = append(out, scope)
+		}
+	}
+	return out
 }
 
 func deleteLocalATProtoSession(ctx context.Context, store oauth.ClientAuthStore, sessData *oauth.ClientSessionData) error {

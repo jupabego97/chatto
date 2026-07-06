@@ -2,6 +2,7 @@ package http_server
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/bluesky-social/indigo/atproto/auth/oauth"
@@ -67,6 +68,41 @@ func TestDeleteLocalATProtoSessionOnlyDeletesStoreEntry(t *testing.T) {
 
 	if store.deletedDID != "did:plc:alice" || store.deletedSessionID != "session-123" {
 		t.Fatalf("deleted = %q/%q, want did:plc:alice/session-123", store.deletedDID, store.deletedSessionID)
+	}
+}
+
+func TestScopesWithout(t *testing.T) {
+	got := scopesWithout([]string{"atproto", "account:email", "repo:example"}, "account:email")
+	want := []string{"atproto", "repo:example"}
+	if len(got) != len(want) {
+		t.Fatalf("len(scopesWithout) = %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("scopesWithout[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestClientAppForScopesUsesScopeSpecificLoopbackClientID(t *testing.T) {
+	scopes := []string{"atproto", "account:email"}
+	cfg := oauth.NewLocalhostConfig("http://127.0.0.1:5173/auth/atproto/callback", scopes)
+	h := &atprotoHandler{
+		app:         oauth.NewClientApp(&cfg, &recordingATProtoStore{}),
+		callbackURL: cfg.CallbackURL,
+		loopback:    true,
+		scopes:      scopes,
+	}
+
+	baseApp := h.clientAppForScopes([]string{"atproto"})
+	if baseApp.Config.ClientID == h.app.Config.ClientID {
+		t.Fatal("base-scope loopback client_id should differ from full-scope client_id")
+	}
+	if strings.Contains(baseApp.Config.ClientID, "account%3Aemail") {
+		t.Fatalf("base-scope client_id = %q, should not include account:email", baseApp.Config.ClientID)
+	}
+	if !strings.Contains(baseApp.Config.ClientID, "scope=atproto") {
+		t.Fatalf("base-scope client_id = %q, want scope=atproto", baseApp.Config.ClientID)
 	}
 }
 
