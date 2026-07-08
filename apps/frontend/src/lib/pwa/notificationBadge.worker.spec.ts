@@ -4,6 +4,7 @@ import {
   BadgeStateVersionGate,
   createCacheForegroundBadgeIntentStorage,
   type ForegroundBadgeIntentStorage,
+  type NativeNotificationLike,
   ServiceWorkerBadgeCoordinator,
   syncBadgeFromNativeNotifications
 } from './notificationBadge.worker';
@@ -419,8 +420,9 @@ describe('ServiceWorkerBadgeCoordinator', () => {
   });
 
   it('does not let a persisted foreground clear hide remaining native notifications', async () => {
+    const nativeNotifications: NativeNotificationLike[] = [{}];
     const registration = {
-      getNotifications: vi.fn(async () => [])
+      getNotifications: vi.fn(async (): Promise<NativeNotificationLike[]> => [])
     };
     const badgeNavigator = {
       setAppBadge: vi.fn(async () => {}),
@@ -433,7 +435,7 @@ describe('ServiceWorkerBadgeCoordinator', () => {
       badgeNavigator,
       foregroundBadgeIntentStorage
     ).applyForegroundNotificationCount(0, { serviceWorkerAppBadgeEnabled: true });
-    registration.getNotifications.mockResolvedValue([{}]);
+    registration.getNotifications.mockResolvedValue(nativeNotifications);
     badgeNavigator.clearAppBadge.mockClear();
     badgeNavigator.setAppBadge.mockClear();
 
