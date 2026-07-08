@@ -174,8 +174,9 @@ export async function syncBadgeFromNativeNotifications(
     return;
   }
 
-  if (minimumBadgeIntent) {
-    await applyBadgeIntent(badgeNavigator, minimumBadgeIntent);
+  const listedMinimumBadgeIntent = minimumBadgeIntent?.kind === 'clear' ? null : minimumBadgeIntent;
+  if (listedMinimumBadgeIntent) {
+    await applyBadgeIntent(badgeNavigator, listedMinimumBadgeIntent);
   } else if (notifications.length > 0) {
     await applyBadgeIntent(badgeNavigator, { kind: 'flag' });
   } else {

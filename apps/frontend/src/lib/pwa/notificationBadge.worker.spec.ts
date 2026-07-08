@@ -108,6 +108,24 @@ describe('syncBadgeFromNativeNotifications', () => {
     expect(badgeNavigator.clearAppBadge).not.toHaveBeenCalled();
   });
 
+  it('treats a clear foreground intent as no lower bound when native notifications remain', async () => {
+    const registration = {
+      getNotifications: vi.fn(async () => [{}, {}])
+    };
+    const badgeNavigator = {
+      setAppBadge: vi.fn(async () => {}),
+      clearAppBadge: vi.fn(async () => {})
+    };
+
+    await syncBadgeFromNativeNotifications(registration, badgeNavigator, {
+      minimumBadgeIntent: { kind: 'clear' }
+    });
+
+    expect(registration.getNotifications).toHaveBeenCalledOnce();
+    expect(badgeNavigator.setAppBadge).toHaveBeenCalledWith();
+    expect(badgeNavigator.clearAppBadge).not.toHaveBeenCalled();
+  });
+
   it('clears the app badge when no native notifications remain', async () => {
     const registration = {
       getNotifications: vi.fn(async () => [])
@@ -398,6 +416,35 @@ describe('ServiceWorkerBadgeCoordinator', () => {
 
     expect(badgeNavigator.setAppBadge).toHaveBeenCalledWith(1);
     expect(badgeNavigator.clearAppBadge).toHaveBeenCalledOnce();
+  });
+
+  it('does not let a persisted foreground clear hide remaining native notifications', async () => {
+    const registration = {
+      getNotifications: vi.fn(async () => [])
+    };
+    const badgeNavigator = {
+      setAppBadge: vi.fn(async () => {}),
+      clearAppBadge: vi.fn(async () => {})
+    };
+    const foregroundBadgeIntentStorage = createMemoryBadgeIntentStorage();
+
+    await new ServiceWorkerBadgeCoordinator(
+      registration,
+      badgeNavigator,
+      foregroundBadgeIntentStorage
+    ).applyForegroundNotificationCount(0, { serviceWorkerAppBadgeEnabled: true });
+    registration.getNotifications.mockResolvedValue([{}]);
+    badgeNavigator.clearAppBadge.mockClear();
+    badgeNavigator.setAppBadge.mockClear();
+
+    await new ServiceWorkerBadgeCoordinator(
+      registration,
+      badgeNavigator,
+      foregroundBadgeIntentStorage
+    ).reconcileAfterNotificationClick();
+
+    expect(badgeNavigator.setAppBadge).toHaveBeenCalledWith();
+    expect(badgeNavigator.clearAppBadge).not.toHaveBeenCalled();
   });
 
   it('does not persist push app badge counts as foreground state', async () => {
