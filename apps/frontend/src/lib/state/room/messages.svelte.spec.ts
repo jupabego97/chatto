@@ -1009,6 +1009,76 @@ describe('MessagesStore — room lifecycle ownership', () => {
     store.dispose();
   });
 
+  it('keeps the event array stable when a latest soft-refresh is unchanged', async () => {
+    const fake = new FakeQueryClient([
+      roomEventsResult({
+        events: [threadMessageEvent('m1'), threadMessageEvent('m2')],
+        startCursor: 'tl:cursor-1',
+        endCursor: 'tl:cursor-2',
+        hasOlder: false,
+        hasNewer: false
+      }),
+      roomEventsResult({
+        events: [threadMessageEvent('m1'), threadMessageEvent('m2')],
+        startCursor: 'tl:cursor-1',
+        endCursor: 'tl:cursor-2',
+        hasOlder: false,
+        hasNewer: false
+      })
+    ]);
+    const store = new MessagesStore(
+      fake as unknown as ServerConnection,
+      () => null,
+      timelineFromFixtures(fake)
+    );
+
+    store.setRoom('room-1');
+    await settle();
+    const previousEvents = store.events;
+
+    const result = await store.refreshCurrentWindow();
+    await settle();
+
+    expect(result).toMatchObject({ refreshed: true, changed: false });
+    expect(store.events).toBe(previousEvents);
+    expect(store.rootEvents.map((event) => event.id)).toEqual(['m1', 'm2']);
+    store.dispose();
+  });
+
+  it('preserves the loaded room window when a latest soft-refresh adds newer events', async () => {
+    const fake = new FakeQueryClient([
+      roomEventsResult({
+        events: [threadMessageEvent('m1'), threadMessageEvent('m2'), threadMessageEvent('m3')],
+        startCursor: 'tl:cursor-1',
+        endCursor: 'tl:cursor-3',
+        hasOlder: false,
+        hasNewer: false
+      }),
+      roomEventsResult({
+        events: [threadMessageEvent('m3'), threadMessageEvent('m4')],
+        startCursor: 'tl:cursor-3',
+        endCursor: 'tl:cursor-4',
+        hasOlder: true,
+        hasNewer: false
+      })
+    ]);
+    const store = new MessagesStore(
+      fake as unknown as ServerConnection,
+      () => null,
+      timelineFromFixtures(fake)
+    );
+
+    store.setRoom('room-1');
+    await settle();
+
+    const result = await store.refreshCurrentWindow();
+    await settle();
+
+    expect(result).toMatchObject({ refreshed: true, changed: true });
+    expect(store.rootEvents.map((event) => event.id)).toEqual(['m1', 'm2', 'm3', 'm4']);
+    store.dispose();
+  });
+
   it('soft-refreshes around an anchor event when one is provided', async () => {
     const fake = new FakeQueryClient([
       roomEventsResult({

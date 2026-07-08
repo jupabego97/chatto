@@ -48,7 +48,6 @@ export function useRoomUnread(getProps: () => { roomId: string }) {
       return unread.unreadMarkerWindow;
     },
     markRoomAsRead: unread.markAsRead,
-    noteAwayEvent: unread.noteAwayEvent,
     setUnreadMarkerEventId: unread.setUnreadMarkerEventId,
     clearUnreadMarker: unread.clearUnreadMarker
   };
