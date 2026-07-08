@@ -3,6 +3,16 @@
 All notable changes to Chatto. Maintained by release-please from the
 conventional-commit messages on `main` — do not edit by hand.
 
+## [0.4.3](https://github.com/chattocorp/chatto/compare/v0.4.2...v0.4.3) (2026-07-08)
+
+
+### Bug Fixes
+
+* **docs:** add community chat link ([#1344](https://github.com/chattocorp/chatto/issues/1344)) ([10c1eec](https://github.com/chattocorp/chatto/commit/10c1eec5fe03190f18b6ab45a5580a8a814d7ed6))
+* **frontend:** harden login redirect path validation ([#1340](https://github.com/chattocorp/chatto/issues/1340)) ([01db3e3](https://github.com/chattocorp/chatto/commit/01db3e3032950bf95793df64707ee655bcd9d99b))
+* **pwa:** stop preserving push badge hints ([#1343](https://github.com/chattocorp/chatto/issues/1343)) ([d9e50a3](https://github.com/chattocorp/chatto/commit/d9e50a3912fff800b1ed71c3a42a91d3e85dbd52))
+* **realtime:** align heartbeat cadence with client stall detection ([#1342](https://github.com/chattocorp/chatto/issues/1342)) ([c0e0d23](https://github.com/chattocorp/chatto/commit/c0e0d236ea4d29de7e75b63502323fe7be3ae967))
+
 ## [0.4.2](https://github.com/chattocorp/chatto/compare/v0.4.1...v0.4.2) (2026-07-07)
 
 
