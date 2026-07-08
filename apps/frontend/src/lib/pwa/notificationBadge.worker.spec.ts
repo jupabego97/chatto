@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   applyAuthoritativeBadgeState,
   BadgeStateVersionGate,
+  createCacheForegroundBadgeIntentStorage,
   type ForegroundBadgeIntentStorage,
   ServiceWorkerBadgeCoordinator,
   syncBadgeFromNativeNotifications
@@ -35,6 +36,42 @@ function createMemoryBadgeIntentStorage(): ForegroundBadgeIntentStorage {
     }
   };
 }
+
+function createMemoryCacheStorage(): CacheStorage {
+  const entries = new Map<string, Response>();
+  return {
+    open: vi.fn(async () => ({
+      match: vi.fn(async (request: RequestInfo | URL) => entries.get(request.toString())?.clone()),
+      put: vi.fn(async (request: RequestInfo | URL, response: Response) => {
+        entries.set(request.toString(), response.clone());
+      })
+    }))
+  } as unknown as CacheStorage;
+}
+
+describe('createCacheForegroundBadgeIntentStorage', () => {
+  it('reads legacy foreground notification count cache entries', async () => {
+    const caches = createMemoryCacheStorage();
+    const cache = await caches.open('badge-state');
+    await cache.put(
+      '/__chatto/foreground-notification-count',
+      new Response(
+        JSON.stringify({
+          notificationCount: 3,
+          serviceWorkerAppBadgeEnabled: true
+        })
+      )
+    );
+
+    const storage = createCacheForegroundBadgeIntentStorage(caches, 'badge-state');
+
+    await expect(storage.readForegroundBadgeIntent()).resolves.toEqual({
+      kind: 'count',
+      count: 3
+    });
+    await expect(storage.readServiceWorkerAppBadgeEnabled()).resolves.toBe(true);
+  });
+});
 
 describe('syncBadgeFromNativeNotifications', () => {
   it('sets a flag app badge when native notifications remain', async () => {

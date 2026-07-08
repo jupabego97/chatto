@@ -27,6 +27,7 @@ export interface ForegroundBadgeIntentStorage {
 }
 
 const FOREGROUND_BADGE_INTENT_REQUEST = '/__chatto/foreground-badge-intent';
+const LEGACY_FOREGROUND_NOTIFICATION_COUNT_REQUEST = '/__chatto/foreground-notification-count';
 
 function normalizeBadgeCount(notificationCount: number): number {
   if (!Number.isFinite(notificationCount)) return 0;
@@ -96,7 +97,9 @@ export function createCacheForegroundBadgeIntentStorage(
   async function readState(): Promise<StoredForegroundBadgeState> {
     try {
       const cache = await caches.open(cacheName);
-      const response = await cache.match(FOREGROUND_BADGE_INTENT_REQUEST);
+      const response =
+        (await cache.match(FOREGROUND_BADGE_INTENT_REQUEST)) ??
+        (await cache.match(LEGACY_FOREGROUND_NOTIFICATION_COUNT_REQUEST));
       if (!response) return { badgeIntent: null, serviceWorkerAppBadgeEnabled: false };
 
       return normalizeStoredForegroundBadgeState(await response.json());
