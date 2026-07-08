@@ -67,6 +67,8 @@ describe('useUnreadMarker', () => {
   });
 
   it('uses the read-state window returned on refocus', async () => {
+    const markedAtMs = Date.UTC(2026, 6, 8, 10, 0, 30);
+    vi.spyOn(Date, 'now').mockReturnValue(markedAtMs);
     const markAsRead = vi
       .fn()
       .mockResolvedValueOnce(null)
@@ -96,7 +98,7 @@ describe('useUnreadMarker', () => {
     await vi.waitFor(() =>
       expect(currentApi.unreadMarkerWindow).toEqual({
         afterTime: '2026-07-08T09:00:00.000Z',
-        beforeTime: '2026-07-08T10:00:00.000Z'
+        beforeTime: markedAtMs
       })
     );
     expect(currentApi.unreadMarkerEventId).toBeNull();
@@ -104,6 +106,8 @@ describe('useUnreadMarker', () => {
   });
 
   it('clears the marker when refocus returns no previous read state', async () => {
+    const markedAtMs = Date.UTC(2026, 6, 8, 10, 0, 30);
+    vi.spyOn(Date, 'now').mockReturnValue(markedAtMs);
     const markAsRead = vi
       .fn()
       .mockResolvedValueOnce({
@@ -130,7 +134,7 @@ describe('useUnreadMarker', () => {
     await vi.waitFor(() =>
       expect(currentApi.unreadMarkerWindow).toEqual({
         afterTime: '2026-07-08T09:00:00.000Z',
-        beforeTime: '2026-07-08T10:00:00.000Z'
+        beforeTime: markedAtMs
       })
     );
 
@@ -144,7 +148,34 @@ describe('useUnreadMarker', () => {
     rendered.unmount();
   });
 
-  it('ignores a stale refocus read after a newer explicit read', async () => {
+  it('does not create a marker window when the read cursor did not advance', async () => {
+    const markAsRead = vi.fn().mockResolvedValueOnce({
+      previousLastReadAt: '2026-07-08T09:00:00.000Z',
+      lastReadAt: '2026-07-08T09:00:00.000Z'
+    });
+    let api: HarnessAPI | undefined;
+
+    const rendered = render(Harness, {
+      props: {
+        targetId: 'room-1',
+        markAsRead,
+        onReady: (nextApi: HarnessAPI) => {
+          api = nextApi;
+        }
+      }
+    });
+    flushSync();
+    const currentApi = getApi(api);
+
+    await vi.waitFor(() => expect(markAsRead).toHaveBeenCalledOnce());
+    expect(currentApi.unreadMarkerWindow).toBeNull();
+    expect(currentApi.unreadMarkerEventId).toBeNull();
+    rendered.unmount();
+  });
+
+  it('preserves a pending refocus marker after a newer explicit read', async () => {
+    const markedAtMs = Date.UTC(2026, 6, 8, 10, 0, 30);
+    vi.spyOn(Date, 'now').mockReturnValue(markedAtMs);
     let resolveRefocus!: (value: {
       previousLastReadAt: string;
       lastReadAt: string;
@@ -189,7 +220,10 @@ describe('useUnreadMarker', () => {
     await Promise.resolve();
     flushSync();
 
-    expect(currentApi.unreadMarkerWindow).toBeNull();
+    expect(currentApi.unreadMarkerWindow).toEqual({
+      afterTime: '2026-07-08T09:00:00.000Z',
+      beforeTime: markedAtMs
+    });
     expect(currentApi.unreadMarkerEventId).toBeNull();
     rendered.unmount();
   });
