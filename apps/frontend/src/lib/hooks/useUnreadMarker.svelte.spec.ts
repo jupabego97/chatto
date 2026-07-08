@@ -9,6 +9,7 @@ type HarnessAPI = {
     afterTime: string;
     beforeTime: string | number;
   } | null;
+  markAsRead(targetId: string, upToEventId?: string): Promise<unknown>;
   setUnreadMarkerEventId(eventId: string | null): void;
 };
 
@@ -139,6 +140,56 @@ describe('useUnreadMarker', () => {
 
     await vi.waitFor(() => expect(markAsRead).toHaveBeenCalledTimes(2));
     await vi.waitFor(() => expect(currentApi.unreadMarkerWindow).toBeNull());
+    expect(currentApi.unreadMarkerEventId).toBeNull();
+    rendered.unmount();
+  });
+
+  it('ignores a stale refocus read after a newer explicit read', async () => {
+    let resolveRefocus!: (value: {
+      previousLastReadAt: string;
+      lastReadAt: string;
+    }) => void;
+    const refocusRead = new Promise<{
+      previousLastReadAt: string;
+      lastReadAt: string;
+    }>((resolve) => {
+      resolveRefocus = resolve;
+    });
+    const markAsRead = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockReturnValueOnce(refocusRead)
+      .mockResolvedValueOnce(null);
+    let api: HarnessAPI | undefined;
+
+    const rendered = render(Harness, {
+      props: {
+        targetId: 'room-1',
+        markAsRead,
+        onReady: (nextApi: HarnessAPI) => {
+          api = nextApi;
+        }
+      }
+    });
+    flushSync();
+    const currentApi = getApi(api);
+    await vi.waitFor(() => expect(markAsRead).toHaveBeenCalledOnce());
+
+    setPresent(false);
+    setPresent(true);
+    await vi.waitFor(() => expect(markAsRead).toHaveBeenCalledTimes(2));
+
+    await currentApi.markAsRead('room-1', 'event-2');
+    expect(markAsRead).toHaveBeenCalledTimes(3);
+
+    resolveRefocus({
+      previousLastReadAt: '2026-07-08T09:00:00.000Z',
+      lastReadAt: '2026-07-08T10:00:00.000Z'
+    });
+    await Promise.resolve();
+    flushSync();
+
+    expect(currentApi.unreadMarkerWindow).toBeNull();
     expect(currentApi.unreadMarkerEventId).toBeNull();
     rendered.unmount();
   });

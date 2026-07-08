@@ -27,8 +27,20 @@ export function useUnreadMarker<TReadResult>(
   let unreadMarkerEventId = $state<string | null>(null);
   let unreadMarkerWindow = $state<UnreadMarkerWindow | null>(null);
 
+  let lastFiredTargetId = '';
+  let wasPresent = false;
+  let readMarkerGeneration = 0;
+
+  function startReadRequest(targetId: string, upToEventId?: string) {
+    const generation = ++readMarkerGeneration;
+    return {
+      generation,
+      promise: markAsRead(targetId, upToEventId)
+    };
+  }
+
   async function markTargetAsRead(targetId: string, upToEventId?: string) {
-    return markAsRead(targetId, upToEventId);
+    return startReadRequest(targetId, upToEventId).promise;
   }
 
   function setUnreadMarkerEventId(eventId: string | null) {
@@ -42,10 +54,6 @@ export function useUnreadMarker<TReadResult>(
     unreadMarkerEventId = null;
     unreadMarkerWindow = null;
   }
-
-  let lastFiredTargetId = '';
-  let wasPresent = false;
-  let readMarkerGeneration = 0;
 
   $effect(() => {
     const targetId = getTargetId();
@@ -68,8 +76,8 @@ export function useUnreadMarker<TReadResult>(
     }
 
     const markedAtMs = Date.now();
-    const generation = ++readMarkerGeneration;
-    markTargetAsRead(targetId).then((result) => {
+    const { generation, promise } = startReadRequest(targetId);
+    promise.then((result) => {
       if (generation !== readMarkerGeneration) return;
       if (getTargetId() !== targetId || !result) return;
 
