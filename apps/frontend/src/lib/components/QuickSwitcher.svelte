@@ -12,7 +12,11 @@
   import { recentQuickSwitcher } from '$lib/state/recentQuickSwitcher.svelte';
   import { quickSwitcher } from '$lib/state/globals.svelte';
   import { ROOM_MEMBERS_PAGE_SIZE } from '$lib/state/room/members.svelte';
-  import { getDMAvatarParticipants, getDMConversationLabel } from '$lib/dm/display';
+  import {
+    getDMAvatarParticipants,
+    getDMConversationLabel,
+    hasVisibleDMParticipant
+  } from '$lib/dm/display';
   import * as m from '$lib/i18n/messages';
   import { toast } from '$lib/ui/toast';
   import { createRoomCommandAPI } from '$lib/api-client/rooms';
@@ -104,6 +108,7 @@
               const participants = (
                 await members.listRoomMembers(room.id, '', ROOM_MEMBERS_PAGE_SIZE, 0)
               ).members.map(avatarUser);
+              if (!hasVisibleDMParticipant(participants, currentUserId)) return;
               items.push({
                 kind: 'dm',
                 id: room.id,

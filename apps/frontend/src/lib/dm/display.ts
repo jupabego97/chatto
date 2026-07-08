@@ -49,3 +49,12 @@ export function getDMAvatarParticipants<T extends { id: string }>(
 
   return visibleParticipants.slice(0, limit);
 }
+
+export function hasVisibleDMParticipant<T extends DMDisplayParticipant>(
+  participants: readonly T[],
+  currentUserId: string | null | undefined
+): boolean {
+  return participants.some(
+    (participant) => participant.id !== currentUserId && !participant.deleted
+  );
+}

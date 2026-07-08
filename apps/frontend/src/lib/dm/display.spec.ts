@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getDMAvatarParticipants,
   getDMConversationLabel,
+  hasVisibleDMParticipant,
   type DMDisplayParticipant
 } from './display';
 
@@ -64,5 +65,23 @@ describe('DM display helpers', () => {
 
     expect(getDMAvatarParticipants([current, peerA, peerB], 'current', 1)).toEqual([peerA]);
     expect(getDMAvatarParticipants([current], 'current', 1)).toEqual([current]);
+  });
+
+  it('detects whether a DM has a visible non-current participant', () => {
+    expect(
+      hasVisibleDMParticipant(
+        [participant('current', 'Current User'), participant('peer', 'Peer User')],
+        'current'
+      )
+    ).toBe(true);
+    expect(hasVisibleDMParticipant([participant('current', 'Current User')], 'current')).toBe(
+      false
+    );
+    expect(
+      hasVisibleDMParticipant(
+        [participant('current', 'Current User'), participant('peer', 'Former Peer', true)],
+        'current'
+      )
+    ).toBe(false);
   });
 });
