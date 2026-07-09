@@ -1,24 +1,48 @@
 #!/bin/sh
-# Railway adapter: map $PORT, prepare /data, then hand off to the official
-# image entrypoint (PUID/PGID remapping + nats CLI context).
+# Railway adapter for the official Chatto image.
+# - Maps Railway $PORT
+# - Prepares a writable data directory
+# - Runs /chatto directly (skip su-exec privilege drop; use RAILWAY_RUN_UID=0)
 set -eu
 
-if [ -n "${PORT:-}" ]; then
-  export CHATTO_WEBSERVER_PORT="$PORT"
+echo "railway-entrypoint: boot uid=$(id -u) gid=$(id -g) PORT=${PORT:-} RAILWAY_VOLUME_MOUNT_PATH=${RAILWAY_VOLUME_MOUNT_PATH:-}"
+
+# Prefer Railway's injected PORT; fall back to 8080 for healthchecks/networking.
+if [ -z "${PORT:-}" ]; then
+  export PORT=8080
+  echo "railway-entrypoint: PORT was empty; defaulting to 8080"
 fi
+export CHATTO_WEBSERVER_PORT="$PORT"
 
-# Single-node Railway deploy: embedded NATS + persistent /data volume.
+# Single-node defaults.
 export CHATTO_NATS_EMBEDDED_ENABLED="${CHATTO_NATS_EMBEDDED_ENABLED:-true}"
-export CHATTO_NATS_EMBEDDED_DATA_DIR="${CHATTO_NATS_EMBEDDED_DATA_DIR:-/data}"
-
-# LiveKit needs UDP media ports that Railway does not expose; keep calls off
-# unless the operator explicitly configures an external LiveKit cluster.
 export CHATTO_LIVEKIT_ENABLED="${CHATTO_LIVEKIT_ENABLED:-false}"
-
 export CHATTO_LOG_FORMAT="${CHATTO_LOG_FORMAT:-json}"
 export CHATTO_LOG_LEVEL="${CHATTO_LOG_LEVEL:-info}"
+export CHATTO_OPERATOR_API_ENABLED="${CHATTO_OPERATOR_API_ENABLED:-false}"
 
-# Fail fast with a clear message when required secrets are missing.
+# Pick a writable data directory.
+# 1) Railway volume mount path, if present
+# 2) /data (when a volume is attached there)
+# 3) /tmp/chatto-data (ephemeral fallback so the process can still start)
+data_dir="${CHATTO_NATS_EMBEDDED_DATA_DIR:-}"
+if [ -z "$data_dir" ] && [ -n "${RAILWAY_VOLUME_MOUNT_PATH:-}" ]; then
+  data_dir="$RAILWAY_VOLUME_MOUNT_PATH"
+fi
+if [ -z "$data_dir" ]; then
+  data_dir=/data
+fi
+
+mkdir -p "$data_dir" 2>/dev/null || true
+if ! touch "$data_dir/.chatto-write-test" 2>/dev/null; then
+  echo "railway-entrypoint: cannot write to $data_dir; falling back to /tmp/chatto-data" >&2
+  data_dir=/tmp/chatto-data
+  mkdir -p "$data_dir"
+fi
+rm -f "$data_dir/.chatto-write-test" 2>/dev/null || true
+export CHATTO_NATS_EMBEDDED_DATA_DIR="$data_dir"
+
+# Fail fast when required secrets are missing.
 missing=""
 for var in \
   CHATTO_WEBSERVER_COOKIE_SIGNING_SECRET \
@@ -32,28 +56,20 @@ do
 done
 if [ -n "$missing" ]; then
   echo "railway-entrypoint: missing required env vars:$missing" >&2
-  echo "railway-entrypoint: copy values from .env.railway.example into Railway Variables" >&2
+  echo "railway-entrypoint: add them in Railway → Variables (see .env.railway.example)" >&2
   exit 1
 fi
 
-# Railway volumes are root-owned. The official entrypoint drops to PUID:PGID,
-# so chown /data (and /config) before that handoff.
-mkdir -p /data /config
-if [ "$(id -u)" = "0" ]; then
-  chown "${PUID:-1000}:${PGID:-1000}" /data /config
-else
-  echo "railway-entrypoint: warning: not running as root (uid=$(id -u)); set RAILWAY_RUN_UID=0 so /data can be prepared" >&2
+if [ -z "${CHATTO_WEBSERVER_URL:-}" ]; then
+  if [ -n "${RAILWAY_PUBLIC_DOMAIN:-}" ]; then
+    export CHATTO_WEBSERVER_URL="https://${RAILWAY_PUBLIC_DOMAIN}"
+    echo "railway-entrypoint: derived CHATTO_WEBSERVER_URL=$CHATTO_WEBSERVER_URL"
+  else
+    echo "railway-entrypoint: warning: CHATTO_WEBSERVER_URL is unset (Generate Domain + set the variable)" >&2
+  fi
 fi
 
-# Probe writability early — embedded NATS will otherwise fail obscurely.
-data_dir="${CHATTO_NATS_EMBEDDED_DATA_DIR}"
-if ! touch "${data_dir}/.chatto-write-test" 2>/dev/null; then
-  echo "railway-entrypoint: cannot write to ${data_dir}" >&2
-  echo "railway-entrypoint: attach a Railway Volume at /data and set RAILWAY_RUN_UID=0" >&2
-  exit 1
-fi
-rm -f "${data_dir}/.chatto-write-test"
+echo "railway-entrypoint: starting /chatto on :$CHATTO_WEBSERVER_PORT data=$CHATTO_NATS_EMBEDDED_DATA_DIR url=${CHATTO_WEBSERVER_URL:-}"
 
-echo "railway-entrypoint: starting chatto on port ${CHATTO_WEBSERVER_PORT} (data=${CHATTO_NATS_EMBEDDED_DATA_DIR})"
-
-exec /usr/local/bin/docker-entrypoint.sh "$@"
+# Run the binary directly. Config file is optional; env vars supply production config.
+exec /chatto start -c /config/chatto.toml

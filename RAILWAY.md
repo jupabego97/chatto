@@ -28,20 +28,22 @@ Copy the URL (e.g. `https://chatto-production-xxxx.up.railway.app`).
 
 ## 4. Set environment variables
 
-If these secrets are missing, the container exits immediately and Railway reports `/healthz` as unavailable.
-
 In the service → **Variables**, add at least:
 
 | Variable | Value |
 | --- | --- |
 | `RAILWAY_RUN_UID` | `0` |
+| `PORT` | `8080` |
 | `CHATTO_WEBSERVER_URL` | `https://${{RAILWAY_PUBLIC_DOMAIN}}` |
 | `CHATTO_OWNERS_EMAILS` | your admin email |
 | `CHATTO_WEBSERVER_COOKIE_SIGNING_SECRET` | 64 hex chars |
 | `CHATTO_WEBSERVER_COOKIE_ENCRYPTION_SECRET` | 64 hex chars |
 | `CHATTO_CORE_SECRET_KEY` | 64 hex chars |
 | `CHATTO_CORE_ASSETS_SIGNING_SECRET` | 64 hex chars |
-| SMTP vars | optional at first boot; required for email registration |
+
+Also set the public domain **target port** to `8080` in Networking if Railway asks for one.
+
+Healthchecks are off by default in `railway.toml` until deploy logs show a clean boot. After that, set healthcheck path to `/healthz`.
 
 Generate secrets in PowerShell:
 

@@ -3,10 +3,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-# Give embedded NATS + first boot time before probing.
-healthcheckPath = "/healthz"
-healthcheckTimeout = 300
+# Healthcheck disabled until the service boots cleanly; re-enable /healthz after
+# deploy logs show "Starting HTTP server".
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
-# Railway must publish the container port that Chatto binds ($PORT).
-# Set this in the service Networking settings if healthchecks stay unavailable.
