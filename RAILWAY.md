@@ -69,14 +69,16 @@ Registration from the web UI needs SMTP (email verification codes). Without SMTP
 
 ```sh
 /chatto operator user create \
-  --login admin \
+  --login juanpa \
   --display-name "Admin" \
   --password 'CambiaEstaClave123!' \
   --verified-email tu@email.com \
   --role owner
 ```
 
-4. Open the public URL and sign in with `admin` / that password.
+Do **not** use `admin`, `owner`, `moderator`, `everyone`, `all`, or `here` as `--login`: those collide with system roles / mention handles and return `this username is not available`.
+
+4. Open the public URL and sign in with `juanpa` / that password.
 
 List users later with:
 
