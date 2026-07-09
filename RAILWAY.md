@@ -28,6 +28,8 @@ Copy the URL (e.g. `https://chatto-production-xxxx.up.railway.app`).
 
 ## 4. Set environment variables
 
+If these secrets are missing, the container exits immediately and Railway reports `/healthz` as unavailable.
+
 In the service → **Variables**, add at least:
 
 | Variable | Value |
@@ -39,7 +41,7 @@ In the service → **Variables**, add at least:
 | `CHATTO_WEBSERVER_COOKIE_ENCRYPTION_SECRET` | 64 hex chars |
 | `CHATTO_CORE_SECRET_KEY` | 64 hex chars |
 | `CHATTO_CORE_ASSETS_SIGNING_SECRET` | 64 hex chars |
-| SMTP vars | see `.env.railway.example` |
+| SMTP vars | optional at first boot; required for email registration |
 
 Generate secrets in PowerShell:
 
