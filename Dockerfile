@@ -18,7 +18,6 @@ ENV CHATTO_NATS_EMBEDDED_ENABLED=true \
     PUID=1000 \
     PGID=1000
 
-# Persistent data: attach a Railway Volume at /data (not VOLUME here — Railway rejects it).
 EXPOSE 4000
 
 ENTRYPOINT ["/usr/local/bin/railway-entrypoint.sh"]

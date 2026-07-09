@@ -10,7 +10,9 @@ Voice/video calls (LiveKit) stay **disabled** by default: Railway does not expos
 2. Select `jupabego97/chatto` (or your fork).
 3. Railway should detect `Dockerfile` + `railway.toml` and build automatically.
 
-## 2. Attach a volume (required)
+## 2. Attach a Railway volume (required)
+
+Do **not** use a Dockerfile `VOLUME` instruction — Railway rejects it. Persist data with a Railway Volume instead.
 
 Without a volume, all chat data is lost on every redeploy.
 
