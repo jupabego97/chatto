@@ -1,6 +1,6 @@
 # Railway deploy image: official Chatto release + PORT/volume adapter.
 # Pin the tag for reproducible deploys; bump when you want a newer release.
-FROM ghcr.io/chattocorp/chatto:v0.4.2
+FROM ghcr.io/chattocorp/chatto:0.4.2
 
 COPY docker/railway-entrypoint.sh /usr/local/bin/railway-entrypoint.sh
 RUN chmod +x /usr/local/bin/railway-entrypoint.sh

@@ -76,7 +76,7 @@ Full template: [`.env.railway.example`](.env.railway.example).
 
 ## Upgrade
 
-1. Bump the `FROM ghcr.io/chattocorp/chatto:vX.Y.Z` tag in `Dockerfile`.
+1. Bump the `FROM ghcr.io/chattocorp/chatto:X.Y.Z` tag in `Dockerfile` (no `v` prefix; e.g. `0.4.2`).
 2. Push to GitHub; Railway redeploys.
 3. Keep the `/data` volume attached so JetStream data survives.
 
