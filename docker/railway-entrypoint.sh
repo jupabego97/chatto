@@ -19,7 +19,11 @@ export CHATTO_NATS_EMBEDDED_ENABLED="${CHATTO_NATS_EMBEDDED_ENABLED:-true}"
 export CHATTO_LIVEKIT_ENABLED="${CHATTO_LIVEKIT_ENABLED:-false}"
 export CHATTO_LOG_FORMAT="${CHATTO_LOG_FORMAT:-json}"
 export CHATTO_LOG_LEVEL="${CHATTO_LOG_LEVEL:-info}"
-export CHATTO_OPERATOR_API_ENABLED="${CHATTO_OPERATOR_API_ENABLED:-false}"
+# Operator API: local Unix socket for bootstrap (create first admin without SMTP).
+export CHATTO_OPERATOR_API_ENABLED="${CHATTO_OPERATOR_API_ENABLED:-true}"
+export CHATTO_OPERATOR_API_SOCKET_PATH="${CHATTO_OPERATOR_API_SOCKET_PATH:-/tmp/chatto/operator.sock}"
+mkdir -p "$(dirname "$CHATTO_OPERATOR_API_SOCKET_PATH")"
+chmod 700 "$(dirname "$CHATTO_OPERATOR_API_SOCKET_PATH")"
 
 # Pick a writable data directory.
 # 1) Railway volume mount path, if present

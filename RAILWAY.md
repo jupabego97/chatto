@@ -55,12 +55,53 @@ Full template: [`.env.railway.example`](.env.railway.example).
 
 `PORT` is injected by Railway; the entrypoint maps it to `CHATTO_WEBSERVER_PORT`.
 
-## 5. First login
+## 5. Create the first admin account
 
-1. Open the public URL.
-2. Register with the email listed in `CHATTO_OWNERS_EMAILS`.
-3. Complete email verification (SMTP must work).
-4. That account becomes an owner.
+Registration from the web UI needs SMTP (email verification codes). Without SMTP, create the owner with the Operator CLI inside the running container.
+
+### Option A — Operator CLI (no SMTP)
+
+1. Make sure the service is running and `CHATTO_OPERATOR_API_ENABLED=true` (default in this fork).
+2. Open a shell in the container:
+   - Railway dashboard → service → **Shell**, or
+   - `railway ssh` from your machine (after `railway link`).
+3. Create the owner (change login/email/password):
+
+```sh
+/chatto operator user create \
+  --login admin \
+  --display-name "Admin" \
+  --password 'CambiaEstaClave123!' \
+  --verified-email tu@email.com \
+  --role owner
+```
+
+4. Open the public URL and sign in with `admin` / that password.
+
+List users later with:
+
+```sh
+/chatto operator user list
+```
+
+### Option B — Web register + Resend SMTP
+
+1. Create an API key at [resend.com](https://resend.com).
+2. Set Railway variables:
+
+```env
+CHATTO_SMTP_ENABLED=true
+CHATTO_SMTP_HOST=smtp.resend.com
+CHATTO_SMTP_PORT=465
+CHATTO_SMTP_TLS=implicit
+CHATTO_SMTP_USERNAME=resend
+CHATTO_SMTP_PASSWORD=re_xxxxxxxx
+CHATTO_SMTP_FROM=onboarding@resend.dev
+CHATTO_OWNERS_EMAILS=tu@email.com
+```
+
+3. Redeploy, open the public URL → **Register** with that email → enter the 6-digit code.
+4. That account becomes owner if the email matches `CHATTO_OWNERS_EMAILS`.
 
 ## Files in this repo
 
